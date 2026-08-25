@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "new-rrrdddiiiss",
-  description: "A demo Next.js app with App Router, TypeScript, and Tailwind CSS.",
+  title: "on maintance",
+  description: "on maintance",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
