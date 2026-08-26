@@ -678,9 +678,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/dashboard/releases/new/page.tsx": {
-    "mtime": 1787771672.652623,
-    "seen": 1787771685.528511,
-    "ast_hash": "025b8a169fc244ac84c1267e2ef012ce",
+    "mtime": 1787774675.3343308,
+    "seen": 1787774699.0936399,
+    "ast_hash": "8cccd83d5aaeab987f54a934eec0cfbf",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/dashboard/releases/page.tsx": {
@@ -961,7 +961,7 @@
   },
   "prisma/migrations/20260826153000_init_postgres/migration.sql": {
     "mtime": 1787757771.0266035,
-    "seen": 1787770143.4333608,
+    "seen": 1787772245.614217,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -1224,9 +1224,9 @@
     "semantic_hash": ""
   },
   "src/components/dashboard/release-builder.tsx": {
-    "mtime": 1787771565.5018303,
-    "seen": 1787771685.530858,
-    "ast_hash": "0b256da4936d1fc978f1aa7eb5f5e19b",
+    "mtime": 1787774648.575792,
+    "seen": 1787774699.097944,
+    "ast_hash": "eb49599e076a8d927af5f6f443fd156b",
     "semantic_hash": ""
   },
   "src/app/api/releases/[id]/resubmit/route.ts": {

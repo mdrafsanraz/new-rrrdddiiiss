@@ -672,9 +672,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/dashboard/releases/[id]/page.tsx": {
-    "mtime": 1787768688.6823366,
-    "seen": 1787768719.783519,
-    "ast_hash": "77b4853615420fdb443f69fd46facae5",
+    "mtime": 1787771995.545363,
+    "seen": 1787772028.40165,
+    "ast_hash": "67b63750f1f8185a4596add7394ca613",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/dashboard/releases/new/page.tsx": {
@@ -792,9 +792,9 @@
     "semantic_hash": ""
   },
   "src/app/api/releases/[id]/route.ts": {
-    "mtime": 1787767494.1851647,
-    "seen": 1787767522.763632,
-    "ast_hash": "7365cadcb3a34757a1af39a336b4fc1d",
+    "mtime": 1787771967.7012575,
+    "seen": 1787772028.402282,
+    "ast_hash": "b15411eee5b04a71965cdd923975e6fa",
     "semantic_hash": ""
   },
   "src/app/api/releases/route.ts": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/components/dashboard/status-badge.tsx": {
-    "mtime": 1787768678.021669,
-    "seen": 1787768719.78569,
-    "ast_hash": "4c5e6a2fb84a35e7cbd5405717a77167",
+    "mtime": 1787771992.781855,
+    "seen": 1787772028.40495,
+    "ast_hash": "868fd5edaf37d52f13598a5d23c46f0d",
     "semantic_hash": ""
   },
   "src/components/dashboard/submit-release-button.tsx": {
@@ -918,9 +918,9 @@
     "semantic_hash": ""
   },
   "src/lib/labelgrid/index.ts": {
-    "mtime": 1787769214.6834865,
-    "seen": 1787769282.440568,
-    "ast_hash": "58dc2b47a1150310b435e14b1dd2c8b1",
+    "mtime": 1787771931.373345,
+    "seen": 1787772028.405638,
+    "ast_hash": "52f119813a72979c3cc7f501e163f2cc",
     "semantic_hash": ""
   },
   "src/lib/labelgrid/types.ts": {
@@ -961,8 +961,8 @@
   },
   "prisma/migrations/20260826153000_init_postgres/migration.sql": {
     "mtime": 1787757771.0266035,
-    "seen": 1787770143.4333608,
-    "ast_hash": "",
+    "seen": 1787772245.614217,
+    "ast_hash": "d69357db5fc1f2d43da7b37dba2b6cde",
     "semantic_hash": ""
   },
   "scripts/start.sh": {
@@ -1032,15 +1032,15 @@
     "semantic_hash": ""
   },
   "src/app/(admin)/admin/releases/[id]/page.tsx": {
-    "mtime": 1787768596.9757252,
-    "seen": 1787768719.783326,
-    "ast_hash": "24d429140dc30cbd3f86aa8a439fa3c5",
+    "mtime": 1787772026.1380138,
+    "seen": 1787772028.401379,
+    "ast_hash": "29c33fa53b56e9fb4946aae93eccba06",
     "semantic_hash": ""
   },
   "src/app/(admin)/admin/releases/page.tsx": {
-    "mtime": 1787769264.0968628,
-    "seen": 1787769282.437214,
-    "ast_hash": "378bbbbe3a23307609901e4f8ca75a3a",
+    "mtime": 1787771998.1940212,
+    "seen": 1787772028.401381,
+    "ast_hash": "90f45d5890573bb51b80045c8bec6877",
     "semantic_hash": ""
   },
   "src/app/(admin)/admin/users/[id]/page.tsx": {
@@ -1068,15 +1068,15 @@
     "semantic_hash": ""
   },
   "src/app/api/admin/releases/[id]/approve/route.ts": {
-    "mtime": 1787769254.374779,
-    "seen": 1787769282.4377978,
-    "ast_hash": "99cec175cf8806c0d6fe48d1ae88cbe2",
+    "mtime": 1787772008.8310611,
+    "seen": 1787772028.402037,
+    "ast_hash": "5dd974ffd0e535771ea6d0d862c538a8",
     "semantic_hash": ""
   },
   "src/app/api/admin/releases/[id]/reject/route.ts": {
-    "mtime": 1787768544.8492517,
-    "seen": 1787768719.783882,
-    "ast_hash": "8f2d9315ecf7e2c7baa6b1271e855a35",
+    "mtime": 1787771936.9714699,
+    "seen": 1787772028.402038,
+    "ast_hash": "ec6a6f5cc0d1aa6fa9b8cedf6c19f6c5",
     "semantic_hash": ""
   },
   "src/app/api/admin/users/[id]/route.ts": {
@@ -1098,9 +1098,9 @@
     "semantic_hash": ""
   },
   "src/components/admin/release-review-actions.tsx": {
-    "mtime": 1787769259.0994308,
-    "seen": 1787769282.4382231,
-    "ast_hash": "b91accb21b2741ca143560dd893cf22a",
+    "mtime": 1787771954.6090286,
+    "seen": 1787772028.402543,
+    "ast_hash": "5f0bbb214f841fb327ab4d7cc4d8ce4f",
     "semantic_hash": ""
   },
   "src/components/admin/shell.tsx": {
@@ -1227,6 +1227,18 @@
     "mtime": 1787771565.5018303,
     "seen": 1787771685.530858,
     "ast_hash": "0b256da4936d1fc978f1aa7eb5f5e19b",
+    "semantic_hash": ""
+  },
+  "src/app/api/releases/[id]/resubmit/route.ts": {
+    "mtime": 1787771949.9915252,
+    "seen": 1787772028.402281,
+    "ast_hash": "0db7277c5c5c8268b4569881b96742b2",
+    "semantic_hash": ""
+  },
+  "src/components/dashboard/resubmit-release-button.tsx": {
+    "mtime": 1787771954.6089823,
+    "seen": 1787772028.4049091,
+    "ast_hash": "478b82d0e7fa2216ac113d2ad0254b7a",
     "semantic_hash": ""
   }
 }
