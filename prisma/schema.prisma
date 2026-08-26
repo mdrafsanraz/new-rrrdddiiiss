@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanId {
+  free
+  starter
+  pro
+}
+
+enum SubscriptionStatus {
+  none
+  active
+  trialing
+  past_due
+  canceled
+  incomplete
+}
+
+/** Local release lifecycle — map LabelGrid statuses into this, never expose raw LG in UI. */
+enum ReleaseStatus {
+  draft
+  incomplete
+  ready_to_submit
+  syncing
+  submitted
+  in_review
+  changes_required
+  rejected
+  approved
+  delivering
+  live
+  takedown_pending
+  taken_down
+  error
+}
+
+model User {
+  id                   String             @id @default(cuid())
+  email                String             @unique
+  name                 String
+  passwordHash         String
+  planId               PlanId             @default(free)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripeStatus         SubscriptionStatus @default(none)
+  stripePriceId        String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  artists  Artist[]
+  releases Release[]
+  labels   Label[]
+}
+
+/** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
+model Label {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  labelgridId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  releases Release[]
+
+  @@index([userId])
+}
+
+model Artist {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  fullName      String?
+  email         String?
+  location      String?
+  bioShort      String?
+  spotifyUrl    String?
+  appleMusicUrl String?
+  labelgridId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  releases Release[]
+
+  @@index([userId])
+}
+
+model Release {
+  id              String        @id @default(cuid())
+  userId          String
+  artistId        String?
+  labelId         String?
+  title           String
+  catalogNumber   String
+  upc             String?
+  releaseDate     DateTime?
+  status          ReleaseStatus @default(draft)
+  /** Set once when genuinely submitted — Free plan quota uses this, not drafts. */
+  submittedAt     DateTime?
+  reviewNotes     String?
+  syncError       String?
+  artworkUrl      String?
+  territoriesJson String        @default("[]")
+  storesJson      String        @default("[]")
+  labelgridId     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artist Artist? @relation(fields: [artistId], references: [id], onDelete: SetNull)
+  label  Label?  @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  tracks Track[]
+
+  @@index([userId])
+  @@index([artistId])
+  @@index([userId, submittedAt])
+}
+
+model Track {
+  id          String   @id @default(cuid())
+  userId      String
+  releaseId   String
+  title       String
+  isrc        String?
+  trackNumber Int      @default(1)
+  durationMs  Int?
+  audioUrl    String?
+  labelgridId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  release      Release            @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  contributors TrackContributor[]
+
+  @@index([releaseId])
+  @@index([userId])
+}
+
+model TrackContributor {
+  id           String  @id @default(cuid())
+  trackId      String
+  name         String
+  role         String
+  sharePercent Float?
+  labelgridId  String?
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+}
