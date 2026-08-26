@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+prisma/*.db
+prisma/*.db-journal
+graphify-out/cache
+*.md
+!README.md
+!important.md
+.agents
+.cursor
