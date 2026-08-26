@@ -28,17 +28,32 @@ Open [http://localhost:3000](http://localhost:3000). Sign up → `/dashboard`.
 1. New project → **PostgreSQL**
 2. New service from this GitHub repo (`mdrafsanraz/new-rrrdddiiiss`)
 
-### 2. Variables (web service)
+### 2. Variables (web service — this is the step that usually fails)
 
-| Variable | Value |
-|----------|--------|
+Adding Postgres does **not** automatically give your web app `DATABASE_URL`.
+
+1. Click your **web** service (the Next.js app), not Postgres  
+2. Open **Variables**  
+3. **Add Variable** → **Add Reference** (or paste a reference):
+
+| Name | Value |
+|------|--------|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| `AUTH_SECRET` | long random secret |
-| `NEXT_PUBLIC_APP_URL` | `https://<your-public-domain>` (no trailing slash) |
+
+If your Postgres service has a different name, pick that service’s `DATABASE_URL` from the reference picker.
+
+4. Also add these shared/raw variables on the **web** service:
+
+| Name | Value |
+|------|--------|
+| `AUTH_SECRET` | any long random string (e.g. `openssl rand -hex 32`) |
+| `NEXT_PUBLIC_APP_URL` | `https://new-rrrdddiiiss-production.up.railway.app` |
 | `HOSTNAME` | `0.0.0.0` |
 | `LABELGRID_ENV` | `sandbox` |
-| `LABELGRID_API_TOKEN` | optional until sandbox sync |
-| Stripe vars | optional until billing |
+
+5. **Redeploy** the web service
+
+Pre-deploy runs `npm run db:railway` (`prisma migrate deploy`). If `DATABASE_URL` is missing, the log will say exactly that.
 
 ### 3. Deploy settings
 
