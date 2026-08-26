@@ -5,20 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { List, SignOut, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import AnimatedBrandLogo from "@/components/site/logo";
-import { dashboardNav } from "@/lib/dashboard-nav";
+import { adminNav } from "@/lib/admin-nav";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
-export function DashboardShell({
+export function AdminShell({
   children,
-  userName,
-  planLabel,
-  showAdminLink = false,
+  adminName,
 }: {
   children: React.ReactNode;
-  userName: string;
-  planLabel: string;
-  showAdminLink?: boolean;
+  adminName: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -31,8 +27,8 @@ export function DashboardShell({
   }
 
   const nav = (
-    <nav className="flex flex-col gap-0.5" aria-label="Dashboard">
-      {dashboardNav.map((item) => {
+    <nav className="flex flex-col gap-0.5" aria-label="Admin">
+      {adminNav.map((item) => {
         const active =
           "exact" in item && item.exact
             ? pathname === item.href
@@ -53,30 +49,31 @@ export function DashboardShell({
           </Link>
         );
       })}
-      {showAdminLink ? (
-        <Link
-          href="/admin"
-          onClick={() => setOpen(false)}
-          className="mt-2 rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
-        >
-          Admin console
-        </Link>
-      ) : null}
     </nav>
   );
 
   return (
-    <div className="min-h-dvh bg-[oklch(0.975_0.004_250)]">
+    <div className="min-h-dvh bg-[oklch(0.97_0.006_250)]">
       <div className="mx-auto flex min-h-dvh max-w-[1400px]">
         <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card px-4 py-6 lg:flex">
-          <AnimatedBrandLogo
-            className="h-9 w-auto"
-            gradientId="dashSideWave"
-          />
+          <div>
+            <AnimatedBrandLogo
+              className="h-9 w-auto"
+              gradientId="adminSideWave"
+            />
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Admin
+            </p>
+          </div>
           <div className="mt-8 flex-1">{nav}</div>
           <div className="pt-10">
-            <p className="truncate text-sm font-medium">{userName}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{planLabel} plan</p>
+            <p className="truncate text-sm font-medium">{adminName}</p>
+            <Link
+              href="/dashboard"
+              className="mt-2 block text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              User dashboard
+            </Link>
             <button
               type="button"
               onClick={logout}
@@ -103,17 +100,14 @@ export function DashboardShell({
                   <List className="size-5" weight="bold" />
                 )}
               </button>
-              <AnimatedBrandLogo
-                className="h-8 w-auto"
-                gradientId="dashMobileWave"
-              />
+              <span className="text-sm font-semibold">Admin</span>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Link
-                href="/dashboard/releases/new"
+                href="/admin/releases?status=in_review"
                 className={cn(buttonVariants(), "h-9 px-4 text-sm")}
               >
-                New release
+                Review queue
               </Link>
             </div>
           </header>

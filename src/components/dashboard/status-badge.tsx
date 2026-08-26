@@ -6,8 +6,8 @@ const labels: Record<ReleaseStatus, string> = {
   incomplete: "Incomplete",
   ready_to_submit: "Ready to submit",
   syncing: "Syncing",
-  submitted: "Submitted for review",
-  in_review: "In review",
+  submitted: "Submitted",
+  in_review: "Admin review",
   changes_required: "Changes required",
   rejected: "Rejected",
   approved: "Approved",
@@ -15,16 +15,18 @@ const labels: Record<ReleaseStatus, string> = {
   live: "Live",
   takedown_pending: "Takedown pending",
   taken_down: "Taken down",
-  error: "Error",
+  error: "Sync error",
 };
 
 const tones: Partial<Record<ReleaseStatus, string>> = {
   live: "bg-emerald-600/10 text-emerald-800",
+  approved: "bg-emerald-600/10 text-emerald-800",
   changes_required: "bg-amber-500/15 text-amber-900",
   rejected: "bg-red-500/10 text-red-800",
   error: "bg-red-500/10 text-red-800",
   submitted: "bg-primary/10 text-primary",
   in_review: "bg-primary/10 text-primary",
+  syncing: "bg-amber-500/15 text-amber-900",
   delivering: "bg-primary/10 text-primary",
 };
 

@@ -100,10 +100,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
               className="mt-4 aspect-square w-40 rounded-lg object-cover"
             />
           ) : (
-            <p className="mt-4 text-sm text-muted-foreground">
-              Artwork upload will connect in the multi-step editor (sandbox file
-              URLs).
-            </p>
+            <p className="mt-4 text-sm text-muted-foreground">No artwork yet.</p>
           )}
         </section>
       </div>
@@ -116,7 +113,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
           {release.tracks.map((t) => (
             <li
               key={t.id}
-              className="flex items-center justify-between gap-3 px-5 py-3.5 text-sm"
+              className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-sm"
             >
               <span>
                 <span className="mr-3 tabular-nums text-muted-foreground">
@@ -124,13 +121,34 @@ export default async function ReleaseDetailPage({ params }: Props) {
                 </span>
                 {t.title}
               </span>
-              <span className="text-muted-foreground">
-                {t.isrc ?? "ISRC pending"}
+              <span className="flex items-center gap-3 text-muted-foreground">
+                {t.audioUrl ? (
+                  <audio controls preload="none" src={t.audioUrl} className="h-8 max-w-[220px]" />
+                ) : null}
+                <span>{t.isrc ?? "ISRC pending"}</span>
+                {t.labelgridId ? (
+                  <span className="text-xs">LG {t.labelgridId}</span>
+                ) : null}
               </span>
             </li>
           ))}
         </ul>
       </section>
+
+      {release.reviewNotes ? (
+        <section
+          className={
+            release.status === "rejected"
+              ? "rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-950"
+              : "rounded-xl border border-border bg-muted/40 p-5 text-sm"
+          }
+        >
+          <p className="font-semibold">
+            {release.status === "rejected" ? "Rejected by admin" : "Admin notes"}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap">{release.reviewNotes}</p>
+        </section>
+      ) : null}
 
       {release.syncError ? (
         <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">

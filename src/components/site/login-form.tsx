@@ -32,7 +32,7 @@ export function LoginForm() {
             setStatus("idle");
             return;
           }
-          router.push("/dashboard");
+          router.push(data.redirectTo ?? "/dashboard");
           router.refresh();
         } catch {
           setError("Network error. Try again.");

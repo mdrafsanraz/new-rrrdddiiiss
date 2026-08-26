@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { ensureAdminRole, isAdminUser } from "@/lib/auth/admin";
+import { setSessionCookie, toPublicUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { setSessionCookie } from "@/lib/auth/session";
 
 const schema = z.object({
   email: z.string().email(),
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
     const email = body.email.toLowerCase().trim();
-    const user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
       return NextResponse.json(
@@ -30,15 +31,12 @@ export async function POST(request: Request) {
       );
     }
 
+    user = await ensureAdminRole(user);
     await setSessionCookie(user.id, user.email);
 
     return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        planId: user.planId,
-      },
+      user: toPublicUser(user),
+      redirectTo: isAdminUser(user) ? "/admin" : "/dashboard",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -78,3 +78,50 @@ export async function labelgridFetch<T>(
 
   return parsed as T;
 }
+
+/** Multipart upload (cover art, etc.) — do not set Content-Type manually. */
+export async function labelgridUpload<T>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  const token = getLabelGridToken();
+  if (!token) {
+    throw new LabelGridConfigError(
+      "LABELGRID_API_TOKEN is not set. Sandbox calls are disabled until a token is provided."
+    );
+  }
+
+  const base = getLabelGridBaseUrl();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  let parsed: unknown = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+
+  if (!res.ok) {
+    console.error("[labelgrid]", res.status, path, parsed);
+    throw new LabelGridApiError(
+      `LabelGrid POST ${path} failed (${res.status})`,
+      res.status,
+      parsed
+    );
+  }
+
+  return parsed as T;
+}

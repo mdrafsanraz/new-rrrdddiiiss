@@ -36,6 +36,8 @@ export function ReleaseSubmitForm({
   const [artworkAiUsage, setArtworkAiUsage] = useState<string>("none");
   const [explicit, setExplicit] = useState<string>("off");
   const [upc, setUpc] = useState("");
+  const [artworkName, setArtworkName] = useState("");
+  const [audioName, setAudioName] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState<"idle" | "loading">("idle");
 
@@ -49,21 +51,23 @@ export function ReleaseSubmitForm({
         setError("");
         setStatus("loading");
         try {
+          const formEl = event.currentTarget;
+          const fd = new FormData(formEl);
+          // Ensure controlled fields win over any stale DOM values.
+          fd.set("artistId", artistId);
+          fd.set("title", title);
+          fd.set("trackTitle", trackTitle || title);
+          fd.set("catalogNumber", catalogNumber);
+          fd.set("contentType", contentType);
+          fd.set("primaryGenre", primaryGenre);
+          fd.set("releaseDate", releaseDate);
+          fd.set("artworkAiUsage", artworkAiUsage);
+          fd.set("explicit", explicit);
+          fd.set("upc", upc);
+
           const res = await fetch("/api/releases/submit", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              artistId,
-              title,
-              trackTitle: trackTitle || title,
-              catalogNumber,
-              contentType,
-              primaryGenre,
-              releaseDate,
-              artworkAiUsage,
-              explicit,
-              upc,
-            }),
+            body: fd,
           });
           const data = await res.json();
           if (!res.ok) {
@@ -222,7 +226,43 @@ export function ReleaseSubmitForm({
       </section>
 
       <section className="grid gap-5 rounded-xl border border-border bg-card p-6">
-        <h2 className="text-sm font-semibold">Track</h2>
+        <div>
+          <h2 className="text-sm font-semibold">Artwork</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Square cover, min 1400×1400 recommended. JPEG, PNG, or WebP · max
+            10 MB. Uploaded to LabelGrid as a draft; you see “Admin review”
+            until approved.
+          </p>
+        </div>
+        <div className="grid gap-2">
+          <label htmlFor="artwork" className="text-sm font-medium">
+            Cover art
+          </label>
+          <input
+            id="artwork"
+            name="artwork"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+            required
+            className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+            onChange={(e) =>
+              setArtworkName(e.target.files?.[0]?.name ?? "")
+            }
+          />
+          {artworkName ? (
+            <p className="text-xs text-muted-foreground">{artworkName}</p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="grid gap-5 rounded-xl border border-border bg-card p-6">
+        <div>
+          <h2 className="text-sm font-semibold">Track</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Stereo master: WAV, FLAC, or MP3 · max 200 MB. Stored on LabelGrid
+            as draft audio; submitted for LG review only after admin approval.
+          </p>
+        </div>
         <Field
           id="trackTitle"
           label="Track title"
@@ -230,10 +270,23 @@ export function ReleaseSubmitForm({
           value={trackTitle}
           onChange={(e) => setTrackTitle(e.target.value)}
         />
-        <p className="text-xs text-muted-foreground">
-          Audio upload and full track metadata sync to the distributor in a
-          later step. This submits the release for review in RDISTRO.
-        </p>
+        <div className="grid gap-2">
+          <label htmlFor="audio" className="text-sm font-medium">
+            Audio file
+          </label>
+          <input
+            id="audio"
+            name="audio"
+            type="file"
+            accept="audio/wav,audio/x-wav,audio/flac,audio/mpeg,audio/mp3,.wav,.flac,.mp3"
+            required
+            className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+            onChange={(e) => setAudioName(e.target.files?.[0]?.name ?? "")}
+          />
+          {audioName ? (
+            <p className="text-xs text-muted-foreground">{audioName}</p>
+          ) : null}
+        </div>
       </section>
 
       {error ? (
@@ -244,7 +297,7 @@ export function ReleaseSubmitForm({
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" className="h-11 px-6" disabled={status === "loading"}>
-          {status === "loading" ? "Submitting…" : "Submit for review"}
+          {status === "loading" ? "Uploading & submitting…" : "Submit for admin review"}
         </Button>
         <Link
           href="/dashboard/releases"

@@ -22,6 +22,11 @@ enum SubscriptionStatus {
   incomplete
 }
 
+enum UserRole {
+  user
+  admin
+}
+
 /** Local release lifecycle — map LabelGrid statuses into this, never expose raw LG in UI. */
 enum ReleaseStatus {
   draft
@@ -45,6 +50,7 @@ model User {
   email                String             @unique
   name                 String
   passwordHash         String
+  role                 UserRole           @default(user)
   planId               PlanId             @default(free)
   stripeCustomerId     String?            @unique
   stripeSubscriptionId String?            @unique
@@ -53,9 +59,10 @@ model User {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  artists  Artist[]
-  releases Release[]
-  labels   Label[]
+  artists          Artist[]
+  releases         Release[]
+  labels           Label[]
+  reviewedReleases Release[] @relation("ReleaseReviewer")
 }
 
 /** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
@@ -116,7 +123,10 @@ model Release {
   status          ReleaseStatus @default(draft)
   /** Set once when genuinely submitted — Free plan quota uses this, not drafts. */
   submittedAt     DateTime?
+  /** Admin review notes shown to the user (reject reason, etc.). */
   reviewNotes     String?
+  reviewedAt      DateTime?
+  reviewedById    String?
   syncError       String?
   artworkUrl      String?
   territoriesJson String        @default("[]")
@@ -125,14 +135,17 @@ model Release {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  artist Artist? @relation(fields: [artistId], references: [id], onDelete: SetNull)
-  label  Label?  @relation(fields: [labelId], references: [id], onDelete: SetNull)
-  tracks Track[]
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("ReleaseReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  artist     Artist? @relation(fields: [artistId], references: [id], onDelete: SetNull)
+  label      Label?  @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  tracks     Track[]
 
   @@index([userId])
   @@index([artistId])
   @@index([userId, submittedAt])
+  @@index([status])
+  @@index([reviewedById])
 }
 
 model Track {
