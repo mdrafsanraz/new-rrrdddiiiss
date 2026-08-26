@@ -1,8 +1,8 @@
-# Railway: use Nixpacks (not Dockerfile) so `npm start` has full node_modules/Prisma.
-# Optional container build: see Dockerfile.optional
+# Use Railpack (not Dockerfile). Railway always prefers a root Dockerfile if one exists.
+# Optional Docker build: Dockerfile.optional (set dockerfile path manually if needed).
 
 [build]
-builder = "NIXPACKS"
+builder = "RAILPACK"
 buildCommand = "npm run build"
 
 [deploy]
