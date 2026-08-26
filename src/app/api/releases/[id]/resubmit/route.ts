@@ -58,6 +58,7 @@ export async function POST(_request: Request, { params }: Params) {
           "internal_changes_required",
           "labelgrid_changes_required",
           "changes_required",
+          "ready_to_submit",
         ],
       },
     },

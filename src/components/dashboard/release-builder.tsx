@@ -627,19 +627,24 @@ function buildPayload(state: WizardState) {
 export function ReleaseBuilder({
   artists,
   defaultArtistId,
+  initialWizard,
 }: {
   artists: ArtistOption[];
   defaultArtistId?: string;
+  /** Pre-fill wizard when editing an existing release. */
+  initialWizard?: WizardState;
 }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const errorRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<WizardState>(initialState(artists, defaultArtistId));
-  const skipAutosave = useRef(true);
+  const stateRef = useRef<WizardState>(
+    initialWizard ?? initialState(artists, defaultArtistId)
+  );
+  const skipAutosave = useRef(!initialWizard);
   const createInFlight = useRef<Promise<string | null> | null>(null);
 
-  const [state, setState] = useState<WizardState>(() =>
-    initialState(artists, defaultArtistId)
+  const [state, setState] = useState<WizardState>(
+    () => initialWizard ?? initialState(artists, defaultArtistId)
   );
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");

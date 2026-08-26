@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
+  canUserEditRelease,
   canUserReplaceMedia,
   canUserResubmitRelease,
   canUserSubmitRelease,
@@ -127,6 +128,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
   const canSubmit = canUserSubmitRelease(release);
   const canResubmit = canUserResubmitRelease(release);
+  const canEdit = canUserEditRelease(release);
   const canReplaceMedia = canUserReplaceMedia(release);
   const tracks = release.tracks ?? [];
   const documents = release.documents ?? [];
@@ -145,6 +147,10 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
   const showMediaReplace =
     canReplaceMedia && (needsArtwork || needsAudio || Boolean(release.syncError));
+  const showSentBackNotice =
+    normalizeReleaseStatus(release.status) === "ready_to_submit" &&
+    Boolean(release.submittedAt) &&
+    Boolean(release.reviewNotes);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -172,6 +178,14 @@ export default async function ReleaseDetailPage({ params }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canEdit ? (
+            <Link
+              href={`/dashboard/releases/${release.id}/edit`}
+              className={cn(buttonVariants({ variant: "outline" }), "h-10 px-4")}
+            >
+              Edit release
+            </Link>
+          ) : null}
           {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
           {canResubmit ? (
             <ResubmitReleaseButton releaseId={release.id} />
@@ -186,6 +200,17 @@ export default async function ReleaseDetailPage({ params }: Props) {
           ) : null}
         </div>
       </div>
+
+      {showSentBackNotice ? (
+        <section className="border border-blue-300 bg-blue-50 p-5 text-sm text-blue-950">
+          <p className="font-semibold">Sent back to draft</p>
+          <p className="mt-1 whitespace-pre-wrap">{release.reviewNotes}</p>
+          <p className="mt-2 text-blue-900/80">
+            Use <strong>Edit release</strong> to re-upload artwork and audio,
+            then resubmit for review.
+          </p>
+        </section>
+      ) : null}
 
       {needsChanges ? (
         <section className="border border-amber-500/40 bg-amber-50 p-5 text-amber-950">

@@ -13,7 +13,7 @@ import { planLabel } from "@/lib/plans";
 import { formatShortDate, formatDistanceToNow } from "@/lib/admin/format";
 import { parseJsonObject } from "@/lib/releases/constants";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
-import { canAdminDecide, getAdminStatusLabel } from "@/lib/releases/status";
+import { canAdminDecide, canAdminDeleteRelease, canAdminSendBackToDraft, getAdminStatusLabel } from "@/lib/releases/status";
 import { hasPermission } from "@/lib/auth/permissions";
 import { storedUploadExists } from "@/lib/uploads/store";
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
@@ -92,6 +92,14 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   const canDecide =
     hasPermission(admin.role, "releases.moderate") &&
     canAdminDecide(release.status, release.permanentlyLocked);
+
+  const canSendBackToDraft =
+    hasPermission(admin.role, "releases.moderate") &&
+    canAdminSendBackToDraft(release.status, release.permanentlyLocked);
+
+  const canDeleteRelease =
+    hasPermission(admin.role, "releases.moderate") &&
+    canAdminDeleteRelease(release.status);
 
   const canImpersonate = hasPermission(admin.role, "users.impersonate");
 
@@ -569,6 +577,8 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             <ReleaseReviewActions
               releaseId={release.id}
               canDecide={canDecide}
+              canSendBackToDraft={canSendBackToDraft}
+              canDelete={canDeleteRelease}
               status={release.status}
               permanentlyLocked={release.permanentlyLocked}
               hasLabelgridId={Boolean(release.labelgridId)}

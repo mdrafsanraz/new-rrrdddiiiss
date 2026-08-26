@@ -18,6 +18,8 @@ const DOC_KINDS = [
 export function ReleaseReviewActions({
   releaseId,
   canDecide,
+  canSendBackToDraft,
+  canDelete,
   status,
   permanentlyLocked,
   hasLabelgridId,
@@ -25,10 +27,11 @@ export function ReleaseReviewActions({
 }: {
   releaseId: string;
   canDecide: boolean;
+  canSendBackToDraft: boolean;
+  canDelete: boolean;
   status: string;
   permanentlyLocked: boolean;
   hasLabelgridId: boolean;
-  /** False when LG draft does not exist yet and local artwork/audio are missing. */
   mediaReady?: boolean;
 }) {
   const router = useRouter();
@@ -36,7 +39,14 @@ export function ReleaseReviewActions({
   const [docKind, setDocKind] = useState<string>(DOC_KINDS[0]);
   const [holdReason, setHoldReason] = useState("");
   const [statusBusy, setStatusBusy] = useState<
-    "idle" | "approving" | "changes" | "rejecting" | "hold" | "document"
+    | "idle"
+    | "approving"
+    | "changes"
+    | "rejecting"
+    | "hold"
+    | "document"
+    | "draft"
+    | "deleting"
   >("idle");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<"main" | "document" | "hold">("main");
@@ -91,6 +101,61 @@ export function ReleaseReviewActions({
       }
       router.refresh();
       setStatusBusy("idle");
+    } catch {
+      setError("Network error");
+      setStatusBusy("idle");
+    }
+  }
+
+  async function sendBackToDraft() {
+    setError("");
+    const ok = window.confirm(
+      "Send this release back to draft? The user can edit and re-upload artwork/audio in the release builder, then submit again."
+    );
+    if (!ok) return;
+    setStatusBusy("draft");
+    try {
+      const res = await fetch(`/api/admin/releases/${releaseId}/moderate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_back_to_draft",
+          notes: notes.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not send back to draft");
+        setStatusBusy("idle");
+        return;
+      }
+      router.refresh();
+      setStatusBusy("idle");
+    } catch {
+      setError("Network error");
+      setStatusBusy("idle");
+    }
+  }
+
+  async function deleteRelease() {
+    setError("");
+    const ok = window.confirm(
+      "Permanently delete this release from RDISTRO? This cannot be undone."
+    );
+    if (!ok) return;
+    setStatusBusy("deleting");
+    try {
+      const res = await fetch(`/api/admin/releases/${releaseId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Delete failed");
+        setStatusBusy("idle");
+        return;
+      }
+      router.push("/admin/releases");
+      router.refresh();
     } catch {
       setError("Network error");
       setStatusBusy("idle");
@@ -161,6 +226,17 @@ export function ReleaseReviewActions({
     return (
       <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-950">
         Permanently rejected — moderation actions are disabled.
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 h-9 w-full text-red-800"
+            disabled={statusBusy !== "idle"}
+            onClick={deleteRelease}
+          >
+            {statusBusy === "deleting" ? "Deleting…" : "Delete release"}
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -170,11 +246,11 @@ export function ReleaseReviewActions({
       <div>
         <h2 className="text-sm font-semibold">Internal moderation</h2>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Approve submits the existing LabelGrid draft for review. Changes
-          Required is editable; Reject is final. Status: {status}
+          Approve submits the existing LabelGrid draft for review. Send back to
+          draft lets the user re-upload in the builder. Status: {status}
           {hasLabelgridId ? "" : " · LG draft not created yet"}
           {!mediaReady
-            ? " · Cover/audio missing on server — re-upload below before approve"
+            ? " · Cover/audio missing — send back to draft or re-upload below"
             : ""}
         </p>
       </div>
@@ -187,7 +263,7 @@ export function ReleaseReviewActions({
             as="textarea"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            helper="Shown to the user for changes / reject / document request."
+            helper="Shown to the user for changes, reject, document request, or send back to draft."
           />
           {error ? (
             <p className="text-sm font-medium text-red-700" role="alert">
@@ -196,10 +272,9 @@ export function ReleaseReviewActions({
           ) : null}
           {!mediaReady ? (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Artwork and/or audio files are not on this server. Re-upload media
-              (form above), then approve. Mount a Railway volume and set{" "}
-              <code className="font-mono">UPLOADS_DIR</code> so files survive
-              redeploys.
+              Artwork and/or audio are missing. Use{" "}
+              <strong>Send back to draft</strong> so the user can re-upload in
+              the release builder, or re-upload media above then approve.
             </p>
           ) : null}
           <div className="flex flex-col gap-2">
@@ -213,6 +288,17 @@ export function ReleaseReviewActions({
                 {statusBusy === "approving"
                   ? "Submitting to LabelGrid…"
                   : "Approve → LabelGrid review"}
+              </Button>
+            ) : null}
+            {canSendBackToDraft ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full"
+                disabled={statusBusy !== "idle"}
+                onClick={sendBackToDraft}
+              >
+                {statusBusy === "draft" ? "Sending…" : "Send back to draft"}
               </Button>
             ) : null}
             <Button
@@ -253,6 +339,17 @@ export function ReleaseReviewActions({
                 ? "Rejecting…"
                 : "Reject internally (final)"}
             </Button>
+            {canDelete ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full border-red-200 text-red-800 hover:bg-red-50"
+                disabled={statusBusy !== "idle"}
+                onClick={deleteRelease}
+              >
+                {statusBusy === "deleting" ? "Deleting…" : "Delete release"}
+              </Button>
+            ) : null}
           </div>
         </>
       ) : null}

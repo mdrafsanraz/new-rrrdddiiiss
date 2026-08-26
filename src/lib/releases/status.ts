@@ -212,7 +212,9 @@ export function canUserResubmitRelease(
   if (isFinalRejection(release)) return false;
   const s = normalizeReleaseStatus(release.status);
   return (
-    s === "internal_changes_required" || s === "labelgrid_changes_required"
+    s === "internal_changes_required" ||
+    s === "labelgrid_changes_required" ||
+    (s === "ready_to_submit" && Boolean(release.submittedAt))
   );
 }
 
@@ -248,6 +250,42 @@ export function canAdminDecide(status: string, permanentlyLocked: boolean): bool
     s === "internal_approved" ||
     s === "on_hold"
   );
+}
+
+/** Staff can return a release to editable draft (user re-uploads in builder). */
+export function canAdminSendBackToDraft(
+  status: string,
+  permanentlyLocked: boolean
+): boolean {
+  if (permanentlyLocked) return false;
+  const s = normalizeReleaseStatus(status);
+  if (
+    s === "live" ||
+    s === "delivering" ||
+    s === "takedown_pending" ||
+    s === "taken_down" ||
+    s === "labelgrid_approved" ||
+    s === "internal_rejected" ||
+    s === "labelgrid_rejected"
+  ) {
+    return false;
+  }
+  return (
+    s === "pending_internal_review" ||
+    s === "sync_error" ||
+    s === "internal_approved" ||
+    s === "on_hold" ||
+    s === "submitting_to_labelgrid" ||
+    s === "labelgrid_in_review" ||
+    s === "internal_changes_required" ||
+    s === "labelgrid_changes_required"
+  );
+}
+
+/** Staff delete — blocked for live / in-flight delivery. */
+export function canAdminDeleteRelease(status: string): boolean {
+  const s = normalizeReleaseStatus(status);
+  return s !== "live" && s !== "delivering" && s !== "takedown_pending";
 }
 
 /** Admin-facing status labels (ops console — denser than user labels). */

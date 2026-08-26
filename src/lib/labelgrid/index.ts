@@ -74,6 +74,13 @@ export function updateRelease(id: number | string, body: Record<string, unknown>
   });
 }
 
+/** Permanently delete a release from LabelGrid catalog (best-effort). */
+export function deleteRelease(id: number | string) {
+  return labelgridFetch<unknown>(`/releases/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export function validateRelease(id: number | string) {
   return labelgridFetch<unknown>(`/releases/${id}/validate`, {
     method: "POST",

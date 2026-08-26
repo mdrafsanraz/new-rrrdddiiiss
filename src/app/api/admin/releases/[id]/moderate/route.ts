@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/admin";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { withdrawReleaseFromReview } from "@/lib/labelgrid";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { logReleaseActivity } from "@/lib/releases/activity";
-import { canAdminDecide } from "@/lib/releases/status";
+import {
+  canAdminDecide,
+  canAdminSendBackToDraft,
+  normalizeReleaseStatus,
+} from "@/lib/releases/status";
 
 const schema = z.discriminatedUnion("action", [
   z.object({
@@ -16,6 +22,10 @@ const schema = z.discriminatedUnion("action", [
     notes: z.string().min(1).max(2000),
     documentKind: z.string().min(1).max(120),
     trackId: z.string().optional(),
+  }),
+  z.object({
+    action: z.literal("send_back_to_draft"),
+    notes: z.string().max(2000).optional(),
   }),
 ]);
 
@@ -79,49 +89,114 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     // request_document
-    const issue = await prisma.releaseReviewIssue.create({
-      data: {
+    if (body.action === "request_document") {
+      const issue = await prisma.releaseReviewIssue.create({
+        data: {
+          releaseId: id,
+          source: "INTERNAL",
+          code: "document_requested",
+          category: body.documentKind,
+          title: `Document requested: ${body.documentKind}`,
+          message: body.notes.trim(),
+          severity: "warning",
+          requiresDocument: true,
+          requiresFeedback: true,
+          affectedTrackId: body.trackId ?? null,
+          status: "open",
+        },
+      });
+
+      const fresh = await prisma.release.update({
+        where: { id },
+        data: {
+          status: "internal_changes_required",
+          reviewNotes: body.notes.trim(),
+          reviewedAt: new Date(),
+          reviewedById: gate.admin.id,
+        },
+      });
+
+      await logReleaseActivity({
         releaseId: id,
-        source: "INTERNAL",
-        code: "document_requested",
-        category: body.documentKind,
+        type: "document_requested",
         title: `Document requested: ${body.documentKind}`,
-        message: body.notes.trim(),
-        severity: "warning",
-        requiresDocument: true,
-        requiresFeedback: true,
-        affectedTrackId: body.trackId ?? null,
-        status: "open",
-      },
-    });
+        description: body.notes.trim(),
+        actorUserId: gate.admin.id,
+        metadata: { issueId: issue.id, kind: body.documentKind },
+      });
+      await writeAuditLog({
+        actorUserId: gate.admin.id,
+        action: "release_document_requested",
+        targetType: "release",
+        targetId: id,
+        summary: `Requested ${body.documentKind} for ${release.title}`,
+      });
+
+      return NextResponse.json({ release: fresh, issue });
+    }
+
+    // send_back_to_draft
+    if (!canAdminSendBackToDraft(release.status, release.permanentlyLocked)) {
+      return NextResponse.json(
+        { error: `Cannot send release in status "${release.status}" back to draft.` },
+        { status: 400 }
+      );
+    }
+
+    const normalized = normalizeReleaseStatus(release.status);
+    if (
+      release.labelgridId &&
+      isLabelGridLive() &&
+      (normalized === "labelgrid_in_review" ||
+        normalized === "labelgrid_changes_required" ||
+        normalized === "submitting_to_labelgrid")
+    ) {
+      try {
+        await withdrawReleaseFromReview(release.labelgridId);
+      } catch (error) {
+        console.warn(
+          "[admin/releases/moderate] withdraw-review failed (continuing)",
+          error
+        );
+      }
+    }
+
+    const userNotes =
+      body.notes?.trim() ||
+      "Your release was sent back to draft. Re-upload artwork and audio, then submit again.";
 
     const fresh = await prisma.release.update({
       where: { id },
       data: {
-        status: "internal_changes_required",
-        reviewNotes: body.notes.trim(),
+        status: "ready_to_submit",
+        syncError: null,
+        holdReason: null,
+        heldAt: null,
+        heldById: null,
+        reviewNotes: userNotes,
         reviewedAt: new Date(),
         reviewedById: gate.admin.id,
+        labelgridReviewStatus: release.labelgridId ? "draft" : null,
       },
     });
 
     await logReleaseActivity({
       releaseId: id,
-      type: "document_requested",
-      title: `Document requested: ${body.documentKind}`,
-      description: body.notes.trim(),
+      type: "edited",
+      title: "Sent back to draft",
+      description: userNotes,
       actorUserId: gate.admin.id,
-      metadata: { issueId: issue.id, kind: body.documentKind },
     });
     await writeAuditLog({
       actorUserId: gate.admin.id,
-      action: "release_document_requested",
+      action: "release_changes_requested",
       targetType: "release",
       targetId: id,
-      summary: `Requested ${body.documentKind} for ${release.title}`,
+      summary: `Sent ${release.title} back to draft`,
+      metadata: { notes: userNotes, kind: "send_back_to_draft" },
     });
 
-    return NextResponse.json({ release: fresh, issue });
+    return NextResponse.json({ release: fresh });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

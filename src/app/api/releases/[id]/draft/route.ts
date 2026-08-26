@@ -4,6 +4,8 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { canUserEditRelease, isFinalRejection } from "@/lib/releases/status";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { pushMediaToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import {
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
@@ -12,7 +14,11 @@ import {
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
-import { saveArtwork, saveAudio } from "@/lib/uploads/store";
+import {
+  saveArtwork,
+  saveAudio,
+  type StoredUpload,
+} from "@/lib/uploads/store";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -126,9 +132,13 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const artworkFile = form.get("artwork");
     let artworkUrl = existing.artworkUrl;
+    let artworkUpload: StoredUpload | null = null;
     if (artworkFile instanceof File && artworkFile.size > 0) {
-      artworkUrl = (await saveArtwork(user.id, artworkFile)).publicUrl;
+      artworkUpload = await saveArtwork(user.id, artworkFile);
+      artworkUrl = artworkUpload.publicUrl;
     }
+
+    const audioUploads = new Map<string, StoredUpload>();
 
     const prevMeta = parseJsonObject<ReleaseMetadata & Record<string, unknown>>(
       existing.metadataJson
@@ -218,7 +228,10 @@ export async function PATCH(request: Request, { params }: Params) {
         const audioFile = form.get(audioKey);
         let audioUrl: string | null = null;
         if (audioFile instanceof File && audioFile.size > 0) {
-          audioUrl = (await saveAudio(user.id, audioFile)).publicUrl;
+          const saved = await saveAudio(user.id, audioFile);
+          audioUrl = saved.publicUrl;
+          const trackKey = t.id ?? t.clientId ?? String(index);
+          audioUploads.set(trackKey, saved);
         }
 
         const contributors =
@@ -325,7 +338,38 @@ export async function PATCH(request: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({ release: fresh });
+    let labelgrid: { uploaded: boolean; error?: string } | undefined;
+    if (
+      fresh &&
+      isLabelGridLive() &&
+      (artworkUpload || audioUploads.size > 0)
+    ) {
+      const firstTrack = fresh.tracks[0];
+      const audioUpload =
+        (firstTrack &&
+          [...audioUploads.values()].find((u) => u.publicUrl === firstTrack.audioUrl)) ??
+        [...audioUploads.values()][0] ??
+        null;
+      const pushResult = await pushMediaToLabelGrid({
+        release: fresh,
+        artwork: artworkUpload,
+        audio: audioUpload,
+        localTrackId: firstTrack?.id,
+      });
+      labelgrid = pushResult.ok
+        ? { uploaded: true }
+        : { uploaded: false, error: pushResult.error };
+      if (!pushResult.ok && !fresh.labelgridId) {
+        await prisma.release.update({
+          where: { id },
+          data: {
+            syncError: `LabelGrid upload: ${pushResult.error}`.slice(0, 2000),
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ release: fresh, labelgrid });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
