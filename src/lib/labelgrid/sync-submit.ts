@@ -9,14 +9,21 @@ import {
   createArtist,
   createRelease,
   createTrack,
-  createWriter,
   listGenres,
   listLabels,
   submitReleaseForReview,
+  updateRelease,
   uploadReleasePhoto,
   uploadTrackStereoAudio,
   validateRelease,
 } from "@/lib/labelgrid";
+import {
+  describeLabelGridMediaGaps,
+  ensureWriter,
+  getLabelGridMediaStatus,
+  isLabelGridDraftMediaReady,
+  unwrapLabelGridId,
+} from "@/lib/labelgrid/catalog";
 import type { StoredUpload } from "@/lib/uploads/store";
 import {
   parseJsonObject,
@@ -183,15 +190,7 @@ async function requireGenreId(genreName: string | null): Promise<number> {
 }
 
 function unwrapId(res: unknown): number {
-  if (!res || typeof res !== "object") {
-    throw new Error("Unexpected LabelGrid response shape");
-  }
-  const obj = res as { id?: number; data?: { id?: number } };
-  const id = obj.data?.id ?? obj.id;
-  if (typeof id !== "number") {
-    throw new Error("LabelGrid response missing numeric id");
-  }
-  return id;
+  return unwrapLabelGridId(res);
 }
 
 async function ensureLabelGridArtist(artist: Artist): Promise<number> {
@@ -283,13 +282,13 @@ export async function syncSubmittedReleaseToLabelGrid(
     }> = [];
 
     for (const c of contributorsInput) {
-      const writer = await createWriter({
+      const writerId = await ensureWriter({
         first_name: c.firstName.trim(),
         last_name: c.lastName.trim(),
         email: release.artist.email ?? undefined,
       });
       lgContributors.push({
-        writer_id: unwrapId(writer),
+        writer_id: writerId,
         roles: Object.fromEntries(c.roles.map((r) => [r, true])),
         ai_contribution: "none",
       });
@@ -333,7 +332,11 @@ export async function syncSubmittedReleaseToLabelGrid(
       ];
     }
 
-    const lgRelease = await createRelease(releaseBody);
+    const lgRelease = release.labelgridId
+      ? await updateRelease(Number(release.labelgridId), releaseBody).then(
+          () => ({ data: { id: Number(release.labelgridId) } })
+        )
+      : await createRelease(releaseBody);
     const lgReleaseId = unwrapId(lgRelease);
 
     await uploadReleasePhoto(
@@ -387,7 +390,12 @@ export async function syncSubmittedReleaseToLabelGrid(
       trackBody.lyrics = [{ iso_code: locale, text: tMeta.lyrics.trim() }];
     }
 
-    const lgTrack = await createTrack(trackBody);
+    const lgTrack = track.labelgridId
+      ? await (async () => {
+          // Track already on LabelGrid — metadata refresh only; audio uploaded below.
+          return { data: { id: Number(track.labelgridId) } };
+        })()
+      : await createTrack(trackBody);
     const lgTrackId = unwrapId(lgTrack);
 
     await uploadTrackStereoAudio(lgTrackId, {
@@ -610,9 +618,7 @@ export async function submitLabelGridDraftForReview(input: {
         return {
           ok: false,
           error:
-            "Release is not on LabelGrid yet and artwork/audio files are missing on the server. " +
-            "Re-upload media on the release page, then approve again. " +
-            "Set UPLOADS_DIR to a Railway volume path so uploads persist across redeploys.",
+            "Release is not on LabelGrid yet. Upload cover art and audio (LabelGrid API), then approve again.",
         };
       }
       const synced = await syncSubmittedReleaseToLabelGrid({
@@ -623,6 +629,32 @@ export async function submitLabelGridDraftForReview(input: {
       if (!synced.ok) return synced;
       lgReleaseId = synced.releaseId;
       lgTrackId = synced.trackId;
+    } else {
+      // Draft exists on LabelGrid — verify media via GET release/tracks/files.
+      let mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
+      if (!isLabelGridDraftMediaReady(mediaStatus)) {
+        if (input.artwork || input.audio) {
+          const pushed = await pushMediaToLabelGrid({
+            release,
+            artwork: input.artwork,
+            audio: input.audio,
+            localTrackId: release.tracks[0]?.id,
+          });
+          if (!pushed.ok) return pushed;
+          lgTrackId = pushed.trackId ?? lgTrackId;
+          mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
+        }
+      }
+
+      if (!isLabelGridDraftMediaReady(mediaStatus)) {
+        const gaps = describeLabelGridMediaGaps(mediaStatus);
+        return {
+          ok: false,
+          error:
+            `LabelGrid draft is missing media: ${gaps.join("; ")}. ` +
+            "Re-upload in the release builder (uploads go to LabelGrid), then approve again.",
+        };
+      }
     }
 
     // Best-effort validation before submit-for-review.

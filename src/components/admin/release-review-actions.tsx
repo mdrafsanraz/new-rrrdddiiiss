@@ -250,7 +250,7 @@ export function ReleaseReviewActions({
           draft lets the user re-upload in the builder. Status: {status}
           {hasLabelgridId ? "" : " · LG draft not created yet"}
           {!mediaReady
-            ? " · Cover/audio missing — send back to draft or re-upload below"
+            ? " · Cover/audio missing on LabelGrid — send back to draft or re-upload"
             : ""}
         </p>
       </div>
@@ -272,9 +272,9 @@ export function ReleaseReviewActions({
           ) : null}
           {!mediaReady ? (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Artwork and/or audio are missing. Use{" "}
+              Cover and/or audio are not on LabelGrid yet. Use{" "}
               <strong>Send back to draft</strong> so the user can re-upload in
-              the release builder, or re-upload media above then approve.
+              the release builder (uploads go to LabelGrid API), then approve.
             </p>
           ) : null}
           <div className="flex flex-col gap-2">

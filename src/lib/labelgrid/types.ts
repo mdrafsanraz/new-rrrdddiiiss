@@ -20,14 +20,39 @@ export type ReleaseTitleLocalizationData = {
 export type ReleaseData = {
   id: number;
   public_id: string;
-  artists?: { id?: number; artist_name?: string } | null;
+  artists?: { id?: number; artist_name?: string }[] | null;
   titles?: ReleaseTitleLocalizationData[];
+  mix_versions?: ReleaseTitleLocalizationData[];
   cat?: string;
   release_date?: string | null;
   barcode_number?: string | null;
   review_status?: string | null;
   delivery_status?: string | null;
   locked?: boolean;
+  front_cover?: FileData | null;
+  content_type?: string | null;
+};
+
+export type FileData = {
+  filename?: string;
+  url?: string;
+  filesize?: number | null;
+  status?: string | null;
+};
+
+export type WriterData = {
+  id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+};
+
+export type TrackData = {
+  id: number;
+  public_id?: string;
+  release_id?: number | null;
+  track_num?: number | null;
+  titles?: { iso_code?: string; text?: string }[];
 };
 
 export type UserResource = {

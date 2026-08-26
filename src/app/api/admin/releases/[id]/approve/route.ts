@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: Params) {
     const artwork = await loadStoredUpload(release.artworkUrl);
     const audio = await loadStoredUpload(release.tracks[0]?.audioUrl);
 
-    // Need local files only when this release has never been created on LabelGrid.
+    // No local labelgridId yet — need files to POST release + upload media via LG API.
     if (!release.labelgridId && (!artwork || !audio)) {
       const missing = describeMissingUploads({
         artworkUrl: release.artworkUrl,
@@ -90,9 +90,8 @@ export async function POST(request: Request, { params }: Params) {
         audioOnDisk: await storedUploadExists(release.tracks[0]?.audioUrl),
       });
       const message =
-        `Cannot sync to LabelGrid: ${missing.join("; ")}. ` +
-        "Re-upload cover art and audio on this release, then approve again. " +
-        "On Railway, mount a volume and set UPLOADS_DIR so files survive redeploys.";
+        `Cannot create LabelGrid draft: ${missing.join("; ")}. ` +
+        "Send back to draft so the user can re-upload (files go to LabelGrid API), then approve again.";
 
       await prisma.release.update({
         where: { id },

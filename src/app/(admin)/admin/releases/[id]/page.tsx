@@ -15,6 +15,11 @@ import { parseJsonObject } from "@/lib/releases/constants";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
 import { canAdminDecide, canAdminDeleteRelease, canAdminSendBackToDraft, getAdminStatusLabel } from "@/lib/releases/status";
 import { hasPermission } from "@/lib/auth/permissions";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import {
+  getLabelGridMediaStatus,
+  isLabelGridDraftMediaReady,
+} from "@/lib/labelgrid/catalog";
 import { storedUploadExists } from "@/lib/uploads/store";
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 
@@ -114,8 +119,17 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   );
   const needsArtwork = !artworkOnDisk;
   const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
-  const mediaReadyForLg =
-    Boolean(release.labelgridId) || (artworkOnDisk && !needsAudio);
+
+  let mediaReadyForLg = artworkOnDisk && !needsAudio;
+  if (release.labelgridId && isLabelGridLive()) {
+    try {
+      const lgMedia = await getLabelGridMediaStatus(Number(release.labelgridId));
+      mediaReadyForLg = isLabelGridDraftMediaReady(lgMedia);
+    } catch {
+      mediaReadyForLg = Boolean(release.labelgridId) && artworkOnDisk && !needsAudio;
+    }
+  }
+
   const showMediaReplace =
     hasPermission(admin.role, "releases.moderate") &&
     !release.permanentlyLocked &&

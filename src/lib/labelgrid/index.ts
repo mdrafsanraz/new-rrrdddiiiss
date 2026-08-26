@@ -1,10 +1,13 @@
 import { labelgridFetch, labelgridUpload } from "@/lib/labelgrid/client";
 import type {
   ArtistData,
+  FileData,
   GenreData,
   Paginated,
   ReleaseData,
+  TrackData,
   UserResource,
+  WriterData,
 } from "@/lib/labelgrid/types";
 
 export function getMe() {
@@ -162,6 +165,49 @@ export function createWriter(body: {
     method: "POST",
     body,
   });
+}
+
+export function listWriters(page = 1, perPage = 50, nameFilter?: string) {
+  return labelgridFetch<Paginated<WriterData>>("/writers", {
+    searchParams: {
+      page,
+      per_page: perPage,
+      ...(nameFilter ? { "filter[name]": nameFilter } : {}),
+    },
+  });
+}
+
+export function listTracks(page = 1, perPage = 50, releaseId?: number) {
+  return labelgridFetch<Paginated<TrackData>>("/tracks", {
+    searchParams: {
+      page,
+      per_page: perPage,
+      ...(releaseId ? { "filter[release_id]": releaseId } : {}),
+    },
+  });
+}
+
+export function getTrack(id: number | string) {
+  return labelgridFetch<{ data: TrackData }>(`/tracks/${id}`);
+}
+
+export function updateTrack(
+  id: number | string,
+  body: Record<string, unknown>
+) {
+  return labelgridFetch<{ data: TrackData }>(`/tracks/${id}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export function getTrackFile(
+  trackId: number | string,
+  fileType: "stereo" | "dolby" | "lyrics"
+) {
+  return labelgridFetch<FileData | { data: FileData }>(
+    `/tracks/${trackId}/files/${fileType}`
+  );
 }
 
 export function createTrack(body: Record<string, unknown>) {
