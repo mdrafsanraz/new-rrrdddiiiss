@@ -31,26 +31,52 @@ import {
 
 type Props = { params: Promise<{ id: string }> };
 
+const releaseInclude = {
+  artist: true,
+  tracks: {
+    orderBy: { trackNumber: "asc" as const },
+    include: { contributors: true },
+  },
+  reviewIssues: { orderBy: { createdAt: "desc" as const } },
+  activities: { orderBy: { createdAt: "desc" as const }, take: 40 },
+  documents: { orderBy: { createdAt: "desc" as const }, take: 20 },
+};
+
 export default async function ReleaseDetailPage({ params }: Props) {
   const user = await requireUser();
   const { id } = await params;
 
-  let release = await prisma.release.findFirst({
-    where: { id, userId: user.id },
-    include: {
-      artist: true,
-      tracks: {
-        orderBy: { trackNumber: "asc" },
-        include: { contributors: true },
+  let release;
+  try {
+    release = await prisma.release.findFirst({
+      where: { id, userId: user.id },
+      include: releaseInclude,
+    });
+  } catch (error) {
+    console.error("[releases/detail] query failed", error);
+    // Schema may be mid-sync — retry without newer optional includes.
+    release = await prisma.release.findFirst({
+      where: { id, userId: user.id },
+      include: {
+        artist: true,
+        tracks: {
+          orderBy: { trackNumber: "asc" },
+          include: { contributors: true },
+        },
       },
-      reviewIssues: { orderBy: { createdAt: "desc" } },
-      activities: { orderBy: { createdAt: "desc" }, take: 40 },
-      documents: { orderBy: { createdAt: "desc" }, take: 20 },
-    },
-  });
+    });
+    if (release) {
+      release = {
+        ...release,
+        reviewIssues: [],
+        activities: [],
+        documents: [],
+      };
+    }
+  }
   if (!release) notFound();
 
-  // Safe reconciliation when already in LabelGrid review (not on every draft view).
+  // Best-effort reconciliation — never block the page on LabelGrid latency/errors.
   const normalized = normalizeReleaseStatus(release.status);
   if (
     isLabelGridLive() &&
@@ -65,30 +91,42 @@ export default async function ReleaseDetailPage({ params }: Props) {
       "submitting_to_labelgrid",
     ].includes(normalized)
   ) {
-    await reconcileLabelGridReleaseStatus(release.id, { deep: true });
-    release =
-      (await prisma.release.findFirst({
-        where: { id, userId: user.id },
-        include: {
-          artist: true,
-          tracks: {
-            orderBy: { trackNumber: "asc" },
-            include: { contributors: true },
+    try {
+      await Promise.race([
+        reconcileLabelGridReleaseStatus(release.id, { deep: true }),
+        new Promise<{ ok: false }>((resolve) =>
+          setTimeout(() => resolve({ ok: false }), 2500)
+        ),
+      ]);
+      release =
+        (await prisma.release.findFirst({
+          where: { id, userId: user.id },
+          include: {
+            artist: true,
+            tracks: {
+              orderBy: { trackNumber: "asc" },
+              include: { contributors: true },
+            },
+            reviewIssues: { orderBy: { createdAt: "desc" } },
+            activities: { orderBy: { createdAt: "desc" }, take: 40 },
+            documents: { orderBy: { createdAt: "desc" }, take: 20 },
           },
-          reviewIssues: { orderBy: { createdAt: "desc" } },
-          activities: { orderBy: { createdAt: "desc" }, take: 40 },
-          documents: { orderBy: { createdAt: "desc" }, take: 20 },
-        },
-      })) ?? release;
+        })) ?? release;
+    } catch (error) {
+      console.error("[releases/detail] reconcile skipped", error);
+    }
   }
 
   const facing = getUserFacingReleaseStatus(release.status);
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
-  const openIssues = release.reviewIssues.filter((i) => !i.resolved);
+  const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
   const canSubmit = canUserSubmitRelease(release);
   const canResubmit = canUserResubmitRelease(release);
+  const tracks = release.tracks ?? [];
+  const documents = release.documents ?? [];
+  const activities = release.activities ?? [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -283,7 +321,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <h2 className="text-sm font-semibold">Tracks</h2>
         </div>
         <ul className="divide-y divide-border">
-          {release.tracks.map((t) => {
+          {tracks.map((t) => {
             const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
             return (
               <li key={t.id} className="px-5 py-4 text-sm">
@@ -325,11 +363,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
         </ul>
       </section>
 
-      {release.documents.length > 0 ? (
+      {documents.length > 0 ? (
         <section className="border border-border bg-card p-5">
           <h2 className="text-sm font-semibold">Uploaded documents</h2>
           <ul className="mt-3 divide-y divide-border text-sm">
-            {release.documents.map((d) => (
+            {documents.map((d) => (
               <li
                 key={d.id}
                 className="flex flex-wrap items-center justify-between gap-2 py-2.5"
@@ -355,17 +393,17 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <ClockCounterClockwise size={16} weight="regular" aria-hidden />
           <h2 className="text-sm font-semibold">Activity</h2>
         </div>
-        {release.activities.length === 0 ? (
+        {activities.length === 0 ? (
           <p className="px-5 py-8 text-sm text-muted-foreground">
             No activity recorded yet.
           </p>
         ) : (
           <ol className="relative space-y-0 px-5 py-4">
-            {release.activities.map((a, i) => (
+            {activities.map((a, i) => (
               <li key={a.id} className="relative flex gap-4 pb-5 last:pb-0">
                 <span className="mt-1.5 flex flex-col items-center">
                   <span className="size-2.5 shrink-0 bg-primary" />
-                  {i < release.activities.length - 1 ? (
+                  {i < activities.length - 1 ? (
                     <span className="mt-1 w-px flex-1 bg-border" />
                   ) : null}
                 </span>

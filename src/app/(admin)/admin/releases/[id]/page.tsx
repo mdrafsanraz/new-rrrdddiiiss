@@ -31,23 +31,45 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   const admin = await requirePermission("releases.read");
   const { id } = await params;
 
-  const release = await prisma.release.findUnique({
-    where: { id },
-    include: {
-      user: true,
-      artist: true,
-      label: true,
-      tracks: {
-        orderBy: { trackNumber: "asc" },
-        include: { contributors: true },
+  let release;
+  try {
+    release = await prisma.release.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        artist: true,
+        label: true,
+        tracks: {
+          orderBy: { trackNumber: "asc" },
+          include: { contributors: true },
+        },
+        reviewedBy: { select: { name: true, email: true } },
+        reviewIssues: { orderBy: { createdAt: "desc" } },
+        documents: { orderBy: { createdAt: "desc" } },
+        activities: { orderBy: { createdAt: "desc" }, take: 40 },
+        takedowns: { orderBy: { createdAt: "desc" }, take: 5 },
       },
-      reviewedBy: { select: { name: true, email: true } },
-      reviewIssues: { orderBy: { createdAt: "desc" } },
-      documents: { orderBy: { createdAt: "desc" } },
-      activities: { orderBy: { createdAt: "desc" }, take: 40 },
-      takedowns: { orderBy: { createdAt: "desc" }, take: 5 },
-    },
-  });
+    });
+  } catch (error) {
+    console.error("[admin/releases/detail] query failed", error);
+    // Fallback without newer relations if schema sync is mid-flight.
+    release = await prisma.release.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        artist: true,
+        label: true,
+        tracks: {
+          orderBy: { trackNumber: "asc" },
+          include: { contributors: true },
+        },
+        reviewedBy: { select: { name: true, email: true } },
+        reviewIssues: { orderBy: { createdAt: "desc" } },
+        documents: { orderBy: { createdAt: "desc" } },
+        activities: { orderBy: { createdAt: "desc" }, take: 40 },
+      },
+    });
+  }
   if (!release) notFound();
 
   const meta = parseJsonObject(release.metadataJson) as Record<string, unknown>;
@@ -239,8 +261,8 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                   string,
                   unknown
                 >;
-                const trackQc = qc?.issues.filter((issue) =>
-                  issue.affectedTracks.some(
+                const trackQc = (qc?.issues ?? []).filter((issue) =>
+                  (issue.affectedTracks ?? []).some(
                     (at) =>
                       at.id === Number(t.labelgridId) ||
                       at.title.toLowerCase() === t.title.toLowerCase()

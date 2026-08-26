@@ -226,11 +226,21 @@ export async function requestQualityReportRefresh(localReleaseId: string) {
 }
 
 export function parseCachedQcReport(json: string | null | undefined): QcReportSnapshot | null {
-  if (!json) return null;
+  if (!json || json === "{}") return null;
   try {
-    const parsed = JSON.parse(json) as QcReportSnapshot;
+    const parsed = JSON.parse(json) as Partial<QcReportSnapshot>;
     if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
+    return {
+      enabled: parsed.enabled !== false,
+      status: parsed.status ?? "not_run",
+      stale: Boolean(parsed.stale),
+      checksInProgress: Boolean(parsed.checksInProgress),
+      hold: Boolean(parsed.hold),
+      generatedAt: parsed.generatedAt ?? null,
+      profile: parsed.profile ?? null,
+      issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      raw: parsed.raw ?? parsed,
+    };
   } catch {
     return null;
   }
