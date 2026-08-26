@@ -10,13 +10,17 @@ export const metadata = { title: "Admin" };
 export default async function AdminHomePage() {
   await requireAdmin();
 
-  const [pending, users, releases, approved, rejected] = await Promise.all([
-    prisma.release.count({ where: { status: "in_review" } }),
-    prisma.user.count(),
-    prisma.release.count(),
-    prisma.release.count({ where: { status: "approved" } }),
-    prisma.release.count({ where: { status: "rejected" } }),
-  ]);
+  const [pending, users, releases, approved, rejected, openSupport] =
+    await Promise.all([
+      prisma.release.count({ where: { status: "in_review" } }),
+      prisma.user.count(),
+      prisma.release.count(),
+      prisma.release.count({ where: { status: "approved" } }),
+      prisma.release.count({ where: { status: "rejected" } }),
+      prisma.supportTicket.count({
+        where: { status: { in: ["open", "in_progress"] } },
+      }),
+    ]);
 
   const queue = await prisma.release.findMany({
     where: { status: "in_review" },
@@ -40,8 +44,9 @@ export default async function AdminHomePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="In review" value={pending} href="/admin/releases?status=in_review" />
+        <Stat label="Support open" value={openSupport} href="/admin/support?status=open" />
         <Stat label="Users" value={users} href="/admin/users" />
         <Stat label="Approved" value={approved} href="/admin/releases?status=approved" />
         <Stat label="Rejected" value={rejected} href="/admin/releases?status=rejected" />

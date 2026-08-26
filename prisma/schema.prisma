@@ -27,6 +27,21 @@ enum UserRole {
   admin
 }
 
+enum SupportTicketStatus {
+  open
+  in_progress
+  answered
+  closed
+}
+
+enum SupportTicketCategory {
+  general
+  release
+  billing
+  account
+  technical
+}
+
 /** Local release lifecycle — map LabelGrid statuses into this, never expose raw LG in UI. */
 enum ReleaseStatus {
   draft
@@ -63,6 +78,8 @@ model User {
   releases         Release[]
   labels           Label[]
   reviewedReleases Release[] @relation("ReleaseReviewer")
+  supportTickets   SupportTicket[]
+  supportMessages  SupportMessage[]
 }
 
 /** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
@@ -133,6 +150,11 @@ model Release {
   storesJson      String        @default("[]")
   /** Extra ReleaseCreateData fields (JSON) — mix version, ©/℗, store URLs, etc. */
   metadataJson    String        @default("{}")
+  /**
+   * True after a final policy rejection — release cannot be edited or resubmitted.
+   * Distinct from changes_required, which is editable and may re-enter review.
+   */
+  permanentlyLocked Boolean     @default(false)
   labelgridId     String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -183,4 +205,38 @@ model TrackContributor {
   track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@index([trackId])
+}
+
+/** Internal RDISTRO support — users open tickets; admins reply from /admin/support. */
+model SupportTicket {
+  id        String                @id @default(cuid())
+  userId    String
+  subject   String
+  category  SupportTicketCategory @default(general)
+  status    SupportTicketStatus   @default(open)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  authorId  String
+  body      String
+  /** true when the author is staff (admin reply). */
+  isStaff   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
 }

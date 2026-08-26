@@ -3,9 +3,9 @@ import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
 import { formatLimit } from "@/lib/plans";
-import { ReleaseSubmitForm } from "@/components/dashboard/release-submit-form";
+import { ReleaseBuilder } from "@/components/dashboard/release-builder";
 
-export const metadata = { title: "Submit release" };
+export const metadata = { title: "Release builder" };
 
 type Props = { searchParams: Promise<{ artistId?: string }> };
 
@@ -30,15 +30,15 @@ export default async function NewReleasePage({ searchParams }: Props) {
           ← Releases
         </Link>
         <h1 className="mt-2 text-2xl font-bold tracking-tight">
-          Submit a release
+          Release builder
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Fields follow LabelGrid ReleaseCreateData + TrackCreateData. Submitting
-          uploads a LabelGrid draft and queues RDISTRO admin review
+          Step through artist → release → artwork → track → credits. Catalog
+          number is assigned as RDISTROXXXXXX on submit
           {usage.releasesLimit === null
-            ? " (unlimited on your plan)"
-            : ` (${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used this month)`}
-          . The selected artist locks after submit.
+            ? ""
+            : ` · ${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used this month`}
+          .
         </p>
       </div>
 
@@ -69,7 +69,7 @@ export default async function NewReleasePage({ searchParams }: Props) {
           </Link>
         </div>
       ) : (
-        <ReleaseSubmitForm
+        <ReleaseBuilder
           artists={artists.map((a) => ({
             id: a.id,
             name: a.name,

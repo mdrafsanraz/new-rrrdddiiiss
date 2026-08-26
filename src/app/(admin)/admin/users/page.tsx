@@ -35,9 +35,13 @@ export default async function AdminUsersPage({ searchParams }: Props) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Users</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage plans and roles. Use{" "}
+          Manage plans and accounts. Use{" "}
           <span className="font-medium text-foreground">Login as</span> to open
-          their dashboard.
+          their dashboard. To grant admin access, go to{" "}
+          <Link href="/admin/admins" className="font-medium underline-offset-4 hover:underline">
+            Admins
+          </Link>
+          .
         </p>
       </div>
 

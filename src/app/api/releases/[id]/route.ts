@@ -52,8 +52,19 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (existing.permanentlyLocked || existing.status === "rejected") {
+    return NextResponse.json(
+      {
+        error:
+          "This release was permanently rejected and cannot be edited.",
+      },
+      { status: 403 }
+    );
+  }
   if (
-    ["submitted", "in_review", "delivering", "live"].includes(existing.status)
+    ["submitted", "in_review", "approved", "delivering", "live"].includes(
+      existing.status
+    )
   ) {
     return NextResponse.json(
       { error: "This release can no longer be edited." },

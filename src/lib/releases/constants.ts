@@ -1,4 +1,4 @@
-/** LabelGrid ReleaseCreateData + TrackCreateData aligned constants (sandbox OpenAPI). */
+/** LabelGrid-aligned constants for the release builder. */
 
 export const CONTENT_TYPES = [
   "Single",
@@ -11,7 +11,6 @@ export const CONTENT_TYPES = [
 
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
-/** LabelGrid AiUsageEnum */
 export const ARTWORK_AI_USAGE = ["none", "some", "material", "all"] as const;
 export type ArtworkAiUsage = (typeof ARTWORK_AI_USAGE)[number];
 
@@ -33,7 +32,6 @@ export const COMMERCIAL_SAMPLES = [
   { value: "non_exclusive", label: "Non-exclusive sample clearance" },
 ] as const;
 
-/** Common artistic roles accepted as strings by LabelGrid ReleaseArtistUpdateData */
 export const ARTISTIC_ROLES = [
   "MainArtist",
   "FeaturedArtist",
@@ -58,13 +56,11 @@ export const LOCALES = [
   { value: "pt-BR", label: "Brazilian Portuguese (pt-BR)" },
   { value: "it", label: "Italian (it)" },
   { value: "ja", label: "Japanese (ja)" },
-  { value: "ja-Jpan", label: "Japanese Kanji (ja-Jpan)" },
   { value: "ko", label: "Korean (ko)" },
   { value: "zh", label: "Chinese (zh)" },
   { value: "zxx", label: "No linguistic content (zxx)" },
 ] as const;
 
-/** Common recording countries (ISO 3166-1 alpha-2) — subset of LabelGrid enum */
 export const RECORDING_COUNTRIES = [
   { value: "", label: "Not specified" },
   { value: "US", label: "United States" },
@@ -77,27 +73,15 @@ export const RECORDING_COUNTRIES = [
   { value: "IT", label: "Italy" },
   { value: "NL", label: "Netherlands" },
   { value: "SE", label: "Sweden" },
-  { value: "NO", label: "Norway" },
-  { value: "DK", label: "Denmark" },
-  { value: "FI", label: "Finland" },
-  { value: "IE", label: "Ireland" },
-  { value: "PT", label: "Portugal" },
-  { value: "BR", label: "Brazil" },
-  { value: "MX", label: "Mexico" },
-  { value: "AR", label: "Argentina" },
+  { value: "BD", label: "Bangladesh" },
+  { value: "IN", label: "India" },
   { value: "JP", label: "Japan" },
   { value: "KR", label: "South Korea" },
-  { value: "IN", label: "India" },
   { value: "NG", label: "Nigeria" },
-  { value: "ZA", label: "South Africa" },
-  { value: "BD", label: "Bangladesh" },
-  { value: "PK", label: "Pakistan" },
-  { value: "AE", label: "United Arab Emirates" },
-  { value: "SG", label: "Singapore" },
-  { value: "NZ", label: "New Zealand" },
+  { value: "BR", label: "Brazil" },
+  { value: "MX", label: "Mexico" },
 ] as const;
 
-/** Common genres for the form; mapped to LabelGrid genre ids when syncing. */
 export const PRIMARY_GENRES = [
   "Pop",
   "Hip Hop/Rap",
@@ -131,60 +115,34 @@ export const CONTRIBUTOR_ROLE_KEYS = [
   "FeaturedArtist",
 ] as const;
 
-/** Stored on Release.metadataJson — mirrors optional ReleaseCreateData fields. */
+export type ContributorDraft = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  roles: string[];
+};
+
 export type ReleaseMetadata = {
   mixVersion?: string;
-  phoneticTitle?: string;
-  descriptionLong?: string;
-  secondaryGenre?: string;
-  tertiaryGenre?: string;
-  preOrderDate?: string;
   preferredLocalization?: string;
-  enableExactReleaseTime?: boolean;
-  releaseTime?: string; // HH:mm when enableExactReleaseTime
   artisticRole?: string;
   clineYear?: number | null;
   clineName?: string;
   plineYear?: number | null;
   plineName?: string;
-  courtesyLine?: string;
-  transferFromDistributor?: string;
-  /** Existing DSP / store URLs */
-  storeUrls?: Partial<
-    Record<
-      | "spotify_url"
-      | "applemusic_url"
-      | "itunes_url"
-      | "youtubemusic_url"
-      | "youtube_url"
-      | "deezer_url"
-      | "tidal_url"
-      | "amazon_url"
-      | "beatport_url"
-      | "soundcloud_url"
-      | "bandcamp_url",
-      string
-    >
-  >;
 };
 
-/** Stored on Track.metadataJson — mirrors TrackCreateData fields. */
 export type TrackMetadata = {
   mixVersion?: string;
-  disc?: number;
   compositionType?: string;
   audioAiUsage?: string;
   compositionAiUsage?: string;
   commercialSamples?: string;
   audioLanguage?: string;
   recordingCountry?: string;
-  preferredLocalization?: string;
   primaryGenre?: string;
-  secondaryGenre?: string;
-  tertiaryGenre?: string;
   hasMechanicalLicense?: boolean;
   iswc?: string;
-  dolbyIsrc?: string;
   lyrics?: string;
   previewStartTime?: number | null;
   previewLength?: number | null;
@@ -196,14 +154,17 @@ export type TrackMetadata = {
   clineName?: string;
   plineYear?: number | null;
   plineName?: string;
-  courtesyLine?: string;
-  /** Writer credit used to create LabelGrid writer + contributor */
-  writerFirstName?: string;
-  writerLastName?: string;
-  writerRoles?: string[];
+  /** Multiple writer/contributor credits for LabelGrid. */
+  contributors?: Array<{
+    firstName: string;
+    lastName: string;
+    roles: string[];
+  }>;
 };
 
-export function parseJsonObject<T extends object>(raw: string | null | undefined): T {
+export function parseJsonObject<T extends object>(
+  raw: string | null | undefined
+): T {
   if (!raw) return {} as T;
   try {
     const v = JSON.parse(raw);
@@ -211,4 +172,14 @@ export function parseJsonObject<T extends object>(raw: string | null | undefined
   } catch {
     return {} as T;
   }
+}
+
+/** RDISTRO + 6 alphanumeric chars (no ambiguous 0/O/1/I). */
+export function makeCatalogCandidate(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 6; i++) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `RDISTRO${suffix}`;
 }

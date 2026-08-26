@@ -9,17 +9,14 @@ export function AdminUserEditForm({
   userId,
   name,
   planId,
-  role,
 }: {
   userId: string;
   name: string;
   planId: string;
-  role: string;
 }) {
   const router = useRouter();
   const [formName, setFormName] = useState(name);
   const [formPlan, setFormPlan] = useState(planId);
-  const [formRole, setFormRole] = useState(role);
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
@@ -39,7 +36,6 @@ export function AdminUserEditForm({
             body: JSON.stringify({
               name: formName,
               planId: formPlan,
-              role: formRole,
             }),
           });
           const data = await res.json();
@@ -58,6 +54,13 @@ export function AdminUserEditForm({
       }}
     >
       <h2 className="text-sm font-semibold">Edit user</h2>
+      <p className="text-xs text-muted-foreground">
+        To grant admin access, use{" "}
+        <a href="/admin/admins" className="font-medium underline-offset-4 hover:underline">
+          Add admin
+        </a>
+        .
+      </p>
       <Field
         id="name"
         label="Name"
@@ -76,24 +79,12 @@ export function AdminUserEditForm({
         <option value="starter">Starter</option>
         <option value="pro">Pro</option>
       </Field>
-      <Field
-        id="role"
-        label="Role"
-        as="select"
-        value={formRole}
-        onChange={(e) => setFormRole(e.target.value)}
-      >
-        <option value="user">User</option>
-        <option value="admin">Admin</option>
-      </Field>
       {error ? (
         <p className="text-sm font-medium text-red-700" role="alert">
           {error}
         </p>
       ) : null}
-      {ok ? (
-        <p className="text-sm text-emerald-800">Saved.</p>
-      ) : null}
+      {ok ? <p className="text-sm text-emerald-800">Saved.</p> : null}
       <Button type="submit" className="h-10 px-5" disabled={status === "loading"}>
         {status === "loading" ? "Saving…" : "Save changes"}
       </Button>

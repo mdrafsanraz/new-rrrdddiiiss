@@ -9,7 +9,7 @@ const labels: Record<ReleaseStatus, string> = {
   submitted: "Submitted",
   in_review: "Admin review",
   changes_required: "Changes required",
-  rejected: "Rejected",
+  rejected: "Rejected (final)",
   approved: "Approved",
   delivering: "Delivering",
   live: "Live",

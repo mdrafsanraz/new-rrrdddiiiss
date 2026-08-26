@@ -33,6 +33,12 @@ export async function POST(request: Request, { params }: Params) {
     if (!release) {
       return NextResponse.json({ error: "Release not found" }, { status: 404 });
     }
+    if (release.permanentlyLocked || release.status === "rejected") {
+      return NextResponse.json(
+        { error: "This release is permanently rejected and locked." },
+        { status: 400 }
+      );
+    }
     if (!["in_review", "submitted", "error"].includes(release.status)) {
       return NextResponse.json(
         { error: `Cannot approve release in status "${release.status}"` },

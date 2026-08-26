@@ -14,8 +14,9 @@ type Props = {
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "in_review", label: "In review" },
+  { value: "changes_required", label: "Changes required" },
   { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+  { value: "rejected", label: "Rejected (final)" },
   { value: "error", label: "Sync error" },
   { value: "all", label: "All" },
 ];
@@ -57,8 +58,10 @@ export default async function AdminReleasesPage({ searchParams }: Props) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Release queue</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Releases arrive as LabelGrid drafts. Approve submits them for
-          LabelGrid review; reject returns notes to the user.
+          Releases arrive as LabelGrid drafts. Approve submits them for LabelGrid
+          review. <strong>Changes required</strong> returns the release editable
+          for correction and resubmit. <strong>Reject</strong> is final and
+          permanently locks the release.
         </p>
       </div>
 

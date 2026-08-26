@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { SubmitReleaseButton } from "@/components/dashboard/submit-release-button";
+import { ResubmitReleaseButton } from "@/components/dashboard/resubmit-release-button";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -21,13 +22,13 @@ export default async function ReleaseDetailPage({ params }: Props) {
   });
   if (!release) notFound();
 
-  const editable = [
-    "draft",
-    "incomplete",
-    "ready_to_submit",
-    "changes_required",
-    "error",
-  ].includes(release.status);
+  const isFinalReject =
+    release.permanentlyLocked || release.status === "rejected";
+  const needsChanges = release.status === "changes_required";
+  const draftEditable =
+    ["draft", "incomplete", "ready_to_submit", "error"].includes(
+      release.status
+    ) && !release.submittedAt;
 
   return (
     <div className="space-y-8">
@@ -50,10 +51,42 @@ export default async function ReleaseDetailPage({ params }: Props) {
             {release.upc ? ` · UPC ${release.upc}` : ""}
           </p>
         </div>
-        {editable && !release.submittedAt ? (
+        {draftEditable ? (
           <SubmitReleaseButton releaseId={release.id} />
         ) : null}
+        {needsChanges ? <ResubmitReleaseButton releaseId={release.id} /> : null}
       </div>
+
+      {needsChanges ? (
+        <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+          <p className="font-semibold">Changes required</p>
+          <p className="mt-1">
+            Review found something that needs attention. This is{" "}
+            <strong>not</strong> a final rejection — correct the flagged items,
+            then resubmit to re-enter admin review.
+          </p>
+          {release.reviewNotes ? (
+            <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3">
+              {release.reviewNotes}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {isFinalReject ? (
+        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-950">
+          <p className="font-semibold">Permanently rejected</p>
+          <p className="mt-1">
+            This release was rejected for a serious policy problem. It is locked
+            permanently and cannot be edited or resubmitted.
+          </p>
+          {release.reviewNotes ? (
+            <p className="mt-3 whitespace-pre-wrap border-t border-red-200 pt-3">
+              {release.reviewNotes}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <section className="rounded-xl border border-border bg-card p-5">
@@ -70,10 +103,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
                   : "Not set"
               }
             />
-            <Row
-              label="Artwork AI"
-              value={release.artworkAiUsage}
-            />
+            <Row label="Artwork AI" value={release.artworkAiUsage} />
             <Row label="Explicit" value={release.explicit} />
             <Row
               label="Submitted"
@@ -123,29 +153,25 @@ export default async function ReleaseDetailPage({ params }: Props) {
               </span>
               <span className="flex items-center gap-3 text-muted-foreground">
                 {t.audioUrl ? (
-                  <audio controls preload="none" src={t.audioUrl} className="h-8 max-w-[220px]" />
+                  <audio
+                    controls
+                    preload="none"
+                    src={t.audioUrl}
+                    className="h-8 max-w-[220px]"
+                  />
                 ) : null}
                 <span>{t.isrc ?? "ISRC pending"}</span>
-                {t.labelgridId ? (
-                  <span className="text-xs">LG {t.labelgridId}</span>
-                ) : null}
               </span>
             </li>
           ))}
         </ul>
       </section>
 
-      {release.reviewNotes ? (
-        <section
-          className={
-            release.status === "rejected"
-              ? "rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-950"
-              : "rounded-xl border border-border bg-muted/40 p-5 text-sm"
-          }
-        >
-          <p className="font-semibold">
-            {release.status === "rejected" ? "Rejected by admin" : "Admin notes"}
-          </p>
+      {release.reviewNotes &&
+      release.status !== "changes_required" &&
+      !isFinalReject ? (
+        <section className="rounded-xl border border-border bg-muted/40 p-5 text-sm">
+          <p className="font-semibold">Admin notes</p>
           <p className="mt-1 whitespace-pre-wrap">{release.reviewNotes}</p>
         </section>
       ) : null}

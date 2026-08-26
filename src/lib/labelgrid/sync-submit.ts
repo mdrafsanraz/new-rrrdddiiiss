@@ -111,15 +111,6 @@ function unwrapId(res: unknown): number {
   return id;
 }
 
-function pickStoreUrls(urls: ReleaseMetadata["storeUrls"]) {
-  if (!urls) return {};
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(urls)) {
-    if (v?.trim()) out[k] = v.trim();
-  }
-  return out;
-}
-
 async function ensureLabelGridArtist(artist: Artist): Promise<number> {
   if (artist.labelgridId && /^\d+$/.test(artist.labelgridId)) {
     return Number(artist.labelgridId);
@@ -175,32 +166,51 @@ export async function syncSubmittedReleaseToLabelGrid(
       ensureLabelGridArtist(release.artist),
     ]);
 
-    const [secondaryGenreId, tertiaryGenreId, trackPrimaryGenreId, trackSecondaryGenreId, trackTertiaryGenreId] =
-      await Promise.all([
-        resolveGenreId(rMeta.secondaryGenre),
-        resolveGenreId(rMeta.tertiaryGenre),
-        resolveGenreId(tMeta.primaryGenre ?? release.primaryGenre),
-        resolveGenreId(tMeta.secondaryGenre),
-        resolveGenreId(tMeta.tertiaryGenre),
-      ]);
-
-    const writerFirst =
-      tMeta.writerFirstName ||
-      splitName(release.artist.fullName || release.artist.name).first;
-    const writerLast =
-      tMeta.writerLastName ||
-      splitName(release.artist.fullName || release.artist.name).last;
-
-    const writer = await createWriter({
-      first_name: writerFirst,
-      last_name: writerLast,
-      email: release.artist.email ?? undefined,
-    });
-    const writerId = unwrapId(writer);
+    const trackPrimaryGenreId = await resolveGenreId(
+      tMeta.primaryGenre ?? release.primaryGenre
+    );
 
     const locale = rMeta.preferredLocalization || "en";
     const titleText = release.title;
     const artisticRole = rMeta.artisticRole || "MainArtist";
+
+    const contribList =
+      tMeta.contributors?.filter(
+        (c) => c.firstName?.trim() && c.lastName?.trim() && c.roles?.length
+      ) ?? [];
+
+    const fallbackName = splitName(
+      release.artist.fullName || release.artist.name
+    );
+    const contributorsInput =
+      contribList.length > 0
+        ? contribList
+        : [
+            {
+              firstName: fallbackName.first,
+              lastName: fallbackName.last,
+              roles: ["Composer", "Lyricist"],
+            },
+          ];
+
+    const lgContributors: Array<{
+      writer_id: number;
+      roles: Record<string, boolean>;
+      ai_contribution: string;
+    }> = [];
+
+    for (const c of contributorsInput) {
+      const writer = await createWriter({
+        first_name: c.firstName.trim(),
+        last_name: c.lastName.trim(),
+        email: release.artist.email ?? undefined,
+      });
+      lgContributors.push({
+        writer_id: unwrapId(writer),
+        roles: Object.fromEntries(c.roles.map((r) => [r, true])),
+        ai_contribution: "none",
+      });
+    }
 
     const releaseBody: Record<string, unknown> = {
       content_type: release.contentType,
@@ -213,23 +223,16 @@ export async function syncSubmittedReleaseToLabelGrid(
       release_date: release.releaseDate
         ? release.releaseDate.toISOString()
         : undefined,
-      release_pre_order_date: rMeta.preOrderDate
-        ? new Date(`${rMeta.preOrderDate}T00:00:00.000Z`).toISOString()
-        : undefined,
-      enable_exact_release_time: Boolean(rMeta.enableExactReleaseTime),
       explicit: release.explicit,
-      description_long: rMeta.descriptionLong || undefined,
       cline_year: rMeta.clineYear ?? undefined,
       cline_name: rMeta.clineName || undefined,
       pline_year: rMeta.plineYear ?? undefined,
       pline_name: rMeta.plineName || undefined,
-      courtesy_line: rMeta.courtesyLine || undefined,
-      transfer_from_distributor: rMeta.transferFromDistributor || undefined,
       titles: [
         {
           iso_code: locale,
           text: titleText,
-          phonetic: rMeta.phoneticTitle || null,
+          phonetic: null,
         },
       ],
       artists: [
@@ -239,11 +242,8 @@ export async function syncSubmittedReleaseToLabelGrid(
           position: 1,
         },
       ],
-      ...pickStoreUrls(rMeta.storeUrls),
     };
 
-    if (secondaryGenreId) releaseBody.secondary_genre_id = secondaryGenreId;
-    if (tertiaryGenreId) releaseBody.tertiary_genre_id = tertiaryGenreId;
     if (rMeta.mixVersion?.trim()) {
       releaseBody.mix_versions = [
         { iso_code: locale, text: rMeta.mixVersion.trim(), phonetic: null },
@@ -259,22 +259,16 @@ export async function syncSubmittedReleaseToLabelGrid(
       artwork.filename
     );
 
-    const trackLocale = tMeta.preferredLocalization || locale;
-    const writerRoles = tMeta.writerRoles?.length
-      ? tMeta.writerRoles
-      : ["Composer", "Lyricist"];
-    const rolesObj = Object.fromEntries(writerRoles.map((r) => [r, true]));
-
     const trackBody: Record<string, unknown> = {
       release_id: lgReleaseId,
-      disc: tMeta.disc ?? 1,
+      disc: 1,
       track_num: track.trackNumber || 1,
       composition_type: tMeta.compositionType || "original_composition",
       audio_ai_usage: tMeta.audioAiUsage || "none",
       composition_ai_usage: tMeta.compositionAiUsage || "none",
       commercial_samples: tMeta.commercialSamples || "no",
       audio_language: tMeta.audioLanguage || "en",
-      preferred_localization: trackLocale,
+      preferred_localization: locale,
       explicit: tMeta.explicit || release.explicit,
       recording_country: tMeta.recordingCountry || undefined,
       isrc: track.isrc || undefined,
@@ -289,8 +283,7 @@ export async function syncSubmittedReleaseToLabelGrid(
       cline_name: tMeta.clineName || undefined,
       pline_year: tMeta.plineYear ?? undefined,
       pline_name: tMeta.plineName || undefined,
-      courtesy_line: tMeta.courtesyLine || undefined,
-      titles: [{ iso_code: trackLocale, text: track.title }],
+      titles: [{ iso_code: locale, text: track.title }],
       artists: [
         {
           artist_id: lgArtistId,
@@ -298,27 +291,17 @@ export async function syncSubmittedReleaseToLabelGrid(
           position: 1,
         },
       ],
-      contributors: [
-        {
-          writer_id: writerId,
-          roles: rolesObj,
-          ai_contribution: "none",
-        },
-      ],
+      contributors: lgContributors,
     };
 
     if (trackPrimaryGenreId) trackBody.primary_genre_id = trackPrimaryGenreId;
-    if (trackSecondaryGenreId) trackBody.secondary_genre_id = trackSecondaryGenreId;
-    if (trackTertiaryGenreId) trackBody.tertiary_genre_id = trackTertiaryGenreId;
     if (tMeta.mixVersion?.trim()) {
       trackBody.mix_versions = [
-        { iso_code: trackLocale, text: tMeta.mixVersion.trim() },
+        { iso_code: locale, text: tMeta.mixVersion.trim() },
       ];
     }
     if (tMeta.lyrics?.trim()) {
-      trackBody.lyrics = [
-        { iso_code: trackLocale, text: tMeta.lyrics.trim() },
-      ];
+      trackBody.lyrics = [{ iso_code: locale, text: tMeta.lyrics.trim() }];
     }
 
     const lgTrack = await createTrack(trackBody);

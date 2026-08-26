@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
-import type { PlanId, UserRole } from "@prisma/client";
+import type { PlanId } from "@prisma/client";
 
 const patchSchema = z.object({
   planId: z.enum(["free", "starter", "pro"]).optional(),
-  role: z.enum(["user", "admin"]).optional(),
   name: z.string().min(1).max(120).optional(),
 });
 
@@ -43,20 +42,8 @@ export async function PATCH(request: Request, { params }: Params) {
 
   try {
     const body = patchSchema.parse(await request.json());
-    if (id === gate.admin.id && body.role === "user") {
-      return NextResponse.json(
-        { error: "Cannot demote yourself" },
-        { status: 400 }
-      );
-    }
-
-    const data: {
-      planId?: PlanId;
-      role?: UserRole;
-      name?: string;
-    } = {};
+    const data: { planId?: PlanId; name?: string } = {};
     if (body.planId) data.planId = body.planId;
-    if (body.role) data.role = body.role;
     if (body.name) data.name = body.name.trim();
 
     const user = await prisma.user.update({

@@ -12,48 +12,40 @@ import {
   COMPOSITION_TYPES,
   CONTENT_TYPES,
   PRIMARY_GENRES,
+  makeCatalogCandidate,
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
 import { saveArtwork, saveAudio } from "@/lib/uploads/store";
 
-const genreOpt = z.string().max(64).optional().or(z.literal(""));
 const ai = z.enum(ARTWORK_AI_USAGE);
+
+const contributorSchema = z.object({
+  firstName: z.string().min(1).max(255),
+  lastName: z.string().min(1).max(255),
+  roles: z.array(z.string().min(1)).min(1),
+});
 
 const payloadSchema = z.object({
   artistId: z.string().min(1),
-  artisticRole: z.enum(ARTISTIC_ROLES).or(z.string().min(1).max(255)),
+  artisticRole: z.string().min(1).max(255).default("MainArtist"),
   title: z.string().min(1).max(200),
-  phoneticTitle: z.string().max(200).optional().or(z.literal("")),
   mixVersion: z.string().max(200).optional().or(z.literal("")),
-  catalogNumber: z.string().min(1).max(20),
   contentType: z.enum(CONTENT_TYPES),
   primaryGenre: z.enum(PRIMARY_GENRES),
-  secondaryGenre: genreOpt,
-  tertiaryGenre: genreOpt,
-  preferredLocalization: z.string().min(2).max(20),
+  preferredLocalization: z.string().min(2).max(20).default("en"),
   releaseDate: z.string().min(1),
-  preOrderDate: z.string().optional().or(z.literal("")),
-  enableExactReleaseTime: z.boolean().optional(),
-  releaseTime: z.string().optional().or(z.literal("")),
   artworkAiUsage: ai,
   explicit: z.enum(["off", "on", "edited"]),
   barcode: z.string().max(13).optional().or(z.literal("")),
-  descriptionLong: z.string().max(5000).optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
   clineName: z.string().max(255).optional().or(z.literal("")),
   plineYear: z.string().optional().or(z.literal("")),
   plineName: z.string().max(255).optional().or(z.literal("")),
-  courtesyLine: z.string().max(255).optional().or(z.literal("")),
-  transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
-  storeUrls: z
-    .record(z.string(), z.string().optional().or(z.literal("")))
-    .optional(),
   track: z.object({
     title: z.string().min(1).max(200),
     mixVersion: z.string().max(200).optional().or(z.literal("")),
     trackNumber: z.string().min(1),
-    disc: z.string().min(1),
     compositionType: z.enum([
       COMPOSITION_TYPES[0].value,
       COMPOSITION_TYPES[1].value,
@@ -68,10 +60,6 @@ const payloadSchema = z.object({
     ]),
     audioLanguage: z.string().min(2).max(20),
     recordingCountry: z.string().max(2).optional().or(z.literal("")),
-    preferredLocalization: z.string().min(2).max(20),
-    primaryGenre: genreOpt,
-    secondaryGenre: genreOpt,
-    tertiaryGenre: genreOpt,
     explicit: z.enum(["off", "on", "edited"]),
     isrc: z.string().max(15).optional().or(z.literal("")),
     iswc: z.string().max(15).optional().or(z.literal("")),
@@ -86,10 +74,7 @@ const payloadSchema = z.object({
     clineName: z.string().max(255).optional().or(z.literal("")),
     plineYear: z.string().optional().or(z.literal("")),
     plineName: z.string().max(255).optional().or(z.literal("")),
-    courtesyLine: z.string().max(255).optional().or(z.literal("")),
-    writerFirstName: z.string().min(1).max(255),
-    writerLastName: z.string().min(1).max(255),
-    writerRoles: z.array(z.string().min(1)).min(1),
+    contributors: z.array(contributorSchema).min(1),
   }),
 });
 
@@ -105,16 +90,16 @@ function intOrNull(v?: string) {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-function buildReleaseDateIso(
-  date: string,
-  enableExact: boolean | undefined,
-  time: string | undefined
-) {
-  if (!date) return null;
-  if (enableExact && time) {
-    return new Date(`${date}T${time}:00.000Z`);
+async function allocateCatalogNumber(): Promise<string> {
+  for (let i = 0; i < 12; i++) {
+    const candidate = makeCatalogCandidate();
+    const exists = await prisma.release.findFirst({
+      where: { catalogNumber: candidate },
+      select: { id: true },
+    });
+    if (!exists) return candidate;
   }
-  return new Date(`${date}T00:00:00.000Z`);
+  return makeCatalogCandidate();
 }
 
 export async function POST(request: Request) {
@@ -130,7 +115,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing release payload" }, { status: 400 });
     }
 
-    const fields = payloadSchema.parse(JSON.parse(rawPayload));
+    const parsed = JSON.parse(rawPayload);
+    if (!parsed.artisticRole) parsed.artisticRole = "MainArtist";
+    if (
+      parsed.artisticRole &&
+      !ARTISTIC_ROLES.includes(parsed.artisticRole as (typeof ARTISTIC_ROLES)[number])
+    ) {
+      // allow custom but keep string
+    }
+    const fields = payloadSchema.parse(parsed);
 
     const artworkFile = form.get("artwork");
     const audioFile = form.get("audio");
@@ -158,42 +151,27 @@ export async function POST(request: Request) {
 
     const artwork = await saveArtwork(user.id, artworkFile);
     const audio = await saveAudio(user.id, audioFile);
+    const catalogNumber = await allocateCatalogNumber();
 
     const releaseMeta: ReleaseMetadata = {
       mixVersion: fields.mixVersion || undefined,
-      phoneticTitle: fields.phoneticTitle || undefined,
-      descriptionLong: fields.descriptionLong || undefined,
-      secondaryGenre: fields.secondaryGenre || undefined,
-      tertiaryGenre: fields.tertiaryGenre || undefined,
-      preOrderDate: fields.preOrderDate || undefined,
       preferredLocalization: fields.preferredLocalization,
-      enableExactReleaseTime: Boolean(fields.enableExactReleaseTime),
-      releaseTime: fields.releaseTime || undefined,
-      artisticRole: fields.artisticRole,
+      artisticRole: fields.artisticRole || "MainArtist",
       clineYear: yearOrNull(fields.clineYear),
       clineName: fields.clineName || undefined,
       plineYear: yearOrNull(fields.plineYear),
       plineName: fields.plineName || undefined,
-      courtesyLine: fields.courtesyLine || undefined,
-      transferFromDistributor: fields.transferFromDistributor || undefined,
-      storeUrls: Object.fromEntries(
-        Object.entries(fields.storeUrls ?? {}).filter(([, v]) => Boolean(v?.trim()))
-      ) as ReleaseMetadata["storeUrls"],
     };
 
     const trackMeta: TrackMetadata = {
       mixVersion: fields.track.mixVersion || undefined,
-      disc: Number(fields.track.disc) || 1,
       compositionType: fields.track.compositionType,
       audioAiUsage: fields.track.audioAiUsage,
       compositionAiUsage: fields.track.compositionAiUsage,
       commercialSamples: fields.track.commercialSamples,
       audioLanguage: fields.track.audioLanguage,
       recordingCountry: fields.track.recordingCountry || undefined,
-      preferredLocalization: fields.track.preferredLocalization,
-      primaryGenre: fields.track.primaryGenre || fields.primaryGenre,
-      secondaryGenre: fields.track.secondaryGenre || undefined,
-      tertiaryGenre: fields.track.tertiaryGenre || undefined,
+      primaryGenre: fields.primaryGenre,
       hasMechanicalLicense: Boolean(fields.track.hasMechanicalLicense),
       iswc: fields.track.iswc || undefined,
       lyrics: fields.track.lyrics || undefined,
@@ -207,26 +185,19 @@ export async function POST(request: Request) {
       clineName: fields.track.clineName || undefined,
       plineYear: yearOrNull(fields.track.plineYear),
       plineName: fields.track.plineName || undefined,
-      courtesyLine: fields.track.courtesyLine || undefined,
-      writerFirstName: fields.track.writerFirstName.trim(),
-      writerLastName: fields.track.writerLastName.trim(),
-      writerRoles: fields.track.writerRoles,
+      contributors: fields.track.contributors,
     };
 
-    const releaseDate = buildReleaseDateIso(
-      fields.releaseDate,
-      fields.enableExactReleaseTime,
-      fields.releaseTime
-    );
-
+    const releaseDate = new Date(`${fields.releaseDate}T00:00:00.000Z`);
     const now = new Date();
+
     const release = await prisma.$transaction(async (tx) => {
       const created = await tx.release.create({
         data: {
           userId: user.id,
           artistId: artist.id,
           title: fields.title.trim(),
-          catalogNumber: fields.catalogNumber.trim().toUpperCase(),
+          catalogNumber,
           contentType: fields.contentType,
           primaryGenre: fields.primaryGenre,
           artworkAiUsage: fields.artworkAiUsage,
@@ -245,6 +216,12 @@ export async function POST(request: Request) {
               isrc: fields.track.isrc?.trim() || null,
               audioUrl: audio.publicUrl,
               metadataJson: JSON.stringify(trackMeta),
+              contributors: {
+                create: fields.track.contributors.map((c) => ({
+                  name: `${c.firstName} ${c.lastName}`.trim(),
+                  role: c.roles.join(", "),
+                })),
+              },
             },
           },
         },

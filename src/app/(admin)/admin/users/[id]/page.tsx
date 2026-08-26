@@ -56,7 +56,6 @@ export default async function AdminUserDetailPage({ params }: Props) {
         userId={user.id}
         name={user.name}
         planId={user.planId}
-        role={user.role}
       />
 
       <section className="rounded-xl border border-border bg-card">

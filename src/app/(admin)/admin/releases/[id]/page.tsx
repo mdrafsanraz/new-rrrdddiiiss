@@ -25,7 +25,9 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   });
   if (!release) notFound();
 
-  const canDecide = ["in_review", "submitted", "error"].includes(release.status);
+  const canDecide =
+    !release.permanentlyLocked &&
+    ["in_review", "submitted", "error"].includes(release.status);
 
   return (
     <div className="space-y-8">

@@ -81,10 +81,20 @@ export function validateRelease(id: number | string) {
 
 /**
  * Submit a draft release into LabelGrid's distribution review queue.
- * (OpenAPI: POST /releases/{id}/distribute — "submitting your release for distribution")
+ * (OpenAPI: POST /releases/{id}/distribute)
  */
 export function submitReleaseForReview(id: number | string) {
   return labelgridFetch<unknown>(`/releases/${id}/distribute`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Pull a release back from LabelGrid review to draft (editable again).
+ * Pair with changes_required locally.
+ */
+export function withdrawReleaseFromReview(id: number | string) {
+  return labelgridFetch<unknown>(`/releases/${id}/withdraw-review`, {
     method: "POST",
   });
 }
