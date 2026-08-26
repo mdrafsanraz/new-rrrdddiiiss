@@ -57,11 +57,13 @@ On start, the app runs `prisma db push` to create tables in Postgres (no migrati
 
 ### 3. Deploy settings
 
-`railway.toml` sets:
+`railway.toml` uses **Nixpacks** (not the optional Dockerfile).
 
-- **Build:** `npm run build` (standalone Next.js)
-- **Pre-deploy:** `npx prisma migrate deploy`
-- **Start:** `npm start` → `node .next/standalone/server.js`
+- **Build:** `npm run build`
+- **Start:** `npm start` → schema sync + standalone server on `0.0.0.0`
+- **Healthcheck:** `/api/health`
+
+If Railway still builds with Docker, clear **Settings → Build → Dockerfile path** (leave empty) so Nixpacks is used.
 
 Generate a public domain under **Settings → Networking**, then set `NEXT_PUBLIC_APP_URL` to that URL.
 
