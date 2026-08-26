@@ -5,8 +5,9 @@ import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { syncSubmittedReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
+import { logReleaseActivity } from "@/lib/releases/activity";
+import { getPlanLimits } from "@/lib/plans";
 import {
-  ARTISTIC_ROLES,
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
   COMPOSITION_TYPES,
@@ -102,6 +103,10 @@ async function allocateCatalogNumber(): Promise<string> {
   return makeCatalogCandidate();
 }
 
+/**
+ * Create local release + LabelGrid sandbox DRAFT, then enter RDISTRO internal review.
+ * User-facing status: "In Review". LabelGrid remains draft until admin approves.
+ */
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) {
@@ -112,17 +117,14 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const rawPayload = form.get("payload");
     if (typeof rawPayload !== "string") {
-      return NextResponse.json({ error: "Missing release payload" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing release payload" },
+        { status: 400 }
+      );
     }
 
     const parsed = JSON.parse(rawPayload);
     if (!parsed.artisticRole) parsed.artisticRole = "MainArtist";
-    if (
-      parsed.artisticRole &&
-      !ARTISTIC_ROLES.includes(parsed.artisticRole as (typeof ARTISTIC_ROLES)[number])
-    ) {
-      // allow custom but keep string
-    }
     const fields = payloadSchema.parse(parsed);
 
     const artworkFile = form.get("artwork");
@@ -152,6 +154,7 @@ export async function POST(request: Request) {
     const artwork = await saveArtwork(user.id, artworkFile);
     const audio = await saveAudio(user.id, audioFile);
     const catalogNumber = await allocateCatalogNumber();
+    const priorityReview = getPlanLimits(user.planId).priorityReview;
 
     const releaseMeta: ReleaseMetadata = {
       mixVersion: fields.mixVersion || undefined,
@@ -206,8 +209,9 @@ export async function POST(request: Request) {
           releaseDate,
           artworkUrl: artwork.publicUrl,
           metadataJson: JSON.stringify(releaseMeta),
-          status: "in_review",
+          status: "pending_internal_review",
           submittedAt: now,
+          priorityReview,
           tracks: {
             create: {
               userId: user.id,
@@ -236,6 +240,22 @@ export async function POST(request: Request) {
         },
       });
 
+      await logReleaseActivity({
+        tx,
+        releaseId: created.id,
+        type: "created",
+        title: "Draft created",
+        actorUserId: user.id,
+      });
+      await logReleaseActivity({
+        tx,
+        releaseId: created.id,
+        type: "submitted_internal",
+        title: "Submitted to RDISTRO review",
+        description: "Your release is in review.",
+        actorUserId: user.id,
+      });
+
       return created;
     });
 
@@ -258,6 +278,10 @@ export async function POST(request: Request) {
           releaseId: result.releaseId,
           trackId: result.trackId,
         };
+        await prisma.release.update({
+          where: { id: release.id },
+          data: { labelgridReviewStatus: "draft" },
+        });
       } else {
         labelgrid = { draftSynced: false, error: result.error };
       }
@@ -292,7 +316,10 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: "Invalid release payload" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid release payload" },
+        { status: 400 }
+      );
     }
     const message =
       error instanceof Error ? error.message : "Could not submit release";

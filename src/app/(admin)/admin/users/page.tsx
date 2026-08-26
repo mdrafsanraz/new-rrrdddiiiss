@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
+import { isStaffRole, hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,8 +12,9 @@ export const metadata = { title: "Users · Admin" };
 type Props = { searchParams: Promise<{ q?: string }> };
 
 export default async function AdminUsersPage({ searchParams }: Props) {
-  await requireAdmin();
+  const admin = await requirePermission("users.read");
   const q = ((await searchParams).q ?? "").trim();
+  const canImpersonate = hasPermission(admin.role, "users.impersonate");
 
   const users = await prisma.user.findMany({
     where: q
@@ -20,6 +22,8 @@ export default async function AdminUsersPage({ searchParams }: Props) {
           OR: [
             { email: { contains: q, mode: "insensitive" } },
             { name: { contains: q, mode: "insensitive" } },
+            { id: { equals: q } },
+            { stripeCustomerId: { contains: q, mode: "insensitive" } },
           ],
         }
       : undefined,
@@ -31,17 +35,11 @@ export default async function AdminUsersPage({ searchParams }: Props) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Users</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Users</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage plans and accounts. Use{" "}
-          <span className="font-medium text-foreground">Login as</span> to open
-          their dashboard. To grant admin access, go to{" "}
-          <Link href="/admin/admins" className="font-medium underline-offset-4 hover:underline">
-            Admins
-          </Link>
-          .
+          Search by name, email, user ID, or Stripe customer ID.
         </p>
       </div>
 
@@ -49,48 +47,60 @@ export default async function AdminUsersPage({ searchParams }: Props) {
         <input
           name="q"
           defaultValue={q}
-          placeholder="Search name or email…"
-          className="h-10 w-full max-w-md rounded-lg border border-border bg-background px-3 text-sm outline-none focus-visible:border-primary"
+          placeholder="Name, email, user ID, Stripe…"
+          className="h-9 w-full max-w-md rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-foreground/30"
         />
         <button
           type="submit"
-          className={cn(buttonVariants({ variant: "outline" }), "h-10 px-4")}
+          className={cn(buttonVariants({ variant: "outline" }), "h-9 px-4")}
         >
           Search
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+      <div className="overflow-x-auto rounded-md border border-border bg-card">
+        <table className="w-full min-w-[800px] text-left text-sm">
+          <thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">User</th>
-              <th className="hidden px-4 py-3 font-medium sm:table-cell">Plan</th>
-              <th className="hidden px-4 py-3 font-medium md:table-cell">
-                Counts
-              </th>
-              <th className="px-4 py-3 font-medium" />
+              <th className="px-3 py-2 font-semibold">User</th>
+              <th className="px-3 py-2 font-semibold">Plan</th>
+              <th className="px-3 py-2 font-semibold">Artists</th>
+              <th className="px-3 py-2 font-semibold">Releases</th>
+              <th className="px-3 py-2 font-semibold">Status</th>
+              <th className="px-3 py-2 font-semibold">Joined</th>
+              <th className="px-3 py-2 font-semibold" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {users.map((u) => (
-              <tr key={u.id}>
-                <td className="px-4 py-3">
+              <tr key={u.id} className="hover:bg-muted/30">
+                <td className="px-3 py-2.5">
                   <p className="font-medium">{u.name}</p>
                   <p className="text-xs text-muted-foreground">{u.email}</p>
-                  {u.role === "admin" ? (
-                    <span className="mt-1 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                      ADMIN
+                  {isStaffRole(u.role) ? (
+                    <span className="mt-1 inline-block rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">
+                      {u.role.replace("_", " ")}
                     </span>
                   ) : null}
                 </td>
-                <td className="hidden px-4 py-3 sm:table-cell">
-                  {planLabel(u.planId)}
+                <td className="px-3 py-2.5 text-xs">{planLabel(u.planId)}</td>
+                <td className="px-3 py-2.5 text-xs tabular-nums">
+                  {u._count.artists}
                 </td>
-                <td className="hidden px-4 py-3 text-xs text-muted-foreground md:table-cell">
-                  {u._count.artists} artists · {u._count.releases} releases
+                <td className="px-3 py-2.5 text-xs tabular-nums">
+                  {u._count.releases}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2.5 text-xs">
+                  {u.terminated
+                    ? "Terminated"
+                    : u.suspended
+                      ? "Suspended"
+                      : "Active"}
+                </td>
+                <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                  {u.createdAt.toLocaleDateString()}
+                </td>
+                <td className="px-3 py-2.5">
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <Link
                       href={`/admin/users/${u.id}`}
@@ -99,9 +109,9 @@ export default async function AdminUsersPage({ searchParams }: Props) {
                         "h-8 px-3 text-xs"
                       )}
                     >
-                      Manage
+                      Open
                     </Link>
-                    {u.role !== "admin" ? (
+                    {canImpersonate && !isStaffRole(u.role) ? (
                       <LoginAsUserButton userId={u.id} userName={u.name} />
                     ) : null}
                   </div>

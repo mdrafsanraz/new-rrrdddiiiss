@@ -130,6 +130,11 @@ export type ReleaseMetadata = {
   clineName?: string;
   plineYear?: number | null;
   plineName?: string;
+  secondaryGenre?: string;
+  allStores?: boolean;
+  selectedOutletIds?: number[];
+  worldwide?: boolean;
+  territoryCodes?: string[];
 };
 
 export type TrackMetadata = {
@@ -154,6 +159,7 @@ export type TrackMetadata = {
   clineName?: string;
   plineYear?: number | null;
   plineName?: string;
+  featuredArtistNames?: string[];
   /** Multiple writer/contributor credits for LabelGrid. */
   contributors?: Array<{
     firstName: string;

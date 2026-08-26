@@ -22,9 +22,74 @@ enum SubscriptionStatus {
   incomplete
 }
 
+/**
+ * Account role. Staff values gate /admin; `user` is the customer dashboard only.
+ * Legacy rows with `admin` map to full ADMIN permissions until migrated to super_admin.
+ */
 enum UserRole {
   user
+  super_admin
   admin
+  reviewer
+  support
+  finance
+}
+
+enum DocumentReviewStatus {
+  pending
+  approved
+  rejected
+  replacement_requested
+}
+
+enum TakedownReason {
+  user_requested
+  compliance
+  copyright
+  fraud
+  dsp_request
+  administrative
+}
+
+enum TakedownStatus {
+  requested
+  submitted
+  processing
+  completed
+  failed
+}
+
+enum InternalNoteEntity {
+  user
+  release
+  document
+  takedown
+  support_ticket
+}
+
+enum AuditAction {
+  release_approved
+  release_changes_requested
+  release_rejected
+  release_held
+  release_document_requested
+  document_approved
+  document_rejected
+  document_replacement_requested
+  user_suspended
+  user_unsuspended
+  user_terminated
+  user_plan_changed
+  impersonation_started
+  impersonation_ended
+  takedown_requested
+  takedown_submitted
+  labelgrid_sync
+  staff_role_changed
+  settings_changed
+  payout_action
+  note_added
+  other
 }
 
 enum SupportTicketStatus {
@@ -42,22 +107,70 @@ enum SupportTicketCategory {
   technical
 }
 
-/** Local release lifecycle — map LabelGrid statuses into this, never expose raw LG in UI. */
+/**
+ * Local release lifecycle (two review layers).
+ * User-facing labels come from getUserFacingStatusLabel() — never expose raw values.
+ * Legacy values (submitted, in_review, …) remain for existing rows; writers use the new names.
+ */
 enum ReleaseStatus {
   draft
   incomplete
   ready_to_submit
+  pending_internal_review
+  internal_changes_required
+  internal_rejected
+  internal_approved
+  submitting_to_labelgrid
+  labelgrid_in_review
+  labelgrid_changes_required
+  labelgrid_rejected
+  labelgrid_approved
+  delivering
+  live
+  takedown_pending
+  taken_down
+  sync_error
+  on_hold
+  // Legacy
   syncing
   submitted
   in_review
   changes_required
   rejected
   approved
+  error
+}
+
+enum ReviewIssueSource {
+  INTERNAL
+  LABELGRID
+}
+
+enum ReleaseActivityType {
+  created
+  edited
+  track_uploaded
+  submitted_internal
+  internal_changes_required
+  internal_rejected
+  internal_approved
+  submitting_labelgrid
+  labelgrid_in_review
+  labelgrid_changes_required
+  labelgrid_rejected
+  labelgrid_approved
+  document_uploaded
+  resubmitted
   delivering
   live
-  takedown_pending
+  takedown_requested
   taken_down
-  error
+  sync_error
+  held
+  document_requested
+  document_reviewed
+  qc_refreshed
+  note
 }
 
 model User {
@@ -71,6 +184,13 @@ model User {
   stripeSubscriptionId String?            @unique
   stripeStatus         SubscriptionStatus @default(none)
   stripePriceId        String?
+  /** Soft account flags for ops — never trust client alone. */
+  suspended            Boolean            @default(false)
+  suspendedAt          DateTime?
+  suspendedReason      String?
+  terminated           Boolean            @default(false)
+  terminatedAt         DateTime?
+  lastActiveAt         DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -80,6 +200,11 @@ model User {
   reviewedReleases Release[] @relation("ReleaseReviewer")
   supportTickets   SupportTicket[]
   supportMessages  SupportMessage[]
+  auditLogs        AuditLog[]            @relation("AuditActor")
+  impersonationsAsAdmin ImpersonationSession[] @relation("ImpersonationAdmin")
+  impersonationsAsTarget ImpersonationSession[] @relation("ImpersonationTarget")
+  internalNotesAuthored InternalNote[]   @relation("InternalNoteAuthor")
+  takedownsRequested TakedownRequest[]   @relation("TakedownRequester")
 }
 
 /** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
@@ -138,20 +263,48 @@ model Release {
   /** LabelGrid explicit: off | on | edited */
   explicit        String        @default("off")
   status          ReleaseStatus @default(draft)
-  /** Set once when genuinely submitted — Free plan quota uses this, not drafts. */
+  /**
+   * Set once on first submit to RDISTRO internal review.
+   * Free plan monthly quota uses this; resubmits must NOT overwrite.
+   */
   submittedAt     DateTime?
-  /** Admin review notes shown to the user (reject reason, etc.). */
+  /** Pro plan: prioritize in RDISTRO moderation queue (not a LabelGrid API field). */
+  priorityReview  Boolean       @default(false)
+  /** Admin / internal review notes shown to the user. */
   reviewNotes     String?
+  internalRejectionReason String?
   reviewedAt      DateTime?
   reviewedById    String?
   syncError       String?
+  /** Last successful LabelGrid status sync (webhook or reconciliation). */
+  lastSyncedAt    DateTime?
+  /** Cached LabelGrid ReviewStatus (draft|to_review|require_changes|rejected|approved|…). */
+  labelgridReviewStatus String?
+  /** Cached overall delivery state from GET /releases/{id}/delivery-status. */
+  deliveryState   String?
+  /** Full delivery-status payload JSON (outlets, currently_live, …). */
+  deliveryJson    String        @default("{}")
+  /**
+   * Cached Preflight QC (GET /releases/{id}/quality-report).
+   * Optional LabelGrid add-on — may be unavailable (qcEnabled=false).
+   */
+  qcStatus        String?
+  qcReportJson    String        @default("{}")
+  qcFetchedAt     DateTime?
+  qcStale         Boolean       @default(false)
+  qcEnabled       Boolean       @default(true)
+  qcChecksInProgress Boolean    @default(false)
+  /** Internal hold — not a LabelGrid state. */
+  holdReason      String?
+  heldAt          DateTime?
+  heldById        String?
   artworkUrl      String?
   territoriesJson String        @default("[]")
   storesJson      String        @default("[]")
   /** Extra ReleaseCreateData fields (JSON) — mix version, ©/℗, store URLs, etc. */
   metadataJson    String        @default("{}")
   /**
-   * True after a final policy rejection — release cannot be edited or resubmitted.
+   * True after a final rejection (internal or LabelGrid) — no edit / resubmit.
    * Distinct from changes_required, which is editable and may re-enter review.
    */
   permanentlyLocked Boolean     @default(false)
@@ -164,12 +317,120 @@ model Release {
   artist     Artist? @relation(fields: [artistId], references: [id], onDelete: SetNull)
   label      Label?  @relation(fields: [labelId], references: [id], onDelete: SetNull)
   tracks     Track[]
+  reviewIssues ReleaseReviewIssue[]
+  activities   ReleaseActivity[]
+  documents    ReleaseDocument[]
+  webhookEvents ProviderWebhookEvent[]
+  takedowns    TakedownRequest[]
 
   @@index([userId])
   @@index([artistId])
   @@index([userId, submittedAt])
   @@index([status])
   @@index([reviewedById])
+  @@index([labelgridId])
+  @@index([priorityReview, status])
+  @@index([qcStatus])
+  @@index([upc])
+}
+
+/** Review findings from RDISTRO admins or LabelGrid (synced). */
+model ReleaseReviewIssue {
+  id              String            @id @default(cuid())
+  releaseId       String
+  source          ReviewIssueSource
+  providerIssueId String?
+  code            String?
+  category        String?
+  title           String?
+  message         String
+  severity        String?
+  isBlocking      Boolean           @default(true)
+  requiresFeedback Boolean          @default(false)
+  requiresDocument Boolean          @default(false)
+  affectedTrackId String?
+  providerTrackId Int?
+  status          String            @default("open")
+  resolved        Boolean           @default(false)
+  resolvedAt      DateTime?
+  evidenceJson    String            @default("[]")
+  notesJson       String            @default("[]")
+  rawJson         String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  release   Release            @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  documents ReleaseDocument[]
+
+  @@index([releaseId])
+  @@index([providerIssueId])
+  @@index([resolved])
+}
+
+/** Append-only release timeline for support / compliance. */
+model ReleaseActivity {
+  id          String              @id @default(cuid())
+  releaseId   String
+  type        ReleaseActivityType
+  title       String
+  description String?
+  actorUserId String?
+  metadataJson String             @default("{}")
+  createdAt   DateTime            @default(now())
+
+  release Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+
+  @@index([releaseId, createdAt])
+}
+
+/**
+ * User-uploaded evidence for review issues.
+ * LabelGrid OpenAPI only documents note replies on issues (no file upload endpoint),
+ * so files are stored locally; a note may be posted to LabelGrid when appropriate.
+ */
+model ReleaseDocument {
+  id              String               @id @default(cuid())
+  releaseId       String
+  trackId         String?
+  issueId         String?
+  kind            String
+  filename        String
+  mimeType        String
+  url             String
+  uploadedById    String
+  reviewStatus    DocumentReviewStatus @default(pending)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  syncedNotePosted Boolean             @default(false)
+  createdAt       DateTime             @default(now())
+
+  release Release             @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  issue   ReleaseReviewIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
+
+  @@index([releaseId])
+  @@index([issueId])
+  @@index([reviewStatus])
+}
+
+/** Raw LabelGrid (or other) webhook payloads for audit + idempotent processing. */
+model ProviderWebhookEvent {
+  id                String   @id @default(cuid())
+  provider          String   @default("labelgrid")
+  eventType         String
+  providerReleaseId String?
+  releaseId         String?
+  payloadJson       String
+  processed         Boolean  @default(false)
+  processedAt       DateTime?
+  error             String?
+  createdAt         DateTime @default(now())
+
+  release Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+
+  @@index([provider, eventType])
+  @@index([providerReleaseId])
+  @@index([processed])
 }
 
 model Track {
@@ -192,6 +453,7 @@ model Track {
 
   @@index([releaseId])
   @@index([userId])
+  @@index([isrc])
 }
 
 model TrackContributor {
@@ -226,17 +488,95 @@ model SupportTicket {
 }
 
 model SupportMessage {
-  id        String   @id @default(cuid())
-  ticketId  String
-  authorId  String
-  body      String
+  id         String   @id @default(cuid())
+  ticketId   String
+  authorId   String
+  body       String
   /** true when the author is staff (admin reply). */
-  isStaff   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  isStaff    Boolean  @default(false)
+  /** Staff-only note — never shown to the user. */
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
   @@index([authorId])
+}
+
+/** Append-only staff audit trail — never editable/deletable via normal admin UI. */
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorUserId  String?
+  action       AuditAction
+  targetType   String
+  targetId     String?
+  summary      String
+  metadataJson String      @default("{}")
+  ip           String?
+  createdAt    DateTime    @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+  @@index([action])
+}
+
+model ImpersonationSession {
+  id            String    @id @default(cuid())
+  adminUserId   String
+  targetUserId  String
+  reason        String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  ip            String?
+  userAgent     String?
+
+  admin  User @relation("ImpersonationAdmin", fields: [adminUserId], references: [id], onDelete: Cascade)
+  target User @relation("ImpersonationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, startedAt])
+  @@index([targetUserId])
+}
+
+/** Staff-only notes — never exposed on the user dashboard. */
+model InternalNote {
+  id          String            @id @default(cuid())
+  entityType  InternalNoteEntity
+  entityId    String
+  body        String
+  authorId    String
+  createdAt   DateTime          @default(now())
+
+  author User @relation("InternalNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([authorId])
+}
+
+model TakedownRequest {
+  id               String         @id @default(cuid())
+  releaseId        String
+  reason           TakedownReason
+  status           TakedownStatus @default(requested)
+  scope            String         @default("all")
+  message          String?
+  internalNotes    String?
+  requestedById    String?
+  submittedAt      DateTime?
+  completedAt      DateTime?
+  providerResponse String?
+  error            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  release     Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  requestedBy User?   @relation("TakedownRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([releaseId])
+  @@index([status])
+  @@index([createdAt])
 }

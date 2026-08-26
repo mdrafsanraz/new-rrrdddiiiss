@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Disc } from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
@@ -7,6 +8,7 @@ import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ReleasesFilter } from "@/components/dashboard/releases-filter";
+import { statusesForUserFacingFilter } from "@/lib/releases/status";
 
 export const metadata = { title: "Releases" };
 
@@ -18,18 +20,32 @@ export default async function ReleasesPage({ searchParams }: Props) {
   const user = await requireUser();
   const sp = await searchParams;
   const q = sp.q?.trim();
-  const status = sp.status?.trim();
+  const statusFilter = sp.status?.trim() ?? "";
+  const statusIn = statusesForUserFacingFilter(statusFilter);
 
   const [releases, usage] = await Promise.all([
     prisma.release.findMany({
       where: {
         userId: user.id,
-        ...(status ? { status: status as never } : {}),
+        ...(statusIn ? { status: { in: statusIn as never[] } } : {}),
         ...(q
           ? {
               OR: [
-                { title: { contains: q } },
-                { catalogNumber: { contains: q } },
+                { title: { contains: q, mode: "insensitive" } },
+                { catalogNumber: { contains: q, mode: "insensitive" } },
+                { upc: { contains: q, mode: "insensitive" } },
+                {
+                  artist: {
+                    name: { contains: q, mode: "insensitive" },
+                  },
+                },
+                {
+                  tracks: {
+                    some: {
+                      isrc: { contains: q, mode: "insensitive" },
+                    },
+                  },
+                },
               ],
             }
           : {}),
@@ -42,12 +58,17 @@ export default async function ReleasesPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
         <div>
-          <p className="text-sm text-muted-foreground">Catalog</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Catalog
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
             Releases
           </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Track drafts, review, and live deliveries in one place.
+          </p>
         </div>
         <Link
           href="/dashboard/releases/new"
@@ -57,23 +78,26 @@ export default async function ReleasesPage({ searchParams }: Props) {
         </Link>
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="border border-border bg-card p-5">
         <UsageMeter
           label="Submitted this month"
           used={usage.releasesThisMonth}
           limit={usage.releasesLimit}
-          hint="Drafts do not count toward this limit."
+          hint="Counted on first submit to review. Drafts and resubmits do not add to the quota."
         />
       </section>
 
-      <ReleasesFilter initialQ={q ?? ""} initialStatus={status ?? ""} />
+      <ReleasesFilter initialQ={q ?? ""} initialStatus={statusFilter} />
 
-      <section className="rounded-xl border border-border bg-card">
+      <section className="border border-border bg-card">
         {releases.length === 0 ? (
-          <div className="px-5 py-12 text-center">
-            <p className="font-semibold">No releases</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Create a local draft first. Submission syncs to distribution later.
+          <div className="px-5 py-14 text-center">
+            <div className="mx-auto flex size-12 items-center justify-center border border-border bg-muted text-muted-foreground">
+              <Disc size={22} weight="regular" aria-hidden />
+            </div>
+            <p className="mt-4 font-semibold">No releases match</p>
+            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+              Create a release to start the RDISTRO review workflow.
             </p>
             <Link
               href="/dashboard/releases/new"
@@ -91,17 +115,39 @@ export default async function ReleasesPage({ searchParams }: Props) {
               <li key={r.id}>
                 <Link
                   href={`/dashboard/releases/${r.id}`}
-                  className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-muted/50"
+                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{r.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {r.artist?.name ?? "No artist"} · {r.catalogNumber} ·{" "}
-                      {r._count.tracks} track
-                      {r._count.tracks === 1 ? "" : "s"}
+                  <div className="size-14 shrink-0 overflow-hidden border border-border bg-muted">
+                    {r.artworkUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.artworkUrl}
+                        alt=""
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-full items-center justify-center text-muted-foreground">
+                        <Disc size={20} weight="regular" aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-semibold">{r.title}</p>
+                      <StatusBadge status={r.status} />
+                    </div>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">
+                      {r.artist?.name ?? "No artist"}
+                      {r.upc ? ` · UPC ${r.upc}` : ""}
+                      {r.releaseDate
+                        ? ` · ${r.releaseDate.toLocaleDateString()}`
+                        : ""}
+                      {` · ${r._count.tracks} track${r._count.tracks === 1 ? "" : "s"}`}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Updated {r.updatedAt.toLocaleString()}
                     </p>
                   </div>
-                  <StatusBadge status={r.status} />
                 </Link>
               </li>
             ))}

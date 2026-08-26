@@ -1,33 +1,38 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { requireAdminApi } from "@/lib/auth/admin";
+import { requirePermissionApi } from "@/lib/auth/admin";
+import { isStaffRole, STAFF_ROLES } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
+import { writeAuditLog } from "@/lib/admin/audit";
 
 const promoteSchema = z.object({
   email: z.string().email(),
+  role: z.enum(["super_admin", "admin", "reviewer", "support", "finance"]).default("admin"),
 });
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),
   email: z.string().email().max(120),
   password: z.string().min(8).max(128),
+  role: z.enum(["super_admin", "admin", "reviewer", "support", "finance"]).default("admin"),
 });
 
-/** List admins. */
+/** List staff. */
 export async function GET() {
-  const gate = await requireAdminApi();
+  const gate = await requirePermissionApi("staff.manage");
   if ("error" in gate) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
   const admins = await prisma.user.findMany({
-    where: { role: "admin" },
+    where: { role: { in: [...STAFF_ROLES] } },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
       name: true,
       email: true,
+      role: true,
       createdAt: true,
       planId: true,
     },
@@ -36,12 +41,12 @@ export async function GET() {
 }
 
 /**
- * Add admin:
- * - { email } promotes an existing user
- * - { name, email, password } creates a new admin account
+ * Add staff:
+ * - { email, role? } promotes an existing user
+ * - { name, email, password, role? } creates a new staff account
  */
 export async function POST(request: Request) {
-  const gate = await requireAdminApi();
+  const gate = await requirePermissionApi("staff.manage");
   if ("error" in gate) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
           name: body.name.trim(),
           email,
           passwordHash,
-          role: "admin",
+          role: body.role,
           planId: "pro",
         },
         select: {
@@ -78,6 +83,13 @@ export async function POST(request: Request) {
           role: true,
           createdAt: true,
         },
+      });
+      await writeAuditLog({
+        actorUserId: gate.admin.id,
+        action: "staff_role_changed",
+        targetType: "user",
+        targetId: user.id,
+        summary: `Created staff ${user.email} as ${body.role}`,
       });
       return NextResponse.json({ admin: user, created: true }, { status: 201 });
     }
@@ -91,16 +103,16 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    if (user.role === "admin") {
+    if (isStaffRole(user.role)) {
       return NextResponse.json(
-        { error: "That user is already an admin" },
+        { error: "That user is already staff" },
         { status: 400 }
       );
     }
 
     const admin = await prisma.user.update({
       where: { id: user.id },
-      data: { role: "admin" },
+      data: { role: body.role },
       select: {
         id: true,
         name: true,
@@ -108,6 +120,13 @@ export async function POST(request: Request) {
         role: true,
         createdAt: true,
       },
+    });
+    await writeAuditLog({
+      actorUserId: gate.admin.id,
+      action: "staff_role_changed",
+      targetType: "user",
+      targetId: admin.id,
+      summary: `Promoted ${admin.email} to ${body.role}`,
     });
     return NextResponse.json({ admin, promoted: true });
   } catch (error) {

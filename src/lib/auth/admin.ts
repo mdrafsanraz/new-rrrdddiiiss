@@ -1,9 +1,14 @@
 import type { User, UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/lib/auth/session";
+import {
+  hasPermission,
+  isStaffRole,
+  type AdminPermission,
+} from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 
-/** Comma-separated emails promoted to admin (also sets role=admin on login). */
+/** Comma-separated emails promoted to super_admin (also sets role on login). */
 const DEFAULT_ADMIN_EMAILS = ["rafsan@rdistro.net"];
 
 export function adminEmailsFromEnv(): string[] {
@@ -18,17 +23,17 @@ export function isAdminUser(user: {
   role: UserRole;
   email: string;
 }): boolean {
-  if (user.role === "admin") return true;
+  if (isStaffRole(user.role)) return true;
   return adminEmailsFromEnv().includes(user.email.toLowerCase());
 }
 
-/** Ensure env-listed admins get role=admin persisted. */
+/** Ensure env-listed admins get role=super_admin persisted. */
 export async function ensureAdminRole(user: User): Promise<User> {
-  if (user.role === "admin") return user;
   if (!adminEmailsFromEnv().includes(user.email.toLowerCase())) return user;
+  if (user.role === "super_admin") return user;
   return prisma.user.update({
     where: { id: user.id },
-    data: { role: "admin" },
+    data: { role: "super_admin" },
   });
 }
 
@@ -45,6 +50,14 @@ export async function requireAdmin() {
   return user;
 }
 
+export async function requirePermission(permission: AdminPermission) {
+  const admin = await requireAdmin();
+  if (!hasPermission(admin.role, permission)) {
+    redirect("/admin");
+  }
+  return admin;
+}
+
 export async function requireAdminApi() {
   const ctx = await getSessionContext();
   if (!ctx.user) return { error: "Unauthorized" as const, status: 401 as const };
@@ -59,4 +72,13 @@ export async function requireAdminApi() {
   }
   const user = await ensureAdminRole(ctx.user);
   return { admin: user };
+}
+
+export async function requirePermissionApi(permission: AdminPermission) {
+  const gate = await requireAdminApi();
+  if ("error" in gate) return gate;
+  if (!hasPermission(gate.admin.role, permission)) {
+    return { error: "Forbidden" as const, status: 403 as const };
+  }
+  return gate;
 }

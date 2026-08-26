@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdminApi } from "@/lib/auth/admin";
+import { requirePermissionApi } from "@/lib/auth/admin";
+import { isStaffRole } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
+import { writeAuditLog } from "@/lib/admin/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -9,9 +11,9 @@ const demoteSchema = z.object({
   confirm: z.literal(true),
 });
 
-/** Remove admin role (demote to user). Cannot demote yourself. */
+/** Remove staff role (demote to user). Cannot demote yourself. */
 export async function DELETE(request: Request, { params }: Params) {
-  const gate = await requireAdminApi();
+  const gate = await requirePermissionApi("staff.manage");
   if ("error" in gate) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
@@ -27,14 +29,21 @@ export async function DELETE(request: Request, { params }: Params) {
   try {
     demoteSchema.parse(await request.json().catch(() => ({ confirm: true })));
     const user = await prisma.user.findUnique({ where: { id } });
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ error: "Admin not found" }, { status: 404 });
+    if (!user || !isStaffRole(user.role)) {
+      return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
     }
 
     const updated = await prisma.user.update({
       where: { id },
       data: { role: "user" },
       select: { id: true, name: true, email: true, role: true },
+    });
+    await writeAuditLog({
+      actorUserId: gate.admin.id,
+      action: "staff_role_changed",
+      targetType: "user",
+      targetId: id,
+      summary: `Demoted ${updated.email} to user`,
     });
     return NextResponse.json({ user: updated });
   } catch (error) {

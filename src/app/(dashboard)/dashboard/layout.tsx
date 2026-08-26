@@ -17,6 +17,7 @@ export default async function DashboardLayout({
       {ctx.isImpersonating && ctx.impersonator ? (
         <ImpersonationBanner
           targetName={user.name}
+          targetEmail={user.email}
           adminName={ctx.impersonator.name}
         />
       ) : null}

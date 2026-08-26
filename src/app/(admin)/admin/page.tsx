@@ -1,124 +1,348 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
+import { getAdminHomeSnapshot } from "@/lib/admin/home";
+import {
+  HealthDot,
+  PlatformSummaryCards,
+} from "@/components/admin/home-widgets";
+import { hasPermission } from "@/lib/auth/permissions";
+import { formatDistanceToNow } from "@/lib/admin/format";
 import { prisma } from "@/lib/db";
-import { StatusBadge } from "@/components/dashboard/status-badge";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
-export const metadata = { title: "Admin" };
+export const metadata = { title: "Operations · Admin" };
 
 export default async function AdminHomePage() {
-  await requireAdmin();
+  const admin = await requirePermission("admin.access");
+  const snap = await getAdminHomeSnapshot();
+  const s = snap.summary;
 
-  const [pending, users, releases, approved, rejected, openSupport] =
-    await Promise.all([
-      prisma.release.count({ where: { status: "in_review" } }),
-      prisma.user.count(),
-      prisma.release.count(),
-      prisma.release.count({ where: { status: "approved" } }),
-      prisma.release.count({ where: { status: "rejected" } }),
-      prisma.supportTicket.count({
-        where: { status: { in: ["open", "in_progress"] } },
-      }),
-    ]);
-
-  const queue = await prisma.release.findMany({
-    where: { status: "in_review" },
-    orderBy: { submittedAt: "asc" },
-    take: 8,
-    include: {
-      user: { select: { name: true, email: true } },
-      artist: { select: { name: true } },
-    },
-  });
+  const allOperational =
+    snap.health.labelgrid === "operational" &&
+    snap.health.rdistroApi === "operational";
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          Admin overview
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          User submits upload to LabelGrid as a draft (they see Admin review).
-          Approve submits that draft for LabelGrid review; reject stops it here.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label="In review" value={pending} href="/admin/releases?status=in_review" />
-        <Stat label="Support open" value={openSupport} href="/admin/support?status=open" />
-        <Stat label="Users" value={users} href="/admin/users" />
-        <Stat label="Approved" value={approved} href="/admin/releases?status=approved" />
-        <Stat label="Rejected" value={rejected} href="/admin/releases?status=rejected" />
-      </div>
-
-      <section className="rounded-xl border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold">Review queue</h2>
-          <Link
-            href="/admin/releases?status=in_review"
-            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-          >
-            View all
-          </Link>
-        </div>
-        {queue.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-muted-foreground">
-            No releases waiting for review.
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            RDISTRO Operations
+          </h1>
+          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <HealthDot
+              state={allOperational ? "operational" : snap.health.labelgrid}
+            />
+            {allOperational
+              ? "All systems operational"
+              : snap.health.labelgrid === "unknown"
+                ? "Platform health partially unknown"
+                : "Attention needed on platform health"}
+            <span className="text-border">·</span>
+            Sandbox
           </p>
-        ) : (
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Signed in as {admin.name}
+        </p>
+      </header>
+
+      <PlatformSummaryCards
+        items={[
+          {
+            key: "users",
+            label: "Users",
+            value: s.usersTotal,
+            hint: `+${s.usersToday} today`,
+            href: "/admin/users",
+          },
+          {
+            key: "releases",
+            label: "Releases",
+            value: s.releasesTotal,
+            hint: `${s.submittedToday} submitted today`,
+            href: "/admin/releases?filter=all",
+          },
+          {
+            key: "review",
+            label: "In review",
+            value: s.pendingReview,
+            hint: "Waiting for RDISTRO",
+            href: "/admin/releases?filter=pending_review",
+          },
+          {
+            key: "qc",
+            label: "QC flags",
+            value: s.qcFlagged,
+            hint: "Warnings / review required",
+            href: "/admin/releases?filter=qc_flagged",
+          },
+          {
+            key: "live",
+            label: "Live",
+            value: s.liveCount,
+            hint: "Distributed catalog",
+            href: "/admin/releases?filter=live",
+          },
+          {
+            key: "support",
+            label: "Support",
+            value: s.openSupport,
+            hint: "Open tickets",
+            href: "/admin/support",
+          },
+        ]}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-md border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold">Needs attention</h2>
+          </div>
           <ul className="divide-y divide-border">
-            {queue.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{r.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {r.user.name} · {r.artist?.name ?? "—"} · {r.catalogNumber}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={r.status} />
-                  <Link
-                    href={`/admin/releases/${r.id}`}
-                    className={cn(buttonVariants({ variant: "outline" }), "h-8 px-3 text-xs")}
-                  >
-                    Review
-                  </Link>
-                </div>
+            {(
+              [
+                {
+                  n: s.pendingReview,
+                  label: "Releases waiting for review",
+                  href: "/admin/releases?filter=pending_review",
+                },
+                {
+                  n: s.qcFlagged,
+                  label: "QC flagged releases",
+                  href: "/admin/releases?filter=qc_flagged",
+                },
+                {
+                  n: s.docsPending,
+                  label: "Rights documents waiting",
+                  href: "/admin/documents?status=pending",
+                },
+                {
+                  n: s.changesRequired,
+                  label: "Changes required",
+                  href: "/admin/releases?filter=changes_required",
+                },
+                {
+                  n: s.syncFailures,
+                  label: "LabelGrid sync failures",
+                  href: "/admin/releases?filter=sync_issues",
+                },
+                {
+                  n: s.openSupport,
+                  label: "Open support tickets",
+                  href: "/admin/support?status=open",
+                },
+              ] as const
+            ).map((row) => (
+              <li key={row.href}>
+                <Link
+                  href={row.href}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted/60"
+                >
+                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className="font-semibold tabular-nums">{row.n}</span>
+                </Link>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
 
-      <p className="text-xs text-muted-foreground">
-        Total releases tracked: {releases}
-      </p>
+        <section className="rounded-md border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold">Release pipeline</h2>
+          </div>
+          <ol className="space-y-0 px-4 py-3">
+            {snap.pipeline.map((stage, i) => (
+              <li key={stage.key} className="relative flex gap-3 pb-4 last:pb-0">
+                {i < snap.pipeline.length - 1 ? (
+                  <span
+                    className="absolute left-[7px] top-4 h-[calc(100%-8px)] w-px bg-border"
+                    aria-hidden
+                  />
+                ) : null}
+                <span className="relative mt-1.5 size-2 shrink-0 rounded-full bg-foreground/70" />
+                <Link
+                  href={stage.href}
+                  className="flex min-w-0 flex-1 items-baseline justify-between gap-3 hover:underline"
+                >
+                  <span className="text-sm">{stage.label}</span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {stage.count.toLocaleString()}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="rounded-md border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold">Recent activity</h2>
+          </div>
+          {snap.activities.length === 0 ? (
+            <p className="px-4 py-8 text-sm text-muted-foreground">
+              No activity yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {snap.activities.map((a) => (
+                <li key={a.id} className="px-4 py-2.5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <Link
+                      href={`/admin/releases/${a.releaseId}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {a.title}
+                    </Link>
+                    <time className="text-[11px] text-muted-foreground">
+                      {formatDistanceToNow(a.createdAt)}
+                    </time>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {a.release.title}
+                    {a.description ? ` — ${a.description.slice(0, 80)}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <div className="space-y-6">
+          <section className="rounded-md border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">Platform health</h2>
+            </div>
+            <ul className="divide-y divide-border text-sm">
+              {(
+                [
+                  ["RDISTRO API", snap.health.rdistroApi],
+                  ["LabelGrid API", snap.health.labelgrid],
+                  ["LabelGrid Sandbox", snap.health.labelgridSandbox],
+                  ["Webhooks", snap.health.webhooks],
+                  ["Stripe", snap.health.stripe],
+                  ["Background jobs", snap.health.backgroundJobs],
+                ] as const
+              ).map(([label, state]) => (
+                <li
+                  key={label}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5"
+                >
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="inline-flex items-center gap-2 text-xs font-medium capitalize">
+                    <HealthDot state={state} />
+                    {state}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
+              Last LabelGrid sync:{" "}
+              {snap.health.lastSyncedReleaseAt
+                ? formatDistanceToNow(snap.health.lastSyncedReleaseAt)
+                : "Unknown"}
+              {snap.health.lastWebhookAt
+                ? ` · Last webhook ${formatDistanceToNow(snap.health.lastWebhookAt)}`
+                : " · No webhooks recorded"}
+            </div>
+          </section>
+
+          {hasPermission(admin.role, "system.read") ? (
+            <section className="rounded-md border border-border bg-card">
+              <div className="border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold">
+                  LabelGrid capacity
+                </h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Starter plan ceilings — local estimates until provider reports
+                  usage.
+                </p>
+              </div>
+              <ul className="space-y-3 px-4 py-3 text-sm">
+                <CapacityRow
+                  label="Active tracks"
+                  value={await trackCountEstimate()}
+                  max={3000}
+                  source="local"
+                />
+                <CapacityRow
+                  label="Registered labels"
+                  value={1}
+                  max={5}
+                  source="local"
+                />
+                <CapacityRow
+                  label="Royalties processed (mo)"
+                  value={0}
+                  max={35000}
+                  prefix="$"
+                  source="unknown"
+                />
+              </ul>
+              <div className="border-t border-border px-4 py-2.5">
+                <Link
+                  href="/admin/system"
+                  className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Open system console
+                </Link>
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Stat({
+async function trackCountEstimate() {
+  return prisma.release.findMany({
+    where: {
+      status: {
+        notIn: ["draft", "incomplete", "internal_rejected", "labelgrid_rejected"],
+      },
+    },
+    select: { _count: { select: { tracks: true } } },
+  }).then((rows) => rows.reduce((n, r) => n + r._count.tracks, 0));
+}
+
+function CapacityRow({
   label,
   value,
-  href,
+  max,
+  prefix,
+  source,
 }: {
   label: string;
   value: number;
-  href: string;
+  max: number;
+  prefix?: string;
+  source: "local" | "provider" | "unknown";
 }) {
+  const pct = Math.min(100, Math.round((value / max) * 100));
   return (
-    <Link
-      href={href}
-      className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/40"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+    <li>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums">
+          {prefix}
+          {value.toLocaleString()} / {prefix}
+          {max.toLocaleString()}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full bg-foreground/70"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {source === "provider"
+          ? "Provider reported"
+          : source === "local"
+            ? "Locally calculated"
+            : "Unknown — no data yet"}
       </p>
-      <p className="mt-2 text-3xl font-bold tabular-nums">{value}</p>
-    </Link>
+    </li>
   );
 }

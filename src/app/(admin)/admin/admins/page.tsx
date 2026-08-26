@@ -1,44 +1,47 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
+import { STAFF_ROLES } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { AddAdminForms } from "@/components/admin/add-admin-forms";
 import { RemoveAdminButton } from "@/components/admin/remove-admin-button";
 
-export const metadata = { title: "Admins · Admin" };
+export const metadata = { title: "Staff · Admin" };
 
 export default async function AdminAdminsPage() {
-  const me = await requireAdmin();
+  const me = await requirePermission("staff.manage");
   const admins = await prisma.user.findMany({
-    where: { role: "admin" },
+    where: { role: { in: [...STAFF_ROLES] } },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
       name: true,
       email: true,
+      role: true,
       createdAt: true,
     },
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Admins</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Staff</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Admin access is managed here only — not from the user edit screen.
+          Roles: super_admin, admin, reviewer, support, finance. Enforced
+          server-side.
         </p>
       </div>
 
       <AddAdminForms />
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold">Current admins</h2>
+      <section className="overflow-hidden rounded-md border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold">Current staff</h2>
         </div>
         <ul className="divide-y divide-border">
           {admins.map((a) => (
             <li
               key={a.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-sm"
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
             >
               <div>
                 <p className="font-medium">
@@ -50,7 +53,8 @@ export default async function AdminAdminsPage() {
                   ) : null}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {a.email} · since {a.createdAt.toLocaleDateString()}
+                  {a.email} · {a.role.replace("_", " ")} · since{" "}
+                  {a.createdAt.toLocaleDateString()}
                 </p>
               </div>
               {a.id !== me.id ? (

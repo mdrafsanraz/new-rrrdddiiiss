@@ -1,47 +1,108 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  ArrowLeft,
+  ClockCounterClockwise,
+  WarningCircle,
+} from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { SubmitReleaseButton } from "@/components/dashboard/submit-release-button";
 import { ResubmitReleaseButton } from "@/components/dashboard/resubmit-release-button";
+import { UploadReleaseDocumentForm } from "@/components/dashboard/upload-release-document-form";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import {
+  canUserResubmitRelease,
+  canUserSubmitRelease,
+  getUserFacingReleaseStatus,
+  getUserFacingStatusDescription,
+  isFinalRejection,
+  normalizeReleaseStatus,
+} from "@/lib/releases/status";
+import {
+  parseJsonObject,
+  type ReleaseMetadata,
+  type TrackMetadata,
+} from "@/lib/releases/constants";
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function ReleaseDetailPage({ params }: Props) {
   const user = await requireUser();
   const { id } = await params;
-  const release = await prisma.release.findFirst({
+
+  let release = await prisma.release.findFirst({
     where: { id, userId: user.id },
     include: {
       artist: true,
-      tracks: { orderBy: { trackNumber: "asc" } },
+      tracks: {
+        orderBy: { trackNumber: "asc" },
+        include: { contributors: true },
+      },
+      reviewIssues: { orderBy: { createdAt: "desc" } },
+      activities: { orderBy: { createdAt: "desc" }, take: 40 },
+      documents: { orderBy: { createdAt: "desc" }, take: 20 },
     },
   });
   if (!release) notFound();
 
-  const isFinalReject =
-    release.permanentlyLocked || release.status === "rejected";
-  const needsChanges = release.status === "changes_required";
-  const draftEditable =
-    ["draft", "incomplete", "ready_to_submit", "error"].includes(
-      release.status
-    ) && !release.submittedAt;
+  // Safe reconciliation when already in LabelGrid review (not on every draft view).
+  const normalized = normalizeReleaseStatus(release.status);
+  if (
+    isLabelGridLive() &&
+    release.labelgridId &&
+    !release.lastSyncedAt &&
+    [
+      "labelgrid_in_review",
+      "labelgrid_changes_required",
+      "labelgrid_approved",
+      "delivering",
+      "live",
+      "submitting_to_labelgrid",
+    ].includes(normalized)
+  ) {
+    await reconcileLabelGridReleaseStatus(release.id, { deep: true });
+    release =
+      (await prisma.release.findFirst({
+        where: { id, userId: user.id },
+        include: {
+          artist: true,
+          tracks: {
+            orderBy: { trackNumber: "asc" },
+            include: { contributors: true },
+          },
+          reviewIssues: { orderBy: { createdAt: "desc" } },
+          activities: { orderBy: { createdAt: "desc" }, take: 40 },
+          documents: { orderBy: { createdAt: "desc" }, take: 20 },
+        },
+      })) ?? release;
+  }
+
+  const facing = getUserFacingReleaseStatus(release.status);
+  const finalReject = isFinalRejection(release);
+  const needsChanges = facing === "changes_required";
+  const openIssues = release.reviewIssues.filter((i) => !i.resolved);
+  const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const canSubmit = canUserSubmitRelease(release);
+  const canResubmit = canUserResubmitRelease(release);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
+        <div className="min-w-0">
           <Link
             href="/dashboard/releases"
-            className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
-            ← Releases
+            <ArrowLeft size={14} weight="bold" aria-hidden />
+            Releases
           </Link>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight text-balance">
               {release.title}
             </h1>
             <StatusBadge status={release.status} />
@@ -50,48 +111,140 @@ export default async function ReleaseDetailPage({ params }: Props) {
             {release.artist?.name ?? "No artist"} · {release.catalogNumber}
             {release.upc ? ` · UPC ${release.upc}` : ""}
           </p>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            {getUserFacingStatusDescription(release.status)}
+          </p>
         </div>
-        {draftEditable ? (
-          <SubmitReleaseButton releaseId={release.id} />
-        ) : null}
-        {needsChanges ? <ResubmitReleaseButton releaseId={release.id} /> : null}
+        <div className="flex flex-wrap gap-2">
+          {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
+          {canResubmit ? (
+            <ResubmitReleaseButton releaseId={release.id} />
+          ) : null}
+          {finalReject ? (
+            <Link
+              href="/dashboard/support"
+              className={cn(buttonVariants({ variant: "outline" }), "h-10 px-4")}
+            >
+              Contact support
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {needsChanges ? (
-        <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
-          <p className="font-semibold">Changes required</p>
-          <p className="mt-1">
-            Review found something that needs attention. This is{" "}
-            <strong>not</strong> a final rejection — correct the flagged items,
-            then resubmit to re-enter admin review.
-          </p>
-          {release.reviewNotes ? (
-            <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3">
-              {release.reviewNotes}
-            </p>
+        <section className="border border-amber-500/40 bg-amber-50 p-5 text-amber-950">
+          <div className="flex items-start gap-3">
+            <WarningCircle
+              size={22}
+              weight="fill"
+              className="mt-0.5 shrink-0"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold">Changes Required</p>
+              <p className="mt-1 text-sm text-amber-900/85">
+                This is not a final rejection. Fix the items below, upload any
+                requested documents, then resubmit. Your release will go through
+                RDISTRO review again before distribution review continues.
+              </p>
+              {release.reviewNotes ? (
+                <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3 text-sm">
+                  {release.reviewNotes}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {openIssues.length === 0 ? (
+              <p className="text-sm">
+                Review notes are above. Update your release materials, then
+                resubmit.
+              </p>
+            ) : (
+              openIssues.map((issue) => (
+                <article
+                  key={issue.id}
+                  className="border border-amber-200/80 bg-white/70 p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-800/80">
+                      {issue.category || "Review"}
+                    </span>
+                    {issue.requiresDocument ? (
+                      <span className="text-[11px] font-medium text-amber-900">
+                        Document may be required
+                      </span>
+                    ) : null}
+                  </div>
+                  <h3 className="mt-1 text-sm font-semibold">
+                    {issue.title || "Issue"}
+                  </h3>
+                  <p className="mt-1 text-sm leading-relaxed text-amber-950/90">
+                    {issue.message}
+                  </p>
+                  {issue.requiresDocument || issue.requiresFeedback ? (
+                    <UploadReleaseDocumentForm
+                      releaseId={release.id}
+                      issueId={issue.id}
+                      trackId={issue.affectedTrackId}
+                    />
+                  ) : null}
+                </article>
+              ))
+            )}
+          </div>
+
+          {canResubmit ? (
+            <div className="mt-5">
+              <ResubmitReleaseButton releaseId={release.id} />
+            </div>
           ) : null}
         </section>
       ) : null}
 
-      {isFinalReject ? (
-        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-950">
-          <p className="font-semibold">Permanently rejected</p>
+      {finalReject ? (
+        <section className="border border-red-200 bg-red-50 p-5 text-sm text-red-950">
+          <p className="font-semibold">Rejected</p>
           <p className="mt-1">
-            This release was rejected for a serious policy problem. It is locked
-            permanently and cannot be edited or resubmitted.
+            This release was rejected and cannot be edited or resubmitted.
+            Contact support if you believe this decision needs review.
           </p>
-          {release.reviewNotes ? (
+          {(release.internalRejectionReason || release.reviewNotes) && (
             <p className="mt-3 whitespace-pre-wrap border-t border-red-200 pt-3">
-              {release.reviewNotes}
+              {release.internalRejectionReason || release.reviewNotes}
             </p>
-          ) : null}
+          )}
+          <Link
+            href="/dashboard/support"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "mt-4 h-9 border-red-300 bg-white px-4 text-red-950"
+            )}
+          >
+            Contact support
+          </Link>
         </section>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-5">
+      <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <section className="border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold">Artwork</h2>
+          {release.artworkUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={release.artworkUrl}
+              alt=""
+              className="mt-3 aspect-square w-full object-cover"
+            />
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">No artwork yet.</p>
+          )}
+        </section>
+
+        <section className="border border-border bg-card p-5">
           <h2 className="text-sm font-semibold">Release info</h2>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Status" value={<StatusBadge status={release.status} />} />
             <Row label="Type" value={release.contentType} />
             <Row label="Genre" value={release.primaryGenre ?? "—"} />
@@ -103,82 +256,139 @@ export default async function ReleaseDetailPage({ params }: Props) {
                   : "Not set"
               }
             />
-            <Row label="Artwork AI" value={release.artworkAiUsage} />
+            <Row label="UPC" value={release.upc ?? "—"} />
+            <Row label="Catalog" value={release.catalogNumber} />
             <Row label="Explicit" value={release.explicit} />
             <Row
-              label="Submitted"
+              label="Localization"
+              value={rMeta.preferredLocalization ?? "—"}
+            />
+            <Row
+              label="First submitted"
               value={
                 release.submittedAt
                   ? release.submittedAt.toLocaleString()
                   : "Not submitted"
               }
             />
-            <Row
-              label="Distribution ID"
-              value={release.labelgridId ?? "Not synced yet"}
-            />
+            {release.priorityReview ? (
+              <Row label="Priority" value="Priority review queue" />
+            ) : null}
           </dl>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold">Artwork</h2>
-          {release.artworkUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={release.artworkUrl}
-              alt=""
-              className="mt-4 aspect-square w-40 rounded-lg object-cover"
-            />
-          ) : (
-            <p className="mt-4 text-sm text-muted-foreground">No artwork yet.</p>
-          )}
         </section>
       </div>
 
-      <section className="rounded-xl border border-border bg-card">
+      <section className="border border-border bg-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Tracks</h2>
         </div>
         <ul className="divide-y divide-border">
-          {release.tracks.map((t) => (
-            <li
-              key={t.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-sm"
-            >
-              <span>
-                <span className="mr-3 tabular-nums text-muted-foreground">
-                  {String(t.trackNumber).padStart(2, "0")}
-                </span>
-                {t.title}
-              </span>
-              <span className="flex items-center gap-3 text-muted-foreground">
-                {t.audioUrl ? (
-                  <audio
-                    controls
-                    preload="none"
-                    src={t.audioUrl}
-                    className="h-8 max-w-[220px]"
-                  />
-                ) : null}
-                <span>{t.isrc ?? "ISRC pending"}</span>
-              </span>
-            </li>
-          ))}
+          {release.tracks.map((t) => {
+            const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+            return (
+              <li key={t.id} className="px-5 py-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">
+                      <span className="mr-3 tabular-nums text-muted-foreground">
+                        {String(t.trackNumber).padStart(2, "0")}
+                      </span>
+                      {t.title}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t.isrc ? `ISRC ${t.isrc}` : "ISRC pending"}
+                      {tMeta.audioLanguage
+                        ? ` · ${tMeta.audioLanguage}`
+                        : ""}
+                    </p>
+                    {t.contributors.length > 0 ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Credits:{" "}
+                        {t.contributors
+                          .map((c) => `${c.name} (${c.role})`)
+                          .join("; ")}
+                      </p>
+                    ) : null}
+                  </div>
+                  {t.audioUrl ? (
+                    <audio
+                      controls
+                      preload="none"
+                      src={t.audioUrl}
+                      className="h-8 max-w-[240px]"
+                    />
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </section>
 
-      {release.reviewNotes &&
-      release.status !== "changes_required" &&
-      !isFinalReject ? (
-        <section className="rounded-xl border border-border bg-muted/40 p-5 text-sm">
-          <p className="font-semibold">Admin notes</p>
-          <p className="mt-1 whitespace-pre-wrap">{release.reviewNotes}</p>
+      {release.documents.length > 0 ? (
+        <section className="border border-border bg-card p-5">
+          <h2 className="text-sm font-semibold">Uploaded documents</h2>
+          <ul className="mt-3 divide-y divide-border text-sm">
+            {release.documents.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+              >
+                <span>
+                  <span className="font-medium">{d.filename}</span>
+                  <span className="text-muted-foreground"> · {d.kind}</span>
+                </span>
+                <a
+                  href={d.url}
+                  className="font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  View
+                </a>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
-      {release.syncError ? (
-        <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
-          <p className="font-semibold">Sync issue</p>
+      <section className="border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+          <ClockCounterClockwise size={16} weight="regular" aria-hidden />
+          <h2 className="text-sm font-semibold">Activity</h2>
+        </div>
+        {release.activities.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-muted-foreground">
+            No activity recorded yet.
+          </p>
+        ) : (
+          <ol className="relative space-y-0 px-5 py-4">
+            {release.activities.map((a, i) => (
+              <li key={a.id} className="relative flex gap-4 pb-5 last:pb-0">
+                <span className="mt-1.5 flex flex-col items-center">
+                  <span className="size-2.5 shrink-0 bg-primary" />
+                  {i < release.activities.length - 1 ? (
+                    <span className="mt-1 w-px flex-1 bg-border" />
+                  ) : null}
+                </span>
+                <div className="min-w-0 pb-1">
+                  <p className="text-sm font-medium">{a.title}</p>
+                  {a.description ? (
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {a.description}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {a.createdAt.toLocaleString()}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      {release.syncError && facing === "action_required" ? (
+        <section className="border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+          <p className="font-semibold">Action required</p>
           <p className="mt-1">{release.syncError}</p>
         </section>
       ) : null}
@@ -203,9 +413,11 @@ function Row({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+    <div className="grid gap-1">
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="font-medium">{value}</dd>
     </div>
   );
 }

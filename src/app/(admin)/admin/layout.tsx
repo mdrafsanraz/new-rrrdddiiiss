@@ -8,5 +8,10 @@ export default async function AdminLayout({
 }) {
   const admin = await requireAdmin();
 
-  return <AdminShell adminName={admin.name}>{children}</AdminShell>;
+  return (
+    <AdminShell adminName={admin.name} adminRole={admin.role}>
+      {children}
+    </AdminShell>
+  );
 }
+

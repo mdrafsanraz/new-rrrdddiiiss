@@ -4,13 +4,17 @@ import { requireAdminApi } from "@/lib/auth/admin";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { withdrawReleaseFromReview } from "@/lib/labelgrid";
 import { prisma } from "@/lib/db";
+import { logReleaseActivity } from "@/lib/releases/activity";
+import {
+  canAdminDecide,
+  normalizeReleaseStatus,
+} from "@/lib/releases/status";
 
 /**
- * Admin decision against a release in RDISTRO review.
+ * Admin decision against a release in RDISTRO internal review.
  *
- * LabelGrid semantics we mirror:
- * - changes_required: not final — release returns editable; user fixes & resubmits
- * - rejected: final policy rejection — permanently locked, no edit/resubmit
+ * - changes_required: NOT final — editable; user fixes & resubmits to RDISTRO
+ * - rejected: FINAL — permanently locked
  */
 const schema = z.object({
   notes: z.string().min(1).max(2000),
@@ -33,26 +37,39 @@ export async function POST(request: Request, { params }: Params) {
     if (!release) {
       return NextResponse.json({ error: "Release not found" }, { status: 404 });
     }
-    if (release.permanentlyLocked || release.status === "rejected") {
+    if (release.permanentlyLocked) {
       return NextResponse.json(
         { error: "This release is permanently rejected and locked." },
         { status: 400 }
       );
     }
-    if (!["in_review", "submitted", "syncing", "error"].includes(release.status)) {
+
+    const normalized = normalizeReleaseStatus(release.status);
+    const isFinalReject = body.outcome === "rejected";
+
+    // Admin can also request changes after LG require_changes if needed later;
+    // for now decisions are for internal queue + early LG errors.
+    const allowed =
+      canAdminDecide(release.status, release.permanentlyLocked) ||
+      normalized === "submitting_to_labelgrid" ||
+      normalized === "labelgrid_in_review" ||
+      normalized === "labelgrid_changes_required";
+
+    if (!allowed) {
       return NextResponse.json(
         { error: `Cannot decide on release in status "${release.status}"` },
         { status: 400 }
       );
     }
 
-    const isFinalReject = body.outcome === "rejected";
-
     // If already on LabelGrid review, pull back to draft when requesting changes.
     if (
       !isFinalReject &&
       release.labelgridId &&
-      isLabelGridLive()
+      isLabelGridLive() &&
+      (normalized === "labelgrid_in_review" ||
+        normalized === "labelgrid_changes_required" ||
+        normalized === "submitting_to_labelgrid")
     ) {
       try {
         await withdrawReleaseFromReview(release.labelgridId);
@@ -64,17 +81,62 @@ export async function POST(request: Request, { params }: Params) {
       }
     }
 
+    const nextStatus = isFinalReject
+      ? normalized.startsWith("labelgrid_") ||
+        normalized === "submitting_to_labelgrid"
+        ? "labelgrid_rejected"
+        : "internal_rejected"
+      : normalized.startsWith("labelgrid_") ||
+          normalized === "submitting_to_labelgrid"
+        ? "labelgrid_changes_required"
+        : "internal_changes_required";
+
     const fresh = await prisma.release.update({
       where: { id },
       data: {
-        status: body.outcome,
+        status: nextStatus,
         reviewNotes: body.notes.trim(),
+        internalRejectionReason: isFinalReject ? body.notes.trim() : null,
         reviewedAt: new Date(),
         reviewedById: gate.admin.id,
         syncError: null,
         permanentlyLocked: isFinalReject,
+        labelgridReviewStatus: isFinalReject
+          ? release.labelgridReviewStatus
+          : release.labelgridId
+            ? "draft"
+            : release.labelgridReviewStatus,
       },
       include: { tracks: true, artist: true, user: true },
+    });
+
+    if (!isFinalReject) {
+      await prisma.releaseReviewIssue.create({
+        data: {
+          releaseId: id,
+          source: "INTERNAL",
+          category: "Review",
+          title: "Changes required",
+          message: body.notes.trim(),
+          isBlocking: true,
+          requiresFeedback: true,
+          status: "open",
+        },
+      });
+    }
+
+    await logReleaseActivity({
+      releaseId: id,
+      type: isFinalReject
+        ? nextStatus === "labelgrid_rejected"
+          ? "labelgrid_rejected"
+          : "internal_rejected"
+        : nextStatus === "labelgrid_changes_required"
+          ? "labelgrid_changes_required"
+          : "internal_changes_required",
+      title: isFinalReject ? "Rejected" : "Changes required",
+      description: body.notes.trim(),
+      actorUserId: gate.admin.id,
     });
 
     return NextResponse.json({ release: fresh });

@@ -1,0 +1,107 @@
+/**
+ * Client-side draft shape for the 5-step Create Release wizard.
+ * Maps to local DB + LabelGrid via /api/releases/drafts and submit.
+ */
+
+import type { ContributorDraft } from "@/lib/releases/constants";
+
+export type WizardTrack = {
+  clientId: string;
+  id?: string;
+  title: string;
+  mixVersion: string;
+  isrc: string;
+  compositionType: "original_composition" | "cover_song" | "public_domain";
+  explicit: "off" | "on" | "edited";
+  audioAiUsage: "none" | "some" | "material" | "all";
+  compositionAiUsage: "none" | "some" | "material" | "all";
+  commercialSamples: "no" | "exclusive" | "non_exclusive";
+  audioLanguage: string;
+  featuredArtistNames: string[];
+  hasMechanicalLicense: boolean;
+  lyrics: string;
+  audioFile: File | null;
+  audioUrl: string | null;
+  audioDurationSec: number | null;
+  /** Cover/sample license file for progressive disclosure */
+  licenseFile: File | null;
+  licenseType: "cover" | "sample" | null;
+};
+
+export type WizardState = {
+  releaseId: string | null;
+  step: number;
+  // Step 1
+  artworkFile: File | null;
+  artworkUrl: string | null;
+  artworkPreview: string | null;
+  title: string;
+  artistId: string;
+  contentType: "Single" | "EP" | "Album";
+  primaryGenre: string;
+  secondaryGenre: string;
+  releaseDate: string;
+  upc: string;
+  mixVersion: string;
+  preferredLocalization: string;
+  artworkAiUsage: "none" | "some" | "material" | "all";
+  explicit: "off" | "on" | "edited";
+  // Step 2
+  tracks: WizardTrack[];
+  // Step 3
+  contributors: ContributorDraft[];
+  clineYear: string;
+  clineName: string;
+  plineYear: string;
+  plineName: string;
+  hasSamples: boolean;
+  isRemix: boolean;
+  // Step 4
+  allStores: boolean;
+  selectedOutletIds: number[];
+  worldwide: boolean;
+  territoryCodes: string[];
+  // Step 5
+  rightsConfirmed: boolean;
+};
+
+export function newTrack(partial?: Partial<WizardTrack>): WizardTrack {
+  return {
+    clientId: crypto.randomUUID(),
+    title: "",
+    mixVersion: "",
+    isrc: "",
+    compositionType: "original_composition",
+    explicit: "off",
+    audioAiUsage: "none",
+    compositionAiUsage: "none",
+    commercialSamples: "no",
+    audioLanguage: "en",
+    featuredArtistNames: [],
+    hasMechanicalLicense: false,
+    lyrics: "",
+    audioFile: null,
+    audioUrl: null,
+    audioDurationSec: null,
+    licenseFile: null,
+    licenseType: null,
+    ...partial,
+  };
+}
+
+export function newContributor(): ContributorDraft {
+  return {
+    id: crypto.randomUUID(),
+    firstName: "",
+    lastName: "",
+    roles: ["Composer", "Lyricist"],
+  };
+}
+
+export const WIZARD_STEPS = [
+  { id: "release", label: "Release", title: "Tell us about your release" },
+  { id: "tracks", label: "Tracks", title: "Add your music" },
+  { id: "credits", label: "Credits", title: "Credits & rights" },
+  { id: "distribution", label: "Distribution", title: "Choose where your music goes" },
+  { id: "review", label: "Review", title: "Review your release" },
+] as const;

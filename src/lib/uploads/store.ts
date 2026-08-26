@@ -92,6 +92,45 @@ export function saveAudio(userId: string, file: File) {
   return saveFile(userId, "audio", file, AUDIO_TYPES, 200 * 1024 * 1024);
 }
 
+const DOCUMENT_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+/** Supporting docs for review issues (stored locally; LG has notes-only API). */
+export async function saveGenericUpload(
+  userId: string,
+  file: File,
+  kind = "documents"
+): Promise<StoredUpload> {
+  if (!DOCUMENT_TYPES.has(file.type) && !file.type.startsWith("image/")) {
+    throw new Error("Document must be PDF, Word, or an image");
+  }
+  if (file.size <= 0 || file.size > 25 * 1024 * 1024) {
+    throw new Error("Document must be under 25 MB");
+  }
+  const buf = Buffer.from(await file.arrayBuffer());
+  const token = randomBytes(8).toString("hex");
+  const filename = `${kind}-${token}${extFor(file.type, file.name)}`;
+  const dir = path.join(ROOT, userId);
+  await mkdir(dir, { recursive: true });
+  const abs = path.join(dir, filename);
+  await writeFile(abs, buf);
+  const relativePath = path.posix.join(userId, filename);
+  return {
+    relativePath,
+    publicUrl: `/api/media/${relativePath}`,
+    filename: file.name || filename,
+    mimeType: file.type || "application/octet-stream",
+    size: buf.length,
+    buffer: buf,
+  };
+}
+
 export function resolveUploadPath(relativePath: string): string | null {
   const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
   if (normalized.includes("..") || path.isAbsolute(normalized)) return null;

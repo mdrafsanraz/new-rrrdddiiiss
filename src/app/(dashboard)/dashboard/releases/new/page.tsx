@@ -39,12 +39,11 @@ export default async function NewReleasePage({ searchParams }: Props) {
               Catalog
             </p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-balance">
-              New release
+              Create release
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Build your release in six steps. Catalog number{" "}
-              <span className="font-mono text-foreground">RDISTROXXXXXX</span>{" "}
-              is assigned when you submit
+              Five steps — details, tracks, credits, distribution, then review.
+              We&apos;ll check everything before it goes live
               {usage.releasesLimit === null
                 ? ""
                 : ` · ${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used this month`}
