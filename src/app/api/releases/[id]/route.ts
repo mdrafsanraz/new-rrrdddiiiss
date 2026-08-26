@@ -129,20 +129,31 @@ export async function POST(request: Request, { params }: Params) {
     await assertCanSubmitRelease(user.id, user.planId);
 
     const release = await prisma.$transaction(async (tx) => {
-      const locked = await tx.release.findFirst({
+      const lockedRelease = await tx.release.findFirst({
         where: { id: existing.id, userId: user.id, submittedAt: null },
       });
-      if (!locked) {
+      if (!lockedRelease) {
         throw new Error("Already submitted.");
       }
-      return tx.release.update({
-        where: { id: locked.id },
+      const now = new Date();
+      const updated = await tx.release.update({
+        where: { id: lockedRelease.id },
         data: {
           status: "submitted",
-          submittedAt: new Date(),
-          // LabelGrid sync happens when sandbox token is configured (status → syncing).
+          submittedAt: now,
         },
       });
+      if (lockedRelease.artistId) {
+        await tx.artist.updateMany({
+          where: {
+            id: lockedRelease.artistId,
+            userId: user.id,
+            locked: false,
+          },
+          data: { locked: true, lockedAt: now },
+        });
+      }
+      return updated;
     });
 
     return NextResponse.json({ release });

@@ -68,7 +68,14 @@ export default async function ArtistsPage() {
                   className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-semibold">{artist.name}</p>
+                    <p className="truncate font-semibold">
+                      {artist.name}
+                      {artist.locked ? (
+                        <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                          Locked
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {artist._count.releases} release
                       {artist._count.releases === 1 ? "" : "s"}

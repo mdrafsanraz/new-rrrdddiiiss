@@ -60,6 +60,8 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <h2 className="text-sm font-semibold">Release info</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <Row label="Status" value={<StatusBadge status={release.status} />} />
+            <Row label="Type" value={release.contentType} />
+            <Row label="Genre" value={release.primaryGenre ?? "—"} />
             <Row
               label="Release date"
               value={
@@ -68,6 +70,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
                   : "Not set"
               }
             />
+            <Row
+              label="Artwork AI"
+              value={release.artworkAiUsage}
+            />
+            <Row label="Explicit" value={release.explicit} />
             <Row
               label="Submitted"
               value={

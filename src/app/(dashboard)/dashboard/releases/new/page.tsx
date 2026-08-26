@@ -1,22 +1,27 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
+import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
-import { NewReleaseForm } from "@/components/dashboard/new-release-form";
+import { formatLimit } from "@/lib/plans";
+import { ReleaseSubmitForm } from "@/components/dashboard/release-submit-form";
 
-export const metadata = { title: "New release" };
+export const metadata = { title: "Submit release" };
 
 type Props = { searchParams: Promise<{ artistId?: string }> };
 
 export default async function NewReleasePage({ searchParams }: Props) {
   const user = await requireUser();
   const sp = await searchParams;
-  const artists = await prisma.artist.findMany({
-    where: { userId: user.id },
-    orderBy: { name: "asc" },
-  });
+  const [artists, usage] = await Promise.all([
+    prisma.artist.findMany({
+      where: { userId: user.id },
+      orderBy: { name: "asc" },
+    }),
+    getUserUsage(user.id, user.planId),
+  ]);
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <Link
           href="/dashboard/releases"
@@ -24,14 +29,33 @@ export default async function NewReleasePage({ searchParams }: Props) {
         >
           ← Releases
         </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">New release</h1>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          Submit a release
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Saved as a local draft. Submission for review comes after you finish
-          metadata — drafts do not use your monthly submit allowance.
+          One page, mapped to distributor requirements. Submitting counts toward
+          your monthly allowance
+          {usage.releasesLimit === null
+            ? " (unlimited on your plan)"
+            : ` (${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used)`}
+          . The selected artist becomes locked after submit.
         </p>
       </div>
 
-      {artists.length === 0 ? (
+      {!usage.canCreateRelease ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+          <p className="font-semibold">Monthly submission limit reached</p>
+          <p className="mt-1">
+            Upgrade your plan to submit more releases this month.{" "}
+            <Link
+              href="/dashboard/subscription"
+              className="font-semibold underline-offset-4 hover:underline"
+            >
+              View subscription
+            </Link>
+          </p>
+        </div>
+      ) : artists.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-6 text-sm">
           <p className="font-semibold">Add an artist first</p>
           <p className="mt-2 text-muted-foreground">
@@ -45,8 +69,12 @@ export default async function NewReleasePage({ searchParams }: Props) {
           </Link>
         </div>
       ) : (
-        <NewReleaseForm
-          artists={artists.map((a) => ({ id: a.id, name: a.name }))}
+        <ReleaseSubmitForm
+          artists={artists.map((a) => ({
+            id: a.id,
+            name: a.name,
+            locked: a.locked,
+          }))}
           defaultArtistId={sp.artistId}
         />
       )}

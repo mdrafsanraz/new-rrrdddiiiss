@@ -48,6 +48,15 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (existing.locked) {
+    return NextResponse.json(
+      {
+        error:
+          "This artist is locked because they were used on a submitted release. Profile fields cannot be edited.",
+      },
+      { status: 403 }
+    );
+  }
 
   try {
     const body = patchSchema.parse(await request.json());

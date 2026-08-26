@@ -52,6 +52,7 @@ export default async function ArtistDetailPage({ params }: Props) {
           email: artist.email ?? "",
           location: artist.location ?? "",
           bioShort: artist.bioShort ?? "",
+          locked: artist.locked,
         }}
       />
 

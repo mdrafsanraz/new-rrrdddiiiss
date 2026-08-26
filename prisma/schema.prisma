@@ -84,6 +84,9 @@ model Artist {
   spotifyUrl    String?
   appleMusicUrl String?
   labelgridId   String?
+  /** Locked after the artist is used on a submitted release — profile fields become read-only. */
+  locked        Boolean  @default(false)
+  lockedAt      DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -102,6 +105,14 @@ model Release {
   catalogNumber   String
   upc             String?
   releaseDate     DateTime?
+  /** LabelGrid ContentTypeEnum */
+  contentType     String        @default("Single")
+  /** LabelGrid AiUsageEnum for artwork */
+  artworkAiUsage  String        @default("none")
+  /** Local genre label until LabelGrid genre id is synced */
+  primaryGenre    String?
+  /** LabelGrid explicit: off | on | edited */
+  explicit        String        @default("off")
   status          ReleaseStatus @default(draft)
   /** Set once when genuinely submitted — Free plan quota uses this, not drafts. */
   submittedAt     DateTime?
