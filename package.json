@@ -6,11 +6,10 @@
     "dev": "next dev",
     "build": "prisma generate && next build && npm run build:standalone-assets",
     "build:standalone-assets": "cp -R public .next/standalone/public && mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static",
-    "start": "node .next/standalone/server.js",
+    "start": "prisma db push --skip-generate && node .next/standalone/server.js",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:railway": "node scripts/railway-migrate.js",
     "db:push": "prisma db push",
     "postinstall": "prisma generate"
   },

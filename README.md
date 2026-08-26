@@ -53,7 +53,7 @@ If your Postgres service has a different name, pick that service’s `DATABASE_U
 
 5. **Redeploy** the web service
 
-Pre-deploy runs `npm run db:railway` (`prisma migrate deploy`). If `DATABASE_URL` is missing, the log will say exactly that.
+On start, the app runs `prisma db push` to create tables in Postgres (no migration step).
 
 ### 3. Deploy settings
 
