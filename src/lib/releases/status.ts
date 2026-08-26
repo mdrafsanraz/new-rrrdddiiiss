@@ -216,6 +216,24 @@ export function canUserResubmitRelease(
   );
 }
 
+/**
+ * Re-upload cover/audio when files were lost (e.g. redeploy without a volume)
+ * or while waiting on internal review / sync errors — without full metadata edit.
+ */
+export function canUserReplaceMedia(
+  release: ReleasePermissionSnapshot
+): boolean {
+  if (isFinalRejection(release)) return false;
+  if (canUserEditRelease(release)) return true;
+  const s = normalizeReleaseStatus(release.status);
+  return (
+    s === "pending_internal_review" ||
+    s === "on_hold" ||
+    s === "internal_approved" ||
+    s === "sync_error"
+  );
+}
+
 export function isPendingInternalReview(status: string): boolean {
   const s = normalizeReleaseStatus(status);
   return s === "pending_internal_review";

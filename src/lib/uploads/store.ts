@@ -1,8 +1,27 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
-const ROOT = path.join(process.cwd(), "uploads");
+/**
+ * Persistent upload root.
+ * On Railway, mount a volume (e.g. /data) and set UPLOADS_DIR=/data/uploads
+ * so files survive redeploys. Local default: <cwd>/uploads.
+ */
+function uploadsRoot(): string {
+  const fromEnv =
+    process.env.UPLOADS_DIR?.trim() ||
+    process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (fromEnv) {
+    // If Railway only gives the volume mount path, store under uploads/ inside it.
+    if (fromEnv === "/data" || fromEnv.endsWith("/data")) {
+      return path.join(fromEnv, "uploads");
+    }
+    return fromEnv;
+  }
+  return path.join(process.cwd(), "uploads");
+}
+
+const ROOT = uploadsRoot();
 
 const ARTWORK_TYPES = new Set([
   "image/jpeg",
@@ -148,6 +167,21 @@ export function relativePathFromPublicUrl(publicUrl: string | null | undefined):
   return publicUrl.slice(idx + prefix.length).split("?")[0] || null;
 }
 
+export async function storedUploadExists(
+  publicUrl: string | null | undefined
+): Promise<boolean> {
+  const relative = relativePathFromPublicUrl(publicUrl);
+  if (!relative) return false;
+  const abs = resolveUploadPath(relative);
+  if (!abs) return false;
+  try {
+    await access(abs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Reload a saved upload from disk (used when admin approves → LabelGrid). */
 export async function loadStoredUpload(
   publicUrl: string | null | undefined
@@ -179,4 +213,30 @@ export async function loadStoredUpload(
   } catch {
     return null;
   }
+}
+
+export function describeMissingUploads(input: {
+  artworkUrl: string | null | undefined;
+  audioUrl: string | null | undefined;
+  artworkOnDisk: boolean;
+  audioOnDisk: boolean;
+}): string[] {
+  const missing: string[] = [];
+  if (!input.artworkUrl) missing.push("cover artwork was never saved");
+  else if (!input.artworkOnDisk) {
+    missing.push(
+      "cover artwork file is missing on the server (often after a redeploy without a persistent volume)"
+    );
+  }
+  if (!input.audioUrl) missing.push("audio was never saved");
+  else if (!input.audioOnDisk) {
+    missing.push(
+      "audio file is missing on the server (often after a redeploy without a persistent volume)"
+    );
+  }
+  return missing;
+}
+
+export function getUploadsRootForDiagnostics(): string {
+  return ROOT;
 }

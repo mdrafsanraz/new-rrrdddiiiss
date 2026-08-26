@@ -1,6 +1,7 @@
 import { labelgridFetch, labelgridUpload } from "@/lib/labelgrid/client";
 import type {
   ArtistData,
+  GenreData,
   Paginated,
   ReleaseData,
   UserResource,
@@ -140,12 +141,9 @@ export function listLabels(page = 1, perPage = 50) {
   });
 }
 
-export function listGenres(page = 1, perPage = 200) {
-  return labelgridFetch<
-    Paginated<{ id: number; name?: string; title?: string }>
-  >("/genres", {
-    searchParams: { page, per_page: perPage },
-  });
+export function listGenres() {
+  // OpenAPI: GET /genres returns GenreData[] (not a paginated { data } wrapper).
+  return labelgridFetch<GenreData[] | { data: GenreData[] }>("/genres");
 }
 
 export function createWriter(body: {

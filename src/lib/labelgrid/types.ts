@@ -48,6 +48,13 @@ export type UserResource = {
   terms_acceptance: string;
 };
 
+export type GenreData = {
+  id: number;
+  name: string;
+  category?: string | null;
+  base_genre?: string | null;
+};
+
 export type Paginated<T> = {
   data: T[];
   meta?: {

@@ -21,12 +21,15 @@ export function ReleaseReviewActions({
   status,
   permanentlyLocked,
   hasLabelgridId,
+  mediaReady = true,
 }: {
   releaseId: string;
   canDecide: boolean;
   status: string;
   permanentlyLocked: boolean;
   hasLabelgridId: boolean;
+  /** False when LG draft does not exist yet and local artwork/audio are missing. */
+  mediaReady?: boolean;
 }) {
   const router = useRouter();
   const [notes, setNotes] = useState("");
@@ -170,6 +173,9 @@ export function ReleaseReviewActions({
           Approve submits the existing LabelGrid draft for review. Changes
           Required is editable; Reject is final. Status: {status}
           {hasLabelgridId ? "" : " · LG draft not created yet"}
+          {!mediaReady
+            ? " · Cover/audio missing on server — re-upload below before approve"
+            : ""}
         </p>
       </div>
 
@@ -188,12 +194,20 @@ export function ReleaseReviewActions({
               {error}
             </p>
           ) : null}
+          {!mediaReady ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              Artwork and/or audio files are not on this server. Re-upload media
+              (form above), then approve. Mount a Railway volume and set{" "}
+              <code className="font-mono">UPLOADS_DIR</code> so files survive
+              redeploys.
+            </p>
+          ) : null}
           <div className="flex flex-col gap-2">
             {canDecide ? (
               <Button
                 type="button"
                 className="h-9 w-full"
-                disabled={statusBusy !== "idle"}
+                disabled={statusBusy !== "idle" || !mediaReady}
                 onClick={approve}
               >
                 {statusBusy === "approving"

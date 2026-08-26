@@ -64,15 +64,73 @@ async function resolveLabelId(): Promise<number> {
   return first;
 }
 
-type GenreRow = { id: number; name?: string; title?: string };
+type GenreRow = {
+  id: number;
+  name?: string | null;
+  title?: string | null;
+  category?: string | null;
+  base_genre?: string | null;
+};
 
 let genresCache: GenreRow[] | null = null;
 
+/** Normalize LabelGrid /genres response — OpenAPI returns a bare array. */
+function unwrapGenreRows(raw: unknown): GenreRow[] {
+  if (Array.isArray(raw)) return raw as GenreRow[];
+  if (raw && typeof raw === "object") {
+    const obj = raw as { data?: unknown };
+    if (Array.isArray(obj.data)) return obj.data as GenreRow[];
+  }
+  return [];
+}
+
 async function loadGenres(): Promise<GenreRow[]> {
-  if (genresCache) return genresCache;
-  const genres = await listGenres(1, 200);
-  genresCache = genres.data ?? [];
+  if (genresCache && genresCache.length > 0) return genresCache;
+  const raw = await listGenres();
+  const rows = unwrapGenreRows(raw).filter(
+    (g) => typeof g?.id === "number" && Number.isFinite(g.id)
+  );
+  genresCache = rows;
   return genresCache;
+}
+
+function normalizeGenreKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[/_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/** Map friendly RDISTRO genre labels → common LabelGrid name variants. */
+const GENRE_ALIASES: Record<string, string[]> = {
+  pop: ["pop"],
+  "hip hop rap": ["hip hop", "hip-hop", "rap", "hip hop/rap", "hiphop"],
+  "r and b": ["r&b", "rnb", "r and b", "rhythm and blues"],
+  electronic: ["electronic", "electronica", "edm"],
+  dance: ["dance", "dance / electronic", "dance/electronic"],
+  rock: ["rock"],
+  indie: ["indie", "indie rock", "indie pop"],
+  alternative: ["alternative", "alt", "alternative rock"],
+  country: ["country"],
+  latin: ["latin", "latino", "latin pop"],
+  afrobeats: ["afrobeats", "afrobeat", "afro beats"],
+  jazz: ["jazz"],
+  folk: ["folk", "folk/americana"],
+  metal: ["metal", "heavy metal"],
+  reggae: ["reggae", "dancehall"],
+  world: ["world", "world music"],
+  soundtrack: ["soundtrack", "score", "ost"],
+  ambient: ["ambient"],
+  classical: ["classical"],
+  other: ["other", "miscellaneous", "misc"],
+};
+
+function genreLabelCandidates(genreName: string): string[] {
+  const key = normalizeGenreKey(genreName);
+  const aliases = GENRE_ALIASES[key] ?? [];
+  return [key, ...aliases.map(normalizeGenreKey)];
 }
 
 async function resolveGenreId(
@@ -80,20 +138,45 @@ async function resolveGenreId(
 ): Promise<number | null> {
   if (!genreName?.trim()) return null;
   const genres = await loadGenres();
-  const needle = genreName.trim().toLowerCase();
-  const match =
-    genres.find((g) => {
-      const name = (g.name ?? g.title ?? "").toLowerCase();
-      return name === needle || name.includes(needle);
-    }) ?? null;
-  return match?.id ?? null;
+  if (!genres.length) return null;
+
+  const candidates = genreLabelCandidates(genreName);
+
+  const exact = genres.find((g) => {
+    const name = normalizeGenreKey(g.name ?? g.title ?? "");
+    const base = normalizeGenreKey(g.base_genre ?? "");
+    const category = normalizeGenreKey(g.category ?? "");
+    return candidates.some(
+      (c) => c === name || c === base || (category && c === category)
+    );
+  });
+  if (exact) return exact.id;
+
+  const fuzzy = genres.find((g) => {
+    const name = normalizeGenreKey(g.name ?? g.title ?? "");
+    const base = normalizeGenreKey(g.base_genre ?? "");
+    return candidates.some(
+      (c) =>
+        (name && (name.includes(c) || c.includes(name))) ||
+        (base && (base.includes(c) || c.includes(base)))
+    );
+  });
+  return fuzzy?.id ?? null;
 }
 
 async function requireGenreId(genreName: string | null): Promise<number> {
   const id = await resolveGenreId(genreName);
   if (id) return id;
+
+  // Empty cache from a bad unwrap should not stick forever.
+  genresCache = null;
   const genres = await loadGenres();
-  if (genres[0]?.id) return genres[0].id;
+  const fallback =
+    genres.find((g) =>
+      /pop|other|miscellaneous/i.test(g.name ?? g.title ?? "")
+    ) ?? genres[0];
+  if (fallback?.id) return fallback.id;
+
   throw new Error(
     "Could not resolve a LabelGrid genre id. Check sandbox /genres access."
   );
@@ -340,6 +423,161 @@ export async function syncSubmittedReleaseToLabelGrid(
 }
 
 /**
+ * Upload cover and/or stereo audio to LabelGrid via their API.
+ * - No labelgridId yet → creates draft + uploads both files (requires artwork + audio).
+ * - Existing draft → POST /releases/{id}/photo and/or track stereo upload-url flow.
+ */
+export async function pushMediaToLabelGrid(input: {
+  release: Release & { artist: Artist | null; tracks: Track[] };
+  artwork?: StoredUpload | null;
+  audio?: StoredUpload | null;
+  /** Local track id when uploading audio (defaults to first track). */
+  localTrackId?: string | null;
+}): Promise<
+  | { ok: true; releaseId: number; trackId?: number; created: boolean }
+  | { ok: false; error: string }
+> {
+  if (!isLabelGridLive()) {
+    return {
+      ok: false,
+      error: "LABELGRID_API_TOKEN is not set — cannot upload to LabelGrid.",
+    };
+  }
+
+  const { release, artwork, audio } = input;
+  const lgReleaseId = release.labelgridId ? Number(release.labelgridId) : NaN;
+
+  // First-time: create draft + upload both assets.
+  if (!Number.isFinite(lgReleaseId)) {
+    if (!artwork || !audio) {
+      return {
+        ok: false,
+        error:
+          "Need both cover artwork and audio in memory to create the LabelGrid draft.",
+      };
+    }
+    const synced = await syncSubmittedReleaseToLabelGrid({
+      release,
+      artwork,
+      audio,
+    });
+    if (!synced.ok) return synced;
+    return {
+      ok: true,
+      releaseId: synced.releaseId,
+      trackId: synced.trackId,
+      created: true,
+    };
+  }
+
+  try {
+    let lgTrackId: number | undefined;
+
+    if (!artwork && !audio) {
+      return {
+        ok: true,
+        releaseId: lgReleaseId,
+        created: false,
+      };
+    }
+
+    if (artwork) {
+      await uploadReleasePhoto(
+        lgReleaseId,
+        new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
+        artwork.filename
+      );
+    }
+
+    if (audio) {
+      const track =
+        (input.localTrackId
+          ? release.tracks.find((t) => t.id === input.localTrackId)
+          : release.tracks[0]) ?? null;
+      if (!track) {
+        return { ok: false, error: "No track found for audio upload." };
+      }
+
+      if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
+        lgTrackId = Number(track.labelgridId);
+      } else {
+        // Track row exists locally but was never created on LabelGrid — create it.
+        if (!release.artist) {
+          return { ok: false, error: "Release has no artist to sync track." };
+        }
+        const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+        const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+        const locale = rMeta.preferredLocalization || "en";
+        const artisticRole = rMeta.artisticRole || "MainArtist";
+        const lgArtistId = await ensureLabelGridArtist(release.artist);
+        const trackPrimaryGenreId = await resolveGenreId(
+          tMeta.primaryGenre ?? release.primaryGenre
+        );
+
+        const trackBody: Record<string, unknown> = {
+          release_id: lgReleaseId,
+          disc: 1,
+          track_num: track.trackNumber || 1,
+          composition_type: tMeta.compositionType || "original_composition",
+          audio_ai_usage: tMeta.audioAiUsage || "none",
+          composition_ai_usage: tMeta.compositionAiUsage || "none",
+          commercial_samples: tMeta.commercialSamples || "no",
+          audio_language: tMeta.audioLanguage || "en",
+          preferred_localization: locale,
+          explicit: tMeta.explicit || release.explicit,
+          isrc: track.isrc || undefined,
+          titles: [{ iso_code: locale, text: track.title }],
+          artists: [
+            {
+              artist_id: lgArtistId,
+              artistic_role: artisticRole,
+              position: 1,
+            },
+          ],
+        };
+        if (trackPrimaryGenreId) trackBody.primary_genre_id = trackPrimaryGenreId;
+
+        const lgTrack = await createTrack(trackBody);
+        lgTrackId = unwrapId(lgTrack);
+        await prisma.track.update({
+          where: { id: track.id },
+          data: { labelgridId: String(lgTrackId) },
+        });
+      }
+
+      await uploadTrackStereoAudio(lgTrackId, {
+        buffer: audio.buffer,
+        filename: audio.filename,
+        mimeType: audio.mimeType,
+      });
+    }
+
+    await prisma.release.update({
+      where: { id: release.id },
+      data: {
+        syncError: null,
+        labelgridReviewStatus: release.labelgridReviewStatus ?? "draft",
+      },
+    });
+
+    return {
+      ok: true,
+      releaseId: lgReleaseId,
+      trackId: lgTrackId,
+      created: false,
+    };
+  } catch (error) {
+    const message = formatLgError(error);
+    console.error("[labelgrid/media]", release.id, message);
+    await prisma.release.update({
+      where: { id: release.id },
+      data: { syncError: message.slice(0, 2000) },
+    });
+    return { ok: false, error: message };
+  }
+}
+
+/**
  * Submit an already-synced LabelGrid draft into LG distribution review.
  * If local release has no labelgridId yet, syncs as draft first (with files).
  */
@@ -372,7 +610,9 @@ export async function submitLabelGridDraftForReview(input: {
         return {
           ok: false,
           error:
-            "Release is not on LabelGrid yet and artwork/audio files are missing.",
+            "Release is not on LabelGrid yet and artwork/audio files are missing on the server. " +
+            "Re-upload media on the release page, then approve again. " +
+            "Set UPLOADS_DIR to a Railway volume path so uploads persist across redeploys.",
         };
       }
       const synced = await syncSubmittedReleaseToLabelGrid({

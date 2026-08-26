@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
+  canUserReplaceMedia,
   canUserResubmitRelease,
   canUserSubmitRelease,
   getUserFacingReleaseStatus,
@@ -28,6 +29,8 @@ import {
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
+import { storedUploadExists } from "@/lib/uploads/store";
+import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -124,9 +127,24 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
   const canSubmit = canUserSubmitRelease(release);
   const canResubmit = canUserResubmitRelease(release);
+  const canReplaceMedia = canUserReplaceMedia(release);
   const tracks = release.tracks ?? [];
   const documents = release.documents ?? [];
   const activities = release.activities ?? [];
+
+  const artworkOnDisk = await storedUploadExists(release.artworkUrl);
+  const trackMedia = await Promise.all(
+    tracks.map(async (t) => ({
+      id: t.id,
+      title: t.title,
+      trackNumber: t.trackNumber,
+      hasAudioOnDisk: await storedUploadExists(t.audioUrl),
+    }))
+  );
+  const needsArtwork = !artworkOnDisk;
+  const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
+  const showMediaReplace =
+    canReplaceMedia && (needsArtwork || needsAudio || Boolean(release.syncError));
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -429,6 +447,16 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <p className="font-semibold">Action required</p>
           <p className="mt-1">{release.syncError}</p>
         </section>
+      ) : null}
+
+      {showMediaReplace ? (
+        <ReplaceReleaseMediaForm
+          releaseId={release.id}
+          tracks={trackMedia}
+          artworkOnDisk={artworkOnDisk}
+          needsArtwork={needsArtwork}
+          needsAudio={needsAudio}
+        />
       ) : null}
 
       {release.artist ? (

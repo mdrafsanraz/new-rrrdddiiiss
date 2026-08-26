@@ -50,8 +50,19 @@ If your Postgres service has a different name, pick that service’s `DATABASE_U
 | `NEXT_PUBLIC_APP_URL` | `https://new-rrrdddiiiss-production.up.railway.app` |
 | `HOSTNAME` | `0.0.0.0` |
 | `LABELGRID_ENV` | `sandbox` |
+| `UPLOADS_DIR` | `/data/uploads` (see volume below) |
 
-5. **Redeploy** the web service
+5. **Persistent uploads (required for Approve → LabelGrid)**
+
+Cover art and audio are stored on disk. Without a volume they vanish on every redeploy, and Approve fails with “artwork/audio files are missing”.
+
+1. Web service → **Settings → Volumes** → add a volume mounted at `/data`
+2. Variables → set `UPLOADS_DIR=/data/uploads`
+3. Redeploy
+
+You can re-upload missing media from the release detail page (user or admin), then Approve again.
+
+6. **Redeploy** the web service
 
 On start, the app runs `prisma db push` to create tables in Postgres (no migration step).
 

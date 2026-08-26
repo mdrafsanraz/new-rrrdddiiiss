@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { submitLabelGridDraftForReview } from "@/lib/labelgrid/sync-submit";
 import { prisma } from "@/lib/db";
-import { loadStoredUpload } from "@/lib/uploads/store";
+import {
+  describeMissingUploads,
+  loadStoredUpload,
+  storedUploadExists,
+} from "@/lib/uploads/store";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { writeAuditLog } from "@/lib/admin/audit";
 import {
@@ -77,6 +81,40 @@ export async function POST(request: Request, { params }: Params) {
     const artwork = await loadStoredUpload(release.artworkUrl);
     const audio = await loadStoredUpload(release.tracks[0]?.audioUrl);
 
+    // Need local files only when this release has never been created on LabelGrid.
+    if (!release.labelgridId && (!artwork || !audio)) {
+      const missing = describeMissingUploads({
+        artworkUrl: release.artworkUrl,
+        audioUrl: release.tracks[0]?.audioUrl,
+        artworkOnDisk: await storedUploadExists(release.artworkUrl),
+        audioOnDisk: await storedUploadExists(release.tracks[0]?.audioUrl),
+      });
+      const message =
+        `Cannot sync to LabelGrid: ${missing.join("; ")}. ` +
+        "Re-upload cover art and audio on this release, then approve again. " +
+        "On Railway, mount a volume and set UPLOADS_DIR so files survive redeploys.";
+
+      await prisma.release.update({
+        where: { id },
+        data: {
+          status: "sync_error",
+          syncError: message.slice(0, 2000),
+        },
+      });
+      await logReleaseActivity({
+        releaseId: id,
+        type: "sync_error",
+        title: "Approve blocked — media missing",
+        description: message.slice(0, 500),
+        actorUserId: gate.admin.id,
+      });
+
+      return NextResponse.json(
+        { error: message, labelgrid: { submittedForReview: false } },
+        { status: 400 }
+      );
+    }
+
     const now = new Date();
 
     // Claim the transition under a status guard (double-click safe).
@@ -92,6 +130,7 @@ export async function POST(request: Request, { params }: Params) {
             "sync_error",
             "error",
             "internal_approved",
+            "on_hold",
           ],
         },
       },

@@ -15,6 +15,8 @@ import { parseJsonObject } from "@/lib/releases/constants";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
 import { canAdminDecide, getAdminStatusLabel } from "@/lib/releases/status";
 import { hasPermission } from "@/lib/auth/permissions";
+import { storedUploadExists } from "@/lib/uploads/store";
+import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -92,6 +94,24 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
     canAdminDecide(release.status, release.permanentlyLocked);
 
   const canImpersonate = hasPermission(admin.role, "users.impersonate");
+
+  const artworkOnDisk = await storedUploadExists(release.artworkUrl);
+  const trackMedia = await Promise.all(
+    release.tracks.map(async (t) => ({
+      id: t.id,
+      title: t.title,
+      trackNumber: t.trackNumber,
+      hasAudioOnDisk: await storedUploadExists(t.audioUrl),
+    }))
+  );
+  const needsArtwork = !artworkOnDisk;
+  const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
+  const mediaReadyForLg =
+    Boolean(release.labelgridId) || (artworkOnDisk && !needsAudio);
+  const showMediaReplace =
+    hasPermission(admin.role, "releases.moderate") &&
+    !release.permanentlyLocked &&
+    (needsArtwork || needsAudio || !release.labelgridId);
 
   return (
     <div className="space-y-6">
@@ -187,6 +207,16 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
           <p className="font-semibold">Sync error</p>
           <p className="mt-1 break-words text-xs">{release.syncError}</p>
         </div>
+      ) : null}
+
+      {showMediaReplace ? (
+        <ReplaceReleaseMediaForm
+          releaseId={release.id}
+          tracks={trackMedia}
+          artworkOnDisk={artworkOnDisk}
+          needsArtwork={needsArtwork}
+          needsAudio={needsAudio}
+        />
       ) : null}
 
       {release.permanentlyLocked ? (
@@ -542,6 +572,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               status={release.status}
               permanentlyLocked={release.permanentlyLocked}
               hasLabelgridId={Boolean(release.labelgridId)}
+              mediaReady={mediaReadyForLg}
             />
           ) : null}
 
