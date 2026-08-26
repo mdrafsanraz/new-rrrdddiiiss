@@ -21,7 +21,7 @@ export default async function NewReleasePage({ searchParams }: Props) {
   ]);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <Link
           href="/dashboard/releases"
@@ -33,12 +33,12 @@ export default async function NewReleasePage({ searchParams }: Props) {
           Submit a release
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          One page, mapped to distributor requirements. Submitting counts toward
-          your monthly allowance
+          Fields follow LabelGrid ReleaseCreateData + TrackCreateData. Submitting
+          uploads a LabelGrid draft and queues RDISTRO admin review
           {usage.releasesLimit === null
             ? " (unlimited on your plan)"
-            : ` (${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used)`}
-          . The selected artist becomes locked after submit.
+            : ` (${usage.releasesThisMonth}/${formatLimit(usage.releasesLimit)} used this month)`}
+          . The selected artist locks after submit.
         </p>
       </div>
 

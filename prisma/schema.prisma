@@ -131,6 +131,8 @@ model Release {
   artworkUrl      String?
   territoriesJson String        @default("[]")
   storesJson      String        @default("[]")
+  /** Extra ReleaseCreateData fields (JSON) — mix version, ©/℗, store URLs, etc. */
+  metadataJson    String        @default("{}")
   labelgridId     String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -157,6 +159,8 @@ model Track {
   trackNumber Int      @default(1)
   durationMs  Int?
   audioUrl    String?
+  /** Extra TrackCreateData fields (JSON). */
+  metadataJson String  @default("{}")
   labelgridId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

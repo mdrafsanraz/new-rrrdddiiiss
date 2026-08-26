@@ -6,30 +6,116 @@ import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { syncSubmittedReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import {
+  ARTISTIC_ROLES,
   ARTWORK_AI_USAGE,
+  COMMERCIAL_SAMPLES,
+  COMPOSITION_TYPES,
   CONTENT_TYPES,
   PRIMARY_GENRES,
+  type ReleaseMetadata,
+  type TrackMetadata,
 } from "@/lib/releases/constants";
 import { saveArtwork, saveAudio } from "@/lib/uploads/store";
 
-/**
- * User submit:
- * - Local status = in_review (what the user sees)
- * - LabelGrid = create draft + upload cover/audio (not submitted for LG review yet)
- * Admin approval later calls distribute (submit-for-review) on LabelGrid.
- */
-const fieldsSchema = z.object({
+const genreOpt = z.string().max(64).optional().or(z.literal(""));
+const ai = z.enum(ARTWORK_AI_USAGE);
+
+const payloadSchema = z.object({
   artistId: z.string().min(1),
+  artisticRole: z.enum(ARTISTIC_ROLES).or(z.string().min(1).max(255)),
   title: z.string().min(1).max(200),
+  phoneticTitle: z.string().max(200).optional().or(z.literal("")),
+  mixVersion: z.string().max(200).optional().or(z.literal("")),
   catalogNumber: z.string().min(1).max(20),
   contentType: z.enum(CONTENT_TYPES),
   primaryGenre: z.enum(PRIMARY_GENRES),
+  secondaryGenre: genreOpt,
+  tertiaryGenre: genreOpt,
+  preferredLocalization: z.string().min(2).max(20),
   releaseDate: z.string().min(1),
-  artworkAiUsage: z.enum(ARTWORK_AI_USAGE),
+  preOrderDate: z.string().optional().or(z.literal("")),
+  enableExactReleaseTime: z.boolean().optional(),
+  releaseTime: z.string().optional().or(z.literal("")),
+  artworkAiUsage: ai,
   explicit: z.enum(["off", "on", "edited"]),
-  trackTitle: z.string().min(1).max(200),
-  upc: z.string().max(13).optional().or(z.literal("")),
+  barcode: z.string().max(13).optional().or(z.literal("")),
+  descriptionLong: z.string().max(5000).optional().or(z.literal("")),
+  clineYear: z.string().optional().or(z.literal("")),
+  clineName: z.string().max(255).optional().or(z.literal("")),
+  plineYear: z.string().optional().or(z.literal("")),
+  plineName: z.string().max(255).optional().or(z.literal("")),
+  courtesyLine: z.string().max(255).optional().or(z.literal("")),
+  transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
+  storeUrls: z
+    .record(z.string(), z.string().optional().or(z.literal("")))
+    .optional(),
+  track: z.object({
+    title: z.string().min(1).max(200),
+    mixVersion: z.string().max(200).optional().or(z.literal("")),
+    trackNumber: z.string().min(1),
+    disc: z.string().min(1),
+    compositionType: z.enum([
+      COMPOSITION_TYPES[0].value,
+      COMPOSITION_TYPES[1].value,
+      COMPOSITION_TYPES[2].value,
+    ]),
+    audioAiUsage: ai,
+    compositionAiUsage: ai,
+    commercialSamples: z.enum([
+      COMMERCIAL_SAMPLES[0].value,
+      COMMERCIAL_SAMPLES[1].value,
+      COMMERCIAL_SAMPLES[2].value,
+    ]),
+    audioLanguage: z.string().min(2).max(20),
+    recordingCountry: z.string().max(2).optional().or(z.literal("")),
+    preferredLocalization: z.string().min(2).max(20),
+    primaryGenre: genreOpt,
+    secondaryGenre: genreOpt,
+    tertiaryGenre: genreOpt,
+    explicit: z.enum(["off", "on", "edited"]),
+    isrc: z.string().max(15).optional().or(z.literal("")),
+    iswc: z.string().max(15).optional().or(z.literal("")),
+    lyrics: z.string().max(20000).optional().or(z.literal("")),
+    previewStartTime: z.string().optional().or(z.literal("")),
+    previewLength: z.string().optional().or(z.literal("")),
+    albumOnly: z.boolean().optional(),
+    freeDownload: z.boolean().optional(),
+    instantGratification: z.boolean().optional(),
+    hasMechanicalLicense: z.boolean().optional(),
+    clineYear: z.string().optional().or(z.literal("")),
+    clineName: z.string().max(255).optional().or(z.literal("")),
+    plineYear: z.string().optional().or(z.literal("")),
+    plineName: z.string().max(255).optional().or(z.literal("")),
+    courtesyLine: z.string().max(255).optional().or(z.literal("")),
+    writerFirstName: z.string().min(1).max(255),
+    writerLastName: z.string().min(1).max(255),
+    writerRoles: z.array(z.string().min(1)).min(1),
+  }),
 });
+
+function yearOrNull(v?: string) {
+  if (!v?.trim()) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function intOrNull(v?: string) {
+  if (!v?.trim()) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function buildReleaseDateIso(
+  date: string,
+  enableExact: boolean | undefined,
+  time: string | undefined
+) {
+  if (!date) return null;
+  if (enableExact && time) {
+    return new Date(`${date}T${time}:00.000Z`);
+  }
+  return new Date(`${date}T00:00:00.000Z`);
+}
 
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -39,18 +125,12 @@ export async function POST(request: Request) {
 
   try {
     const form = await request.formData();
-    const fields = fieldsSchema.parse({
-      artistId: String(form.get("artistId") ?? ""),
-      title: String(form.get("title") ?? ""),
-      catalogNumber: String(form.get("catalogNumber") ?? ""),
-      contentType: String(form.get("contentType") ?? ""),
-      primaryGenre: String(form.get("primaryGenre") ?? ""),
-      releaseDate: String(form.get("releaseDate") ?? ""),
-      artworkAiUsage: String(form.get("artworkAiUsage") ?? ""),
-      explicit: String(form.get("explicit") ?? ""),
-      trackTitle: String(form.get("trackTitle") ?? ""),
-      upc: String(form.get("upc") ?? ""),
-    });
+    const rawPayload = form.get("payload");
+    if (typeof rawPayload !== "string") {
+      return NextResponse.json({ error: "Missing release payload" }, { status: 400 });
+    }
+
+    const fields = payloadSchema.parse(JSON.parse(rawPayload));
 
     const artworkFile = form.get("artwork");
     const audioFile = form.get("audio");
@@ -79,6 +159,66 @@ export async function POST(request: Request) {
     const artwork = await saveArtwork(user.id, artworkFile);
     const audio = await saveAudio(user.id, audioFile);
 
+    const releaseMeta: ReleaseMetadata = {
+      mixVersion: fields.mixVersion || undefined,
+      phoneticTitle: fields.phoneticTitle || undefined,
+      descriptionLong: fields.descriptionLong || undefined,
+      secondaryGenre: fields.secondaryGenre || undefined,
+      tertiaryGenre: fields.tertiaryGenre || undefined,
+      preOrderDate: fields.preOrderDate || undefined,
+      preferredLocalization: fields.preferredLocalization,
+      enableExactReleaseTime: Boolean(fields.enableExactReleaseTime),
+      releaseTime: fields.releaseTime || undefined,
+      artisticRole: fields.artisticRole,
+      clineYear: yearOrNull(fields.clineYear),
+      clineName: fields.clineName || undefined,
+      plineYear: yearOrNull(fields.plineYear),
+      plineName: fields.plineName || undefined,
+      courtesyLine: fields.courtesyLine || undefined,
+      transferFromDistributor: fields.transferFromDistributor || undefined,
+      storeUrls: Object.fromEntries(
+        Object.entries(fields.storeUrls ?? {}).filter(([, v]) => Boolean(v?.trim()))
+      ) as ReleaseMetadata["storeUrls"],
+    };
+
+    const trackMeta: TrackMetadata = {
+      mixVersion: fields.track.mixVersion || undefined,
+      disc: Number(fields.track.disc) || 1,
+      compositionType: fields.track.compositionType,
+      audioAiUsage: fields.track.audioAiUsage,
+      compositionAiUsage: fields.track.compositionAiUsage,
+      commercialSamples: fields.track.commercialSamples,
+      audioLanguage: fields.track.audioLanguage,
+      recordingCountry: fields.track.recordingCountry || undefined,
+      preferredLocalization: fields.track.preferredLocalization,
+      primaryGenre: fields.track.primaryGenre || fields.primaryGenre,
+      secondaryGenre: fields.track.secondaryGenre || undefined,
+      tertiaryGenre: fields.track.tertiaryGenre || undefined,
+      hasMechanicalLicense: Boolean(fields.track.hasMechanicalLicense),
+      iswc: fields.track.iswc || undefined,
+      lyrics: fields.track.lyrics || undefined,
+      previewStartTime: intOrNull(fields.track.previewStartTime),
+      previewLength: intOrNull(fields.track.previewLength),
+      albumOnly: Boolean(fields.track.albumOnly),
+      freeDownload: Boolean(fields.track.freeDownload),
+      instantGratification: Boolean(fields.track.instantGratification),
+      explicit: fields.track.explicit,
+      clineYear: yearOrNull(fields.track.clineYear),
+      clineName: fields.track.clineName || undefined,
+      plineYear: yearOrNull(fields.track.plineYear),
+      plineName: fields.track.plineName || undefined,
+      courtesyLine: fields.track.courtesyLine || undefined,
+      writerFirstName: fields.track.writerFirstName.trim(),
+      writerLastName: fields.track.writerLastName.trim(),
+      writerRoles: fields.track.writerRoles,
+    };
+
+    const releaseDate = buildReleaseDateIso(
+      fields.releaseDate,
+      fields.enableExactReleaseTime,
+      fields.releaseTime
+    );
+
     const now = new Date();
     const release = await prisma.$transaction(async (tx) => {
       const created = await tx.release.create({
@@ -91,18 +231,20 @@ export async function POST(request: Request) {
           primaryGenre: fields.primaryGenre,
           artworkAiUsage: fields.artworkAiUsage,
           explicit: fields.explicit,
-          upc: fields.upc?.trim() || null,
-          releaseDate: new Date(fields.releaseDate),
+          upc: fields.barcode?.trim() || null,
+          releaseDate,
           artworkUrl: artwork.publicUrl,
-          // User-facing: always admin review — never expose LabelGrid draft.
+          metadataJson: JSON.stringify(releaseMeta),
           status: "in_review",
           submittedAt: now,
           tracks: {
             create: {
               userId: user.id,
-              title: fields.trackTitle.trim(),
-              trackNumber: 1,
+              title: fields.track.title.trim(),
+              trackNumber: Number(fields.track.trackNumber) || 1,
+              isrc: fields.track.isrc?.trim() || null,
               audioUrl: audio.publicUrl,
+              metadataJson: JSON.stringify(trackMeta),
             },
           },
         },
@@ -141,7 +283,6 @@ export async function POST(request: Request) {
         };
       } else {
         labelgrid = { draftSynced: false, error: result.error };
-        // Keep user status in_review; admin sees syncError on the release.
       }
     } else {
       await prisma.release.update({
@@ -172,6 +313,9 @@ export async function POST(request: Request) {
         { error: error.issues[0]?.message ?? "Invalid input" },
         { status: 400 }
       );
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid release payload" }, { status: 400 });
     }
     const message =
       error instanceof Error ? error.message : "Could not submit release";

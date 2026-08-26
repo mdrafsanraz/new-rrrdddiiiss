@@ -961,7 +961,7 @@
   },
   "prisma/migrations/20260826153000_init_postgres/migration.sql": {
     "mtime": 1787757771.0266035,
-    "seen": 1787767523.699426,
+    "seen": 1787769333.845052,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -978,21 +978,21 @@
     "semantic_hash": ""
   },
   "src/app/api/releases/submit/route.ts": {
-    "mtime": 1787769251.9266856,
-    "seen": 1787769282.438088,
-    "ast_hash": "0ef51ed4cf414bca1bbdb947e311c89e",
+    "mtime": 1787769977.7540042,
+    "seen": 1787770067.3486998,
+    "ast_hash": "e61b42c662f5a6a4da065de074b4adbb",
     "semantic_hash": ""
   },
   "src/components/dashboard/release-submit-form.tsx": {
-    "mtime": 1787769262.6149416,
-    "seen": 1787769282.439669,
-    "ast_hash": "7d3db27cb3f052cf9d4ded4299037980",
+    "mtime": 1787769939.931343,
+    "seen": 1787770067.350074,
+    "ast_hash": "7c062d78e345b8ef06cab44540a10846",
     "semantic_hash": ""
   },
   "src/lib/releases/constants.ts": {
-    "mtime": 1787767417.1926455,
-    "seen": 1787767522.765677,
-    "ast_hash": "3b5b5d776a4f62f067f06c79ca5bdd9a",
+    "mtime": 1787769848.2919219,
+    "seen": 1787770067.351574,
+    "ast_hash": "516719355e834f2d2de961fdd2f76b79",
     "semantic_hash": ""
   },
   "src/app/api/media/[...path]/route.ts": {
@@ -1002,9 +1002,9 @@
     "semantic_hash": ""
   },
   "src/lib/labelgrid/sync-submit.ts": {
-    "mtime": 1787769271.539889,
-    "seen": 1787769282.4405718,
-    "ast_hash": "ef8880ee719cd854a079cd81716ab587",
+    "mtime": 1787770038.127518,
+    "seen": 1787770067.3515332,
+    "ast_hash": "ee4d0e27aa92ef740d6a7a863313ab09",
     "semantic_hash": ""
   },
   "src/lib/uploads/store.ts": {
