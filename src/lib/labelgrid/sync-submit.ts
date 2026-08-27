@@ -220,54 +220,75 @@ async function loadContributorRoles(): Promise<ContributorRoleRow[]> {
   return contributorRolesCache;
 }
 
-function roleIdentifier(row: ContributorRoleRow): string {
-  return String(row.key ?? row.id ?? row.value ?? row.code ?? row.display_value);
+/**
+ * Resolve a UI role label (a display_value from the live catalog) to its
+ * full catalog row — needed because the roles dictionary LabelGrid accepts
+ * is keyed by the role's CATEGORY with the role name as the string value:
+ *
+ *   roles: { "Composition & Lyrics": "Composer" }
+ *
+ * Deduced from the sandbox's own 422 pair: sending {Composer: true} fails
+ * "the contributor role field must be a string" (value must be a string),
+ * and {Composer: "true"} fails "the selected contributor role is invalid"
+ * on the KEY, with the requirement naming the three valid key families:
+ * "Performer, Composition & Lyrics, Production & Engineering" — which are
+ * exactly the `category` values GET /contributor-roles returns.
+ */
+async function resolveContributorRole(
+  label: string
+): Promise<ContributorRoleRow | null> {
+  const roles = await loadContributorRoles();
+  return (
+    roles.find(
+      (r) =>
+        r.display_value.trim().toLowerCase() === label.trim().toLowerCase()
+    ) ?? null
+  );
 }
 
-/**
- * A UI role label only reaches here as one of the exact display_value
- * strings the Credits step fetched live — resolve it to whatever LabelGrid
- * actually uses as the roles.* key for that entry. Never invent a role
- * (LabelGrid 422s: "The selected contributor role is invalid" for an
- * unrecognized key).
- */
-async function resolveContributorRoleKey(
-  label: string
-): Promise<string | null> {
-  const roles = await loadContributorRoles();
-  const match = roles.find(
-    (r) => r.display_value.trim().toLowerCase() === label.trim().toLowerCase()
-  );
-  return match ? roleIdentifier(match) : null;
+/** Build the {category: display_value} roles dict from resolved catalog rows. */
+function rolesDictFromRows(
+  rows: ContributorRoleRow[]
+): Record<string, string> {
+  const dict: Record<string, string> = {};
+  for (const row of rows) {
+    const category = (row.category ?? "").trim();
+    if (!category) continue;
+    // One string value per category key — first selected role in a
+    // category wins; a second role in the same category needs its own
+    // contributor entry, which the UI doesn't model yet.
+    if (!(category in dict)) dict[category] = row.display_value;
+  }
+  return dict;
 }
 
 /**
  * Fallback contributor (used when a track has no explicit credits entered)
  * must satisfy LabelGrid's "at least one contributor in Performer /
  * Composition & Lyrics / Production & Engineering" rule. Picks one real
- * role per available required category so the single fallback writer
- * qualifies regardless of which category LabelGrid actually checks.
+ * role per required category so the single fallback writer qualifies
+ * regardless of which category LabelGrid actually checks.
  */
-async function requiredCategoryRoleKeys(): Promise<string[]> {
+async function requiredCategoryRoles(): Promise<ContributorRoleRow[]> {
   const roles = await loadContributorRoles();
   const requiredCategories = [
     "performer",
     "composition & lyrics",
     "production & engineering",
   ];
-  const keys: string[] = [];
+  const rows: ContributorRoleRow[] = [];
   for (const category of requiredCategories) {
     const found = roles.find(
       (r) => (r.category ?? "").trim().toLowerCase() === category
     );
-    if (found) keys.push(roleIdentifier(found));
+    if (found) rows.push(found);
   }
   // Categories may not match exactly (naming can drift) — fall back to the
   // first available role rather than sending an empty contributor.
-  if (keys.length === 0 && roles.length > 0) {
-    keys.push(roleIdentifier(roles[0]));
+  if (rows.length === 0 && roles.length > 0) {
+    rows.push(roles[0]);
   }
-  return keys;
+  return rows;
 }
 
 function unwrapId(res: unknown): number {
@@ -428,14 +449,15 @@ async function buildTrackContributors(
 
   for (const c of contribList) {
     // Roles arrive as the exact display_value strings the Credits step
-    // fetched live — resolve each to LabelGrid's real key. A label that no
-    // longer matches the catalog (stale client state) is dropped rather
-    // than sent as an invalid key.
+    // fetched live — resolve each to its catalog row (display_value +
+    // category). A label that no longer matches the catalog (stale client
+    // state) is dropped rather than sent as an invalid entry.
     const resolved = await Promise.all(
-      c.roles.map((label) => resolveContributorRoleKey(label))
+      c.roles.map((label) => resolveContributorRole(label))
     );
-    const roleKeys = resolved.filter((k): k is string => Boolean(k));
-    if (roleKeys.length === 0) continue;
+    const rows = resolved.filter((r): r is ContributorRoleRow => Boolean(r));
+    const roles = rolesDictFromRows(rows);
+    if (Object.keys(roles).length === 0) continue;
 
     const writerId = await ensureWriter({
       first_name: c.firstName.trim(),
@@ -444,10 +466,7 @@ async function buildTrackContributors(
     });
     lgContributors.push({
       writer_id: writerId,
-      // LabelGrid validates each roles.* entry as a string (422: "The
-      // contributor role field must be a string") — a boolean presence
-      // flag is rejected even though it's semantically what this is.
-      roles: Object.fromEntries(roleKeys.map((k) => [k, "true"])),
+      roles,
       ai_contribution: "none",
     });
   }
@@ -462,10 +481,10 @@ async function buildTrackContributors(
       last_name: fallbackName.last,
       email: artist.email ?? undefined,
     });
-    const roleKeys = await requiredCategoryRoleKeys();
+    const rows = await requiredCategoryRoles();
     lgContributors.push({
       writer_id: writerId,
-      roles: Object.fromEntries(roleKeys.map((k) => [k, "true"])),
+      roles: rolesDictFromRows(rows),
       ai_contribution: "none",
     });
   }
