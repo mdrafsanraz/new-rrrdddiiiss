@@ -55,6 +55,40 @@ type Outlet = { id: number; name: string; key: string };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "sync-error";
 
+/** Mirrors the server's /labelgrid-snapshot response — live, not cached. */
+type LiveReleaseSnapshot = {
+  id: number;
+  title: string | null;
+  artist: string | null;
+  primary_genre: string | null;
+  content_type: string | null;
+  release_date: string | null;
+  barcode_number: string | null;
+  cover_url: string | null;
+  review_status: string | null;
+  store_count: number | null;
+  all_stores: boolean;
+  tracks: Array<{
+    id: number;
+    track_num: number | null;
+    title: string | null;
+    mix_version: string | null;
+    default_display_artist: string | null;
+  }>;
+};
+
+type SaveDraftResult = {
+  /** The local save request itself succeeded. */
+  ok: boolean;
+  /**
+   * When syncToLabelGrid was requested: true only if LabelGrid confirmed
+   * (release id present / every track landed with no processing failure).
+   * When sync wasn't requested, mirrors `ok`.
+   */
+  labelgridOk: boolean;
+  error?: string;
+};
+
 const currentYear = new Date().getFullYear();
 
 const COMMON_COUNTRIES = [
@@ -813,9 +847,12 @@ export function ReleaseBuilder({
   const stateRef = useRef<WizardState>(
     initialWizard ?? initialState(artists, defaultArtistId)
   );
-  const skipAutosave = useRef(!initialWizard);
-  const createInFlight = useRef<Promise<string | null> | null>(null);
-  const saveInFlight = useRef<Promise<boolean> | null>(null);
+  const createInFlight = useRef<Promise<{
+    id: string | null;
+    labelgridOk: boolean;
+    error?: string;
+  }> | null>(null);
+  const saveInFlight = useRef<Promise<SaveDraftResult> | null>(null);
   const queuedSaveOpts = useRef<{
     forceArtwork?: boolean;
     syncToLabelGrid?: boolean;
@@ -835,6 +872,12 @@ export function ReleaseBuilder({
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [audioAiUsed, setAudioAiUsed] = useState(false);
+  const [liveSnapshot, setLiveSnapshot] = useState<LiveReleaseSnapshot | null>(
+    null
+  );
+  const [liveSnapshotError, setLiveSnapshotError] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     stateRef.current = state;
@@ -891,8 +934,18 @@ export function ReleaseBuilder({
     if (error) errorRef.current?.focus();
   }, [error]);
 
-  async function createDraft(current: WizardState): Promise<string | null> {
-    if (current.releaseId) return current.releaseId;
+  /**
+   * Checkpoint A (leaving Distribution): the ONLY moment Steps 1+2 combine
+   * into the first LabelGrid Create Release call. Returns whether LabelGrid
+   * actually confirmed a release id — the caller must not advance past
+   * Distribution unless labelgridOk is true.
+   */
+  async function createDraft(
+    current: WizardState
+  ): Promise<{ id: string | null; labelgridOk: boolean; error?: string }> {
+    if (current.releaseId) {
+      return { id: current.releaseId, labelgridOk: true };
+    }
     if (createInFlight.current) return createInFlight.current;
 
     const run = (async () => {
@@ -932,10 +985,11 @@ export function ReleaseBuilder({
         if (!res.ok) {
           setSaveStatus("error");
           setError(data.error ?? "Could not create draft");
-          return null;
+          return { id: null, labelgridOk: false, error: data.error };
         }
         const id = data.release.id as string;
         const artworkLanded = Boolean(data.release.artworkUrl);
+        const labelgridOk = Boolean(data.release.labelgridId);
         setState((prev) => ({
           ...prev,
           releaseId: id,
@@ -943,17 +997,17 @@ export function ReleaseBuilder({
           artworkFile:
             current.artworkFile && !artworkLanded ? prev.artworkFile : null,
         }));
-        if (current.artworkFile && !artworkLanded && data.labelgrid?.error) {
+        if (!labelgridOk) {
           setSaveStatus("sync-error");
-          setSyncErrorMessage(data.labelgrid.error);
+          setSyncErrorMessage(data.labelgrid?.error ?? null);
         } else {
           setSaveStatus("saved");
         }
-        return id;
+        return { id, labelgridOk, error: data.labelgrid?.error };
       } catch {
         setSaveStatus("error");
         setError("Network error while saving draft.");
-        return null;
+        return { id: null, labelgridOk: false, error: "Network error" };
       } finally {
         createInFlight.current = null;
       }
@@ -972,10 +1026,11 @@ export function ReleaseBuilder({
    * landed. A call that arrives while one is in flight is queued to run
    * once more (with the latest state) instead of firing concurrently.
    */
+
   async function saveDraft(
     current: WizardState,
     opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
-  ): Promise<boolean> {
+  ): Promise<SaveDraftResult> {
     if (saveInFlight.current) {
       queuedSaveOpts.current = {
         forceArtwork: queuedSaveOpts.current?.forceArtwork || opts?.forceArtwork,
@@ -1000,11 +1055,14 @@ export function ReleaseBuilder({
   async function performSaveDraft(
     current: WizardState,
     opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
-  ): Promise<boolean> {
+  ): Promise<SaveDraftResult> {
     let id = current.releaseId;
     if (!id) {
-      id = await createDraft(current);
-      if (!id) return false;
+      const created = await createDraft(current);
+      if (!created.id) {
+        return { ok: false, labelgridOk: false, error: created.error };
+      }
+      id = created.id;
       current = { ...stateRef.current, releaseId: id };
     }
 
@@ -1039,11 +1097,18 @@ export function ReleaseBuilder({
       if (!res.ok) {
         setSaveStatus("error");
         if (opts?.forceArtwork) setError(data.error ?? "Save failed");
-        return false;
+        return { ok: false, labelgridOk: false, error: data.error };
       }
 
       const release = data.release;
       const labelgridError: string | undefined = data.labelgrid?.error;
+      const anyTrackAudioFailed = (release.tracks ?? []).some(
+        (rt: { metadataJson?: string }) =>
+          Boolean(parseJsonObject<TrackMetadata>(rt.metadataJson).audioProcessingError)
+      );
+      const labelgridOk = opts?.syncToLabelGrid
+        ? !labelgridError && !anyTrackAudioFailed
+        : true;
 
       setState((prev) => {
         const byClient = new Map(prev.tracks.map((t) => [t.clientId, t]));
@@ -1106,61 +1171,26 @@ export function ReleaseBuilder({
         };
       });
 
-      if (labelgridError) {
+      if (!labelgridOk) {
         setSaveStatus("sync-error");
-        setSyncErrorMessage(labelgridError);
+        setSyncErrorMessage(
+          labelgridError ??
+            "Audio processing failed for one or more tracks — check the Tracks step."
+        );
       } else {
         setSaveStatus("saved");
         setSyncErrorMessage(null);
       }
-      return true;
+      return { ok: true, labelgridOk, error: labelgridError };
     } catch {
       setSaveStatus("error");
-      return false;
+      return { ok: false, labelgridOk: false, error: "Network error" };
     }
   }
 
-  // Debounced autosave after draft exists
-  useEffect(() => {
-    if (skipAutosave.current) {
-      skipAutosave.current = false;
-      return;
-    }
-    if (!state.releaseId) return;
-
-    const t = window.setTimeout(() => {
-      void saveDraft(stateRef.current);
-    }, 1200);
-    return () => window.clearTimeout(t);
-    // Intentionally depend on serialized draft-relevant fields
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    state.releaseId,
-    state.title,
-    state.artistId,
-    state.contentType,
-    state.primaryGenre,
-    state.secondaryGenre,
-    state.releaseDate,
-    state.upc,
-    state.mixVersion,
-    state.preferredLocalization,
-    state.artworkAiUsage,
-    state.explicit,
-    state.clineYear,
-    state.clineName,
-    state.plineYear,
-    state.plineName,
-    state.allStores,
-    state.selectedOutletIds,
-    state.worldwide,
-    state.territoryCodes,
-    state.tracks,
-    state.contributors,
-    state.artworkFile,
-    state.hasSamples,
-    state.isRemix,
-  ]);
+  // No autosave: the wizard only talks to the server at two deliberate
+  // checkpoints (leaving Distribution, leaving Credits) plus explicit
+  // Save & Exit / Submit — see ensureDraftThenContinue.
 
   // Poll LabelGrid audio-processing status for any track still "Processing…"
   // (PUT stereo file returned 202 — GET file-upload-attempts/{id} resolves it).
@@ -1212,6 +1242,46 @@ export function ReleaseBuilder({
     };
   }, [state.releaseId, processingKey]);
 
+  // Review must not trust the local cache — fetch what LabelGrid actually
+  // has whenever the user lands on this step. Loading state is derived
+  // (both results null) rather than tracked separately, so nothing is set
+  // synchronously at the top of the effect.
+  useEffect(() => {
+    if (state.step !== STEP_REVIEW || !state.releaseId) return;
+    let cancelled = false;
+    const releaseId = state.releaseId;
+    fetch(`/api/releases/${releaseId}/labelgrid-snapshot`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setLiveSnapshotError(data.error ?? "Could not verify LabelGrid.");
+          setLiveSnapshot(null);
+          return;
+        }
+        setLiveSnapshot(data.snapshot);
+        setLiveSnapshotError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveSnapshot(null);
+          setLiveSnapshotError("Network error while checking LabelGrid.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.step, state.releaseId]);
+
+  /**
+   * The wizard hits the network at exactly two checkpoints:
+   *  - leaving Distribution: first (or updated) LabelGrid Create/Update
+   *    Release, combining Steps 1+2. Blocks on labelgridOk.
+   *  - leaving Credits: LabelGrid Create/Update Track + audio + credits for
+   *    every track, combining Steps 3+4. Blocks on labelgridOk.
+   * Every other transition (Release→Distribution, Tracks→Credits, and all
+   * backward navigation) is a pure client-side step change.
+   */
   async function ensureDraftThenContinue() {
     if (continuing) return;
     setError("");
@@ -1221,21 +1291,40 @@ export function ReleaseBuilder({
       return;
     }
 
+    const leavingDistribution = state.step === STEP_DISTRIBUTION;
+    const leavingCredits = state.step === STEP_CREDITS;
+
     setContinuing(true);
     try {
-      if (state.step === STEP_RELEASE && !state.releaseId) {
-        const id = await createDraft(stateRef.current);
-        if (!id) return;
-      } else if (state.releaseId) {
-        // Deliberate LabelGrid sync checkpoints: full release + distribution
-        // config once Distribution is complete, full track (incl. credits)
-        // once Credits is complete — both create-or-update, never duplicate
-        // (ensureLabelGridReleaseMetadata / ensureLabelGridTrack key off the
-        // stored labelgridId either way).
-        const syncToLabelGrid =
-          state.step === STEP_DISTRIBUTION || state.step === STEP_CREDITS;
-        await saveDraft(stateRef.current, { syncToLabelGrid });
+      if (leavingDistribution) {
+        const result = state.releaseId
+          ? await saveDraft(stateRef.current, {
+              syncToLabelGrid: true,
+              forceArtwork: true,
+            })
+          : await createDraft(stateRef.current);
+        if (!result.labelgridOk) {
+          setError(
+            result.error ??
+              "Could not create the release on LabelGrid. Please try again."
+          );
+          return;
+        }
+      } else if (leavingCredits) {
+        const result = await saveDraft(stateRef.current, {
+          syncToLabelGrid: true,
+          forceArtwork: true,
+        });
+        if (!result.labelgridOk) {
+          setError(
+            result.error ??
+              "Could not sync your tracks to LabelGrid. Please try again."
+          );
+          return;
+        }
       }
+      // Release, Tracks, and Credits steps otherwise change state locally
+      // only — nothing is sent to the server until the next checkpoint.
 
       setState((prev) => {
         const nextStep = Math.min(prev.step + 1, WIZARD_STEPS.length - 1);
@@ -1249,7 +1338,7 @@ export function ReleaseBuilder({
         }
         return { ...prev, step: nextStep };
       });
-      if (state.step === STEP_DISTRIBUTION) {
+      if (leavingDistribution) {
         setEditingTrackId((prev) => prev ?? state.tracks[0]?.clientId ?? null);
       }
     } finally {
@@ -1259,12 +1348,10 @@ export function ReleaseBuilder({
 
   async function saveAndExit() {
     setError("");
-    const ok = state.releaseId
-      ? await saveDraft(stateRef.current)
-      : Boolean(await createDraft(stateRef.current));
-    if (!ok && !stateRef.current.releaseId) return;
-    if (state.releaseId || stateRef.current.releaseId) {
-      await saveDraft(stateRef.current);
+    // Nothing has been pushed anywhere yet if Distribution was never
+    // completed — there's no local row to save into.
+    if (state.releaseId) {
+      await saveDraft(stateRef.current, { syncToLabelGrid: false });
     }
     router.push("/dashboard/releases");
   }
@@ -1295,8 +1382,14 @@ export function ReleaseBuilder({
 
     setSubmitting(true);
     try {
-      const saved = await saveDraft(stateRef.current, { forceArtwork: true });
-      if (!saved) {
+      // Final defensive sync — ensures LabelGrid reflects the latest state
+      // even if the user only advanced through checkpoints without editing.
+      const saved = await saveDraft(stateRef.current, {
+        forceArtwork: true,
+        syncToLabelGrid: true,
+      });
+      if (!saved.labelgridOk) {
+        setError(saved.error ?? "Could not sync to LabelGrid before submitting.");
         setSubmitting(false);
         return;
       }
@@ -2348,6 +2441,37 @@ export function ReleaseBuilder({
 
             {state.step === STEP_REVIEW ? (
               <div className="space-y-5">
+                <div
+                  className={cn(
+                    "flex items-center gap-2 border px-3 py-2 text-xs font-medium",
+                    liveSnapshot
+                      ? "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+                      : liveSnapshotError
+                        ? "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400"
+                        : "border-border bg-muted text-muted-foreground"
+                  )}
+                >
+                  {!liveSnapshot && !liveSnapshotError ? (
+                    <>
+                      <span className="size-1.5 animate-pulse rounded-full bg-current" />
+                      Checking LabelGrid…
+                    </>
+                  ) : liveSnapshot ? (
+                    <>
+                      <Check size={14} weight="bold" aria-hidden />
+                      Confirmed on LabelGrid: {liveSnapshot.title ?? "Untitled"}
+                      {liveSnapshot.artist ? ` · ${liveSnapshot.artist}` : ""}
+                      {` · ${liveSnapshot.tracks.length} track${liveSnapshot.tracks.length === 1 ? "" : "s"}`}
+                    </>
+                  ) : (
+                    <>
+                      <WarningCircle size={14} weight="fill" aria-hidden />
+                      {liveSnapshotError ??
+                        "Could not verify this release on LabelGrid."}
+                    </>
+                  )}
+                </div>
+
                 <Panel>
                   <div className="flex items-start gap-4">
                     <div className="size-24 shrink-0 overflow-hidden border border-border bg-muted">
