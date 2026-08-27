@@ -53,8 +53,11 @@ export function wizardStateFromRelease(
             audioFile: null,
             audioUrl: t.audioUrl,
             audioDurationSec: null,
+            audioProcessing: tMeta.audioProcessing ?? false,
+            audioProcessingError: tMeta.audioProcessingError ?? null,
             licenseFile: null,
-            licenseType: null,
+            licenseType: tMeta.licenseType ?? null,
+            licenseUrl: tMeta.licenseUrl ?? null,
           });
         })
       : [newTrack()];

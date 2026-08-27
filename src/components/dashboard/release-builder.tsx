@@ -35,7 +35,9 @@ import {
   COMPOSITION_TYPES,
   CONTRIBUTOR_ROLE_KEYS,
   LOCALES,
+  parseJsonObject,
   PRIMARY_GENRES,
+  type TrackMetadata,
 } from "@/lib/releases/constants";
 import {
   WIZARD_STEPS,
@@ -137,6 +139,24 @@ function initialState(
   };
 }
 
+/** Inline audio processing status — mirrors LabelGrid's upload_attempt lifecycle. */
+function AudioStatusPill({ status }: { status: "processing" | "failed" }) {
+  if (status === "processing") {
+    return (
+      <span className="inline-flex items-center gap-1.5 border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+        <span className="size-1.5 animate-pulse rounded-full bg-amber-500" aria-hidden />
+        Processing…
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+      <WarningCircle size={12} weight="fill" aria-hidden />
+      Upload failed
+    </span>
+  );
+}
+
 function MediaDropzone({
   id,
   label,
@@ -147,6 +167,7 @@ function MediaDropzone({
   previewUrl,
   helper,
   audioUrl,
+  audioStatus,
 }: {
   id: string;
   label: string;
@@ -157,6 +178,8 @@ function MediaDropzone({
   previewUrl?: string | null;
   helper?: string;
   audioUrl?: string | null;
+  /** LabelGrid async processing state for the currently-stored audio file. */
+  audioStatus?: "processing" | "failed" | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -259,6 +282,10 @@ function MediaDropzone({
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatBytes(file.size)}
                     </p>
+                  ) : audioStatus ? (
+                    <div className="mt-1.5">
+                      <AudioStatusPill status={audioStatus} />
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -501,8 +528,85 @@ function TrackAudioDropzone({
       file={track.audioFile}
       audioUrl={track.audioUrl}
       previewUrl={localPreview}
+      audioStatus={
+        track.audioProcessing
+          ? "processing"
+          : track.audioProcessingError
+            ? "failed"
+            : null
+      }
       onFile={onFile}
     />
+  );
+}
+
+/**
+ * Progressive-disclosure license upload — shown only when the track is a
+ * cover or contains commercial samples (LabelGrid POST /tracks/{id}/licenses,
+ * type: cover|sample). File goes to server storage now and syncs to
+ * LabelGrid on the next autosave / approve.
+ */
+function TrackLicenseUpload({
+  track,
+  onFile,
+}: {
+  track: WizardTrack;
+  onFile: (file: File | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const label =
+    track.licenseType === "cover"
+      ? "Cover license"
+      : track.licenseType === "sample"
+        ? "Sample clearance"
+        : "License document";
+  const hasFile = Boolean(track.licenseFile || track.licenseUrl);
+
+  return (
+    <div className="border border-border bg-background px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {track.licenseFile
+              ? track.licenseFile.name
+              : track.licenseUrl
+                ? "Uploaded — will sync to your distributor."
+                : `Required — ${track.licenseType === "cover" ? "proof you cleared this cover" : "proof the sample is cleared"}.`}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 px-3"
+            onClick={() => inputRef.current?.click()}
+          >
+            {hasFile ? "Replace" : "Upload"}
+          </Button>
+          {track.licenseFile ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-9 px-2 text-destructive"
+              onClick={() => onFile(null)}
+            >
+              <Trash size={16} weight="regular" aria-hidden />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,image/*"
+        className="sr-only"
+        onChange={(e) => {
+          onFile(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+    </div>
   );
 }
 
@@ -537,6 +641,9 @@ function validateStep(state: WizardState, step: number): string | null {
       }
       if (!t.audioFile && !t.audioUrl) {
         return `Please upload audio for “${t.title.trim() || `track ${i + 1}`}”.`;
+      }
+      if (t.audioProcessingError) {
+        return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}” — please re-upload it.`;
       }
     }
     return null;
@@ -596,6 +703,7 @@ function buildPayload(state: WizardState) {
     featuredArtistNames: t.featuredArtistNames,
     hasMechanicalLicense: t.hasMechanicalLicense,
     lyrics: t.lyrics,
+    licenseType: t.licenseType,
     contributors: validContributors,
   }));
 
@@ -794,6 +902,7 @@ export function ReleaseBuilder({
       if (current.artworkFile) fd.set("artwork", current.artworkFile);
       for (const t of current.tracks) {
         if (t.audioFile) fd.set(`audio_${t.clientId}`, t.audioFile);
+        if (t.licenseFile) fd.set(`license_${t.clientId}`, t.licenseFile);
       }
       const res = await fetch(`/api/releases/${id}/draft`, {
         method: "PATCH",
@@ -813,7 +922,12 @@ export function ReleaseBuilder({
           Array.isArray(release.tracks) && release.tracks.length
             ? release.tracks.map(
                 (
-                  rt: { id: string; title: string; audioUrl: string | null },
+                  rt: {
+                    id: string;
+                    title: string;
+                    audioUrl: string | null;
+                    metadataJson?: string;
+                  },
                   i: number
                 ) => {
                   const existing =
@@ -822,18 +936,26 @@ export function ReleaseBuilder({
                       (t) => t.title === rt.title
                     ) ??
                     newTrack();
+                  const tMeta = parseJsonObject<TrackMetadata>(
+                    rt.metadataJson
+                  );
                   return {
                     ...existing,
                     id: rt.id,
                     title: existing.title || rt.title,
                     audioUrl: rt.audioUrl ?? existing.audioUrl,
                     audioFile: null,
+                    audioProcessing: tMeta.audioProcessing ?? false,
+                    audioProcessingError: tMeta.audioProcessingError ?? null,
+                    licenseFile: null,
+                    licenseUrl: tMeta.licenseUrl ?? existing.licenseUrl,
                   };
                 }
               )
             : prev.tracks.map((t) => ({
                 ...t,
                 audioFile: t.audioFile ? null : t.audioFile,
+                licenseFile: t.licenseFile ? null : t.licenseFile,
               }));
 
         return {
@@ -894,6 +1016,56 @@ export function ReleaseBuilder({
     state.isRemix,
   ]);
 
+  // Poll LabelGrid audio-processing status for any track still "Processing…"
+  // (PUT stereo file returned 202 — GET file-upload-attempts/{id} resolves it).
+  const processingTrackIds = state.tracks
+    .filter((t) => t.audioProcessing && t.id)
+    .map((t) => t.id!);
+  const processingKey = processingTrackIds.join(",");
+
+  useEffect(() => {
+    if (!state.releaseId || !processingKey) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      for (const trackId of processingKey.split(",")) {
+        try {
+          const res = await fetch(
+            `/api/releases/${state.releaseId}/tracks/${trackId}/audio-status`,
+            { method: "POST" }
+          );
+          const data = await res.json();
+          if (cancelled || !res.ok) continue;
+          if (data.status === "processing") continue;
+          setState((prev) => ({
+            ...prev,
+            tracks: prev.tracks.map((t) =>
+              t.id === trackId
+                ? {
+                    ...t,
+                    audioProcessing: false,
+                    audioProcessingError:
+                      data.status === "failed"
+                        ? data.error || "Audio processing failed"
+                        : null,
+                  }
+                : t
+            ),
+          }));
+        } catch {
+          // Network hiccup — next poll tick retries.
+        }
+      }
+    };
+
+    const interval = window.setInterval(poll, 5000);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [state.releaseId, processingKey]);
+
   async function ensureDraftThenContinue() {
     setError("");
     const msg = validateStep(state, state.step);
@@ -952,6 +1124,13 @@ export function ReleaseBuilder({
         patch({ step: s });
         return;
       }
+    }
+    if (state.tracks.some((t) => t.audioProcessing)) {
+      setError(
+        "Your audio is still processing on our distributor. This usually takes a moment — please try again shortly."
+      );
+      patch({ step: 1 });
+      return;
     }
 
     setSubmitting(true);
@@ -1376,12 +1555,22 @@ export function ReleaseBuilder({
                           <p className="truncate text-sm font-semibold">
                             {t.title.trim() || "Untitled track"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDuration(t.audioDurationSec)}
-                            {t.audioFile || t.audioUrl
-                              ? " · Audio ready"
-                              : " · No audio"}
-                          </p>
+                          {t.audioProcessing || t.audioProcessingError ? (
+                            <div className="mt-1">
+                              <AudioStatusPill
+                                status={
+                                  t.audioProcessingError ? "failed" : "processing"
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {formatDuration(t.audioDurationSec)}
+                              {t.audioFile || t.audioUrl
+                                ? " · Audio ready"
+                                : " · No audio"}
+                            </p>
+                          )}
                         </div>
                         <Button
                           type="button"
@@ -1597,16 +1786,12 @@ export function ReleaseBuilder({
 
                           {t.compositionType === "cover_song" ||
                           t.commercialSamples !== "no" ? (
-                            <div className="border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                              <p className="font-medium text-foreground">
-                                License document
-                              </p>
-                              <p className="mt-1">
-                                You&apos;ll be able to upload cover/sample
-                                clearance docs from the release detail page
-                                after submit. Keep your license file ready.
-                              </p>
-                            </div>
+                            <TrackLicenseUpload
+                              track={t}
+                              onFile={(file) =>
+                                updateTrack(t.clientId, { licenseFile: file })
+                              }
+                            />
                           ) : null}
                         </div>
                       ) : null}

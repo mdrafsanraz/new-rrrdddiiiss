@@ -3,11 +3,11 @@
   "info": {
     "title": "LabelGrid API",
     "version": "1.0.0",
-    "description": "# **LabelGrid API Documentation**\n\nLabelGrid API provides comprehensive endpoints for content providers to manage their audio catalogs, releases, distribution, and analytics. This RESTful API supports catalog management, track and release operations, distribution workflows, and integrations with external music services.\n\n\n## Prerequisites\n\nThe following prerequisites are required to use the LabelGrid API:\n\n- You must have an active LabelGrid account\n- API features enabled on your account\n- IP allowlisting (if using sandbox environment)\n\n## Authorization\nAll endpoints require authentication via API tokens. Include your token in the `Authorization` header as a Bearer token. You may generate and manage your API tokens in your [LabelGrid account settings](https://app.labelgrid.com/user/profile/api-tokens) or [Sandbox account settings](https://frontend-sandbox.stg.labelgrid.com/user/profile/api-tokens).\n\n> NOTICE\n> For experimenting and testing purposes, we highly recommend using the sandbox environment. See the \"Sandbox Access\" section below for details.\n\n## Sandbox Access\n\n### Sandbox IP Allowlisting\n\nContact support to allowlist any IP addresses you will be using to access the sandbox resources.\n\n> NOTE\n> Allowlisting is only needed for sandbox access.\n\n### Sandbox API\n\nYou can use the following sandbox version of our API to create and manage resources without affecting your production data.\n\n- [API Sandbox](https://api-sandbox.stg.labelgrid.com/docs/api)\n\n### Sandbox Frontend\n\nYou can use the following sandbox version of our frontend to check your catalogue after creating resources via the API.\n\n\n- [Frontend Sandbox](https://frontend-sandbox.stg.labelgrid.com/login)\n\n\n## Keeping Your Data Secure\n\n> IMPORTANT\n> LabelGrid takes data security seriously. Ensure you follow best practices for API key management.\n\n- Never expose your API keys in public repositories or client-side code.\n- Only use your key within server-side code to keep your keys secure.\n- Do not share your API keys with unauthorized parties.\n- Never hard-code API keys in your applications.\n- Use environment variables or secure vaults to store sensitive information.\n- Regularly rotate your API keys and monitor their usage.\n\n## Features Overview\n- **Catalog Management**: Create, update, and delete artists, labels, publishers, and writers.\n- **Release Operations**: Manage releases, including track listings, metadata, and cover art.\n- **Distribution Workflows**: Submit releases for distribution to various music services and platforms.\n\nFor more information, visit our [LabelGrid Help Center](https://labelgrid.com/contact/) or contact our support team.\n\n## API Changelog\n\nTrack breaking changes, deprecations, additions, and fixes to the Public API:\n\n- HTML: [/changelog](https://api.labelgrid.com/changelog)\n- Atom feed: [/changelog.atom](https://api.labelgrid.com/changelog.atom)\n\nAuthenticated public-API responses also advertise the feed via an RFC 8288 `Link: </changelog.atom>; rel=\"changelog\"` header."
+    "description": "# **LabelGrid API Documentation**\n\nLabelGrid API provides comprehensive endpoints for content providers to manage their audio catalogs, releases, distribution, and analytics. This RESTful API supports catalog management, track and release operations, distribution workflows, and integrations with external music services.\n\n\n## Prerequisites\n\nThe following prerequisites are required to use the LabelGrid API:\n\n- You must have an active LabelGrid account\n- API features enabled on your account\n- IP allowlisting (if using sandbox environment)\n\n## Authorization\nAll endpoints require authentication via API tokens. Include your token in the `Authorization` header as a Bearer token. You may generate and manage your API tokens in your [LabelGrid account settings](https://app.labelgrid.com/user/profile/api-tokens) or [Sandbox account settings](https://frontend-sandbox.stg.labelgrid.com/user/profile/api-tokens).\n\n> NOTICE\n> For experimenting and testing purposes, we highly recommend using the sandbox environment. See the \"Sandbox Access\" section below for details.\n\n## Sandbox Access\n\n### Sandbox IP Allowlisting\n\nContact support to allowlist any IP addresses you will be using to access the sandbox resources.\n\n> NOTE\n> Allowlisting is only needed for sandbox access.\n\n### Sandbox API\n\nYou can use the following sandbox version of our API to create and manage resources without affecting your production data.\n\n- [API Sandbox](https://api-sandbox.stg.labelgrid.com/docs/api)\n\n### Sandbox Frontend\n\nYou can use the following sandbox version of our frontend to check your catalogue after creating resources via the API.\n\n\n- [Frontend Sandbox](https://frontend-sandbox.stg.labelgrid.com/login)\n\n\n## Keeping Your Data Secure\n\n> IMPORTANT\n> LabelGrid takes data security seriously. Ensure you follow best practices for API key management.\n\n- Never expose your API keys in public repositories or client-side code.\n- Only use your key within server-side code to keep your keys secure.\n- Do not share your API keys with unauthorized parties.\n- Never hard-code API keys in your applications.\n- Use environment variables or secure vaults to store sensitive information.\n- Regularly rotate your API keys and monitor their usage.\n\n## Features Overview\n- **Catalog Management**: Create, update, and delete artists, labels, publishers, and writers.\n- **Release Operations**: Manage releases, including track listings, metadata, and cover art.\n- **Distribution Workflows**: Submit releases for distribution to various music services and platforms.\n\nFor more information, visit our [LabelGrid Help Center](https://labelgrid.com/contact/) or contact our support team.\n\n## API Changelog\n\nTrack breaking changes, deprecations, additions, and fixes to the Public API:\n\n- HTML: [/changelog](https://api-sandbox.stg.labelgrid.com/changelog)\n- Atom feed: [/changelog.atom](https://api-sandbox.stg.labelgrid.com/changelog.atom)\n\nAuthenticated public-API responses also advertise the feed via an RFC 8288 `Link: </changelog.atom>; rel=\"changelog\"` header."
   },
   "servers": [
     {
-      "url": "https://api.labelgrid.com/api/public"
+      "url": "https://api-sandbox.stg.labelgrid.com/api/public"
     }
   ],
   "tags": [
@@ -809,7 +809,7 @@
       },
       "delete": {
         "operationId": "public-writers.destroy",
-        "description": "Permanently delete a writer from your catalog. This action cannot be undone.",
+        "description": "Permanently delete a writer from your catalog. This action cannot be undone.\n\nA writer that is credited on a track or an artist cannot be deleted on its own —\nthat call returns `422` with `error_code: WRITER_IN_USE`. Pass `replace_with` to\nmove those credits to another writer in your catalog and delete this one in the\nsame call.\n\nA `422` carrying `error_code: REPLACEMENT_UNAVAILABLE` means the writer named by\n`replace_with` was no longer available to take the credits. Nothing was deleted and\nno credit was moved — name another writer and try again.",
         "summary": "Delete writer",
         "tags": [
           "Writers"
@@ -822,6 +822,17 @@
             "description": "The writer ID",
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "name": "replace_with",
+            "in": "query",
+            "description": "ID of the writer that takes over every credit held by the writer being deleted. Must be another writer in your catalog that has not been deleted. Omit it to delete a writer that holds no credits.",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           }
         ],
@@ -839,28 +850,7 @@
             "$ref": "#/components/responses/ModelNotFoundException"
           },
           "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "const": "Cannot delete writer — it is referenced by one or more tracks or artists."
-                    },
-                    "error_code": {
-                      "type": "string",
-                      "const": "WRITER_IN_USE"
-                    }
-                  },
-                  "required": [
-                    "message",
-                    "error_code"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/ValidationException"
           }
         }
       }
@@ -1636,7 +1626,7 @@
       },
       "delete": {
         "operationId": "public-publishers.destroy",
-        "description": "Permanently delete a publisher from your catalog. This action cannot be undone.",
+        "description": "Permanently delete a publisher from your catalog. This action cannot be undone.\n\nA publisher that is credited on a track or set as a label default cannot be deleted\non its own — that call returns `422` with `error_code: PUBLISHER_IN_USE`. Pass\n`replace_with` to move those credits to another publisher in your catalog and\ndelete this one in the same call.\n\nA `422` carrying `error_code: REPLACEMENT_UNAVAILABLE` means the publisher named by\n`replace_with` was no longer available to take the credits. Nothing was deleted and\nno credit was moved — name another publisher and try again.",
         "summary": "Delete publisher",
         "tags": [
           "Publishers"
@@ -1649,6 +1639,17 @@
             "description": "The publisher ID",
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "name": "replace_with",
+            "in": "query",
+            "description": "ID of the publisher that takes over every credit held by the publisher being deleted. Must be another publisher in your catalog. Omit it to delete a publisher that holds no credits.",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           }
         ],
@@ -1666,28 +1667,7 @@
             "$ref": "#/components/responses/ModelNotFoundException"
           },
           "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "const": "Cannot delete publisher — it is referenced by one or more tracks or labels."
-                    },
-                    "error_code": {
-                      "type": "string",
-                      "const": "PUBLISHER_IN_USE"
-                    }
-                  },
-                  "required": [
-                    "message",
-                    "error_code"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/ValidationException"
           }
         }
       }
@@ -1752,7 +1732,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Convert to DTOs\n\n\n\nThe paginated collection of `ReleaseData`",
+            "description": "The paginated collection of `ReleaseData`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1913,13 +1893,14 @@
                       "description": "Auto-generated public unique identifier"
                     },
                     "artists": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "items": {
-                        "$ref": "#/components/schemas/PartialReleaseArtistData"
-                      }
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "titles": {
                       "type": "array",
@@ -1994,14 +1975,21 @@
                       "description": "Pre-order release date"
                     },
                     "release_dates": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
                       "description": "Advanced release dates - only use this if you wish to override the original release date",
-                      "items": {
-                        "$ref": "#/components/schemas/PublicReleaseDate"
-                      }
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PublicReleaseDate"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "artwork_ai_usage": {
                       "anyOf": [
@@ -2144,11 +2132,18 @@
                       ]
                     },
                     "dsp_configs": {
-                      "type": "array",
                       "description": "Distro Queue Configurations",
-                      "items": {
-                        "$ref": "#/components/schemas/ReleaseDspConfigsData"
-                      }
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ReleaseDspConfigsData"
+                          }
+                        }
+                      ]
                     },
                     "enable_automatic_distro": {
                       "type": "boolean",
@@ -2556,7 +2551,7 @@
       },
       "patch": {
         "operationId": "public-releases.update",
-        "description": "Update an existing release. Note: If a release has been distributed or is under review, certain fields may be locked from editing based on business rules.",
+        "description": "Update an existing release. Note: If a release has been distributed or is under review, certain fields may be locked from editing based on business rules.\n\nWhile the account is under an agreed minimum term, a `dsp_configs` change that switches OFF a store the release is already live on returns `409` with error code `CONTRACT_HOLD_CONFIRM_REQUIRED` until the same call is repeated with `confirm_contract_hold: true`. Nothing is stored on the `409`, the change is never refused outright, and every other update is unaffected.",
         "summary": "Update release",
         "tags": [
           "Releases"
@@ -2584,547 +2579,11 @@
         },
         "responses": {
           "200": {
-            "description": "`ReleaseData`",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "integer"
-                    },
-                    "public_id": {
-                      "type": "string",
-                      "description": "Auto-generated public unique identifier"
-                    },
-                    "artists": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "items": {
-                        "$ref": "#/components/schemas/PartialReleaseArtistData"
-                      }
-                    },
-                    "titles": {
-                      "type": "array",
-                      "description": "Track title in various languages",
-                      "items": {
-                        "$ref": "#/components/schemas/ReleaseTitleLocalizationData"
-                      }
-                    },
-                    "mix_versions": {
-                      "type": "array",
-                      "description": "Track title in various languages",
-                      "items": {
-                        "$ref": "#/components/schemas/ReleaseTitleLocalizationData"
-                      }
-                    },
-                    "descriptions": {
-                      "type": "array",
-                      "description": "Track title in various languages",
-                      "items": {
-                        "$ref": "#/components/schemas/ReleaseTitleLocalizationData"
-                      }
-                    },
-                    "front_cover": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/FileData"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "content_type": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/ContentTypeEnum"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "label": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/MinimalLabelData"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "cat": {
-                      "type": "string",
-                      "description": "Your preferred unique catalog number for this release",
-                      "maxLength": 20
-                    },
-                    "release_date": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "date-time",
-                      "description": "Original release date"
-                    },
-                    "release_pre_order_date": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "date-time",
-                      "description": "Pre-order release date"
-                    },
-                    "release_dates": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "description": "Advanced release dates - only use this if you wish to override the original release date",
-                      "items": {
-                        "$ref": "#/components/schemas/PublicReleaseDate"
-                      }
-                    },
-                    "artwork_ai_usage": {
-                      "anyOf": [
-                        {
-                          "description": "Was the artwork created with AI assistance?",
-                          "$ref": "#/components/schemas/AiUsageEnum"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "preferred_localization": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "BCP-47 locale code, e.g. en, es_419, fr, ja_Jpan, ko",
-                      "default": "en",
-                      "maxLength": 10
-                    },
-                    "primary_genre": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/GenreData"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "secondary_genre": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/GenreData"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "tertiary_genre": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/GenreData"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "barcode_number": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "maxLength": 13
-                    },
-                    "cline": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Use cline_year + cline_name. Combined cline is emitted during a 3-month grace period, then removed.",
-                      "deprecated": true,
-                      "examples": [
-                        "2024 Label Name"
-                      ],
-                      "maxLength": 255
-                    },
-                    "pline": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Use pline_year + pline_name. Combined pline is emitted during a 3-month grace period, then removed.",
-                      "deprecated": true,
-                      "examples": [
-                        "2024 Label Name"
-                      ],
-                      "maxLength": 255
-                    },
-                    "cline_year": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ],
-                      "examples": [
-                        2024
-                      ],
-                      "minimum": 1900,
-                      "maximum": 2027
-                    },
-                    "cline_name": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "examples": [
-                        "Label Name"
-                      ],
-                      "maxLength": 255
-                    },
-                    "pline_year": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ],
-                      "examples": [
-                        2024
-                      ],
-                      "minimum": 1900,
-                      "maximum": 2027
-                    },
-                    "pline_name": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "examples": [
-                        "Label Name"
-                      ],
-                      "maxLength": 255
-                    },
-                    "courtesy_line": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "examples": [
-                        "Courtesy of ABC Records"
-                      ]
-                    },
-                    "explicit": {
-                      "type": "string",
-                      "enum": [
-                        "off",
-                        "on",
-                        "edited"
-                      ]
-                    },
-                    "dsp_configs": {
-                      "type": "array",
-                      "description": "Distro Queue Configurations",
-                      "items": {
-                        "$ref": "#/components/schemas/ReleaseDspConfigsData"
-                      }
-                    },
-                    "enable_automatic_distro": {
-                      "type": "boolean",
-                      "description": "Automatically distribute to new DSP's as they are added"
-                    },
-                    "enable_exact_release_time": {
-                      "type": "boolean",
-                      "description": "Whether the exact release time (GMT) is delivered instead of the\nrelease date being floored to midnight (T00:00:00Z)"
-                    },
-                    "transfer_from_distributor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "maxLength": 255
-                    },
-                    "spotify_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "applemusic_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "itunes_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "youtubemusic_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "youtube_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "deezer_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "tidal_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "amazon_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "beatport_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "juno_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "pandora_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "yandex_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "iheartradio_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "napster_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "netease_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "tencentqq_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "tencentku_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "akazoo_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "anghami_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "awa_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "boomplay_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "jiosaavn_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "jaxsta_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "bandcamp_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "soundcloud_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "short_url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "uri",
-                      "maxLength": 255
-                    },
-                    "label_id": {
-                      "type": "integer"
-                    },
-                    "content_type_id": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    },
-                    "title": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Default title based on preferred localization. This field is automatically inferred from the titles array"
-                    },
-                    "mix_version": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Default mix version based on preferred localization. This field is automatically inferred from the mix_versions array"
-                    },
-                    "description_long": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Default description based on preferred localization. This field is automatically inferred from the descriptions array"
-                    },
-                    "default_display_artist": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Auto-generated display artist for this release. This field is automatically inferred from the artists array"
-                    },
-                    "review_status": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/ReviewStatus"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delivery_status": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/DeliveryStatus"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "locked": {
-                      "type": "boolean"
-                    },
-                    "locked_reason": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  }
+                  "type": "object"
                 }
               }
             }
@@ -3196,7 +2655,7 @@
     "/releases/{release}/photo": {
       "post": {
         "operationId": "public-releases.upload-photo",
-        "description": "Upload or replace the release's cover art image.",
+        "description": "Upload or replace the release's cover art image.\n\nReturns `423` when the release does not currently accept a replacement:\n`DELIVERIES_IN_FLIGHT` while its deliveries are still being processed, and\n`RELEASE_LOCKED` while it is being distributed, while it is in review, or\nwhile a policy restriction applies to it.",
         "summary": "Upload cover art",
         "tags": [
           "Releases"
@@ -3390,6 +2849,9 @@
           "401": {
             "$ref": "#/components/responses/AuthenticationException"
           },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
           "404": {
             "$ref": "#/components/responses/ModelNotFoundException"
           }
@@ -3456,7 +2918,7 @@
     "/releases/{release}/takedown-all": {
       "post": {
         "operationId": "public-releases.takedown-all",
-        "description": "Issues a managed takedown of the release from all eligible outlets. A Delete/Purge message is queued to each store the release was delivered to, and the release's distribution intent is recorded as a takedown.\n\n- Only the release owner may take down the release.\n- A release under a blocking/infringement lock cannot be taken down.\n- Owner semantics: the release is not rejected, so you may redistribute later without re-approval.",
+        "description": "Issues a managed takedown of the release from all eligible outlets. A Delete/Purge message is queued to each store the release was delivered to, and the release's distribution intent is recorded as a takedown.\n\n- Only the release owner may take down the release.\n- A release under a blocking/infringement lock cannot be taken down.\n- Owner semantics: the release is not rejected, so you may redistribute later without re-approval.\n- While the account is under an agreed minimum term, the call returns `409` with error code `CONTRACT_HOLD_CONFIRM_REQUIRED` until it is repeated with `confirm_contract_hold: true`. The takedown is never refused outright; the confirmation is recorded.",
         "summary": "Take down release",
         "tags": [
           "Releases"
@@ -3733,6 +3195,180 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          }
+        }
+      }
+    },
+    "/releases/{releaseId}/delivery-status": {
+      "get": {
+        "operationId": "public-releases.delivery-status",
+        "description": "Retrieve the release's overall delivery state and its current state at\neach outlet. The overall state is one of `not_submitted`, `in_progress`,\n`live`, `removing`, `removed`, or `action_needed`.\n\nOutlet entries use the states `queued`, `preparing`, `scheduled`,\n`delivered`, `action_needed`, `removing`, or `removed`. The `operation`\nfield identifies whether the latest work is a `delivery`, `redelivery`,\nor `takedown`.\n\n`customer_state` provides a presentation state that does not imply action\nunless `attention_owner` is `customer` and both action fields are present.\nRecovery-backed states report whether that recovery is queued or acknowledged.\n\nA release outside your account returns `404 RELEASE_NOT_ACCESSIBLE`, the\nsame response as an unknown release. A status that cannot be safely\ndetermined returns `500 PROCESSING_ERROR`.",
+        "summary": "Get a release's delivery status",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "release_id": {
+                      "type": "integer"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "not_submitted",
+                        "in_progress",
+                        "live",
+                        "removing",
+                        "removed",
+                        "action_needed"
+                      ]
+                    },
+                    "currently_live": {
+                      "type": "boolean"
+                    },
+                    "ever_submitted": {
+                      "type": "boolean"
+                    },
+                    "ever_delivered": {
+                      "type": "boolean"
+                    },
+                    "outlets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "outlet": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "preparing",
+                              "scheduled",
+                              "delivered",
+                              "action_needed",
+                              "removing",
+                              "removed"
+                            ]
+                          },
+                          "operation": {
+                            "type": "string",
+                            "enum": [
+                              "delivery",
+                              "redelivery",
+                              "takedown"
+                            ]
+                          },
+                          "customer_state": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "preparing",
+                              "scheduled",
+                              "delivered",
+                              "delivery_delayed",
+                              "not_sent",
+                              "removing",
+                              "removal_delayed",
+                              "not_removed",
+                              "removed",
+                              "action_needed"
+                            ]
+                          },
+                          "attention_owner": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "labelgrid",
+                              "customer"
+                            ]
+                          },
+                          "recovery_state": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "queued",
+                              "acknowledged"
+                            ]
+                          },
+                          "customer_action_code": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "action_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "queue_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "updated_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "error_code": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "outlet",
+                          "state",
+                          "operation",
+                          "customer_state",
+                          "attention_owner",
+                          "recovery_state",
+                          "customer_action_code",
+                          "action_url",
+                          "queue_id",
+                          "updated_at",
+                          "error_code"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "release_id",
+                    "state",
+                    "currently_live",
+                    "ever_submitted",
+                    "ever_delivered",
+                    "outlets"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
           }
         }
       }
@@ -4430,6 +4066,26 @@
           "401": {
             "$ref": "#/components/responses/AuthenticationException"
           },
+          "403": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "description": "Error overview.",
+                      "example": "Uploads require an authenticated account."
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "$ref": "#/components/responses/ModelNotFoundException"
           },
@@ -4491,7 +4147,7 @@
       },
       "put": {
         "operationId": "public-track-files.store",
-        "description": "Upload a new file for a track. If a file of the same asset type already exists, it will be replaced. Files are processed asynchronously and made available for distribution upon successful processing.\n\n**For stereo/dolby (choose one):**\n1. Presigned upload: `{ \"s3_key\": \"uuid/song.wav\" }` - File is queued for async processing (202 Accepted)\n2. Remote URL: `{ \"source_url\": \"https://...\", \"checksum\": \"sha256\" }` - File is downloaded, then queued for transcoding (201 Created)\n\n**Supported audio formats:** WAV (16-, 24-, or 32-bit) or FLAC (16-bit only).\nHi-res FLAC sources (>16-bit) are rejected with 422 — upload WAV for hi-res delivery.\n\n**For lyrics (LRC only):**\n- Presigned upload: `{ \"s3_key\": \"uuid/lyrics.lrc\" }` - LRC file is queued for processing (202 Accepted). Only `.lrc` format via `s3_key` is supported.\n\n**Note:** File is queued for processing. Check status via GET endpoint.",
+        "description": "Upload a new file for a track. If a file of the same asset type already exists, it will be replaced. Files are processed asynchronously and made available for distribution upon successful processing.\n\n**For stereo/dolby (choose one):**\n1. Presigned upload: `{ \"s3_key\": \"uuid/song.wav\" }` - File is queued for async processing (202 Accepted)\n2. Remote URL: `{ \"source_url\": \"https://...\", \"checksum\": \"sha256\" }` - File is downloaded, then queued for transcoding (201 Created)\n\n**Supported audio formats:** WAV (16-, 24-, or 32-bit) or FLAC (16-bit only).\nHi-res FLAC sources (>16-bit) are rejected with 422 — upload WAV for hi-res delivery.\n\n**For lyrics (LRC only):**\n- Presigned upload: `{ \"s3_key\": \"uuid/lyrics.lrc\" }` - LRC file is queued for processing (202 Accepted). Only `.lrc` format via `s3_key` is supported.\n\n**Note:** Accepted stereo and Dolby uploads include an `upload_attempt`\nobject. Poll its `status_url` until it reaches a terminal status.",
         "summary": "Upload new file",
         "tags": [
           "Track Files"
@@ -4541,48 +4197,101 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string",
-                          "const": "File queued for processing. Check status via GET endpoint."
-                        },
-                        "queued": {
-                          "type": "boolean"
-                        },
-                        "track_id": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "queued",
-                        "track_id"
-                      ]
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
                     },
-                    {
+                    "queued": {
+                      "type": "boolean"
+                    },
+                    "track_id": {
+                      "type": "integer"
+                    },
+                    "upload_attempt": {
                       "type": "object",
                       "properties": {
-                        "message": {
-                          "type": "string",
-                          "const": "LRC file queued for processing. Check status via GET endpoint."
-                        },
-                        "queued": {
-                          "type": "boolean"
+                        "id": {
+                          "type": "string"
                         },
                         "track_id": {
                           "type": "integer"
+                        },
+                        "file_type": {
+                          "type": "string",
+                          "enum": [
+                            "stereo",
+                            "dolby"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "const": "queued"
+                        },
+                        "status_url": {
+                          "type": "string"
+                        },
+                        "poll_after_seconds": {
+                          "type": "integer"
+                        },
+                        "error": {
+                          "type": "null"
+                        },
+                        "created_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "started_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "completed_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "failed_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
-                        "message",
-                        "queued",
-                        "track_id"
+                        "id",
+                        "track_id",
+                        "file_type",
+                        "status",
+                        "status_url",
+                        "poll_after_seconds",
+                        "error",
+                        "created_at",
+                        "started_at",
+                        "completed_at",
+                        "failed_at"
                       ]
                     }
+                  },
+                  "required": [
+                    "message",
+                    "queued",
+                    "track_id"
                   ]
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {}
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4637,6 +4346,148 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          }
+        }
+      }
+    },
+    "/tracks/{track}/file-upload-attempts/{uploadAttempt}": {
+      "get": {
+        "operationId": "public-track-file-upload-attempts.show",
+        "description": "Retrieve the current state of an accepted stereo or Dolby upload. Poll\nwhile the status is `queued` or `processing`; stop at `completed`,\n`failed`, or `superseded`.",
+        "summary": "Get audio upload status",
+        "tags": [
+          "Track Files"
+        ],
+        "parameters": [
+          {
+            "name": "track",
+            "in": "path",
+            "required": true,
+            "description": "The track ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "uploadAttempt",
+            "in": "path",
+            "required": true,
+            "description": "The upload attempt ID returned when the file was accepted.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`AudioUploadAttemptResource`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "track_id": {
+                      "type": "integer"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "enum": [
+                        "stereo",
+                        "dolby"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "processing",
+                        "completed",
+                        "failed",
+                        "superseded"
+                      ]
+                    },
+                    "status_url": {
+                      "type": "string"
+                    },
+                    "poll_after_seconds": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "audio_processing_failed"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "can_retry": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "can_retry"
+                      ]
+                    },
+                    "created_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "started_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "completed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "failed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "track_id",
+                    "file_type",
+                    "status",
+                    "status_url",
+                    "poll_after_seconds",
+                    "error",
+                    "created_at",
+                    "started_at",
+                    "completed_at",
+                    "failed_at"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/ModelNotFoundException"
           }
         }
       }
@@ -5137,14 +4988,21 @@
                             }
                           },
                           "artists": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
                             "description": "Track artists and roles",
-                            "items": {
-                              "$ref": "#/components/schemas/TrackArtistData"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "object"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/TrackArtistData"
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "disc": {
                             "type": [
@@ -5667,14 +5525,21 @@
                             "description": "Instant Gratification Setting\nIf true, this track will be available as an instant grat track for pre-orders"
                           },
                           "publishers": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
                             "description": "Publisher Entity Splits",
-                            "items": {
-                              "$ref": "#/components/schemas/TrackPublisherUpdateData"
-                            }
+                            "anyOf": [
+                              {
+                                "type": "object"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/TrackPublisherUpdateData"
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "release_date": {
                             "type": [
@@ -6124,6 +5989,26 @@
           },
           "401": {
             "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "description": "Error overview.",
+                      "example": "Uploads require an authenticated account."
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ModelNotFoundException"
@@ -6997,6 +6882,7 @@
                           "Delivery Failed",
                           "Takedown Completed",
                           "Release Review Status Changed",
+                          "Track Review Status Changed",
                           "Release Preflight Report Ready",
                           "Release Distributed",
                           "Payment Statement Ready",
@@ -7014,6 +6900,7 @@
                           "Triggered when delivery to an outlet fails",
                           "Triggered when a takedown request completes",
                           "Triggered when a release review status changes",
+                          "Triggered when a track's review status changes",
                           "Triggered when the Preflight QC report for a held release is ready to fetch",
                           "Triggered when a release is distributed",
                           "Triggered when a payment statement is ready for viewing",
@@ -7041,6 +6928,10 @@
                                 "type": "string",
                                 "const": "integer"
                               },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
+                              },
                               "release_cat": {
                                 "type": "string",
                                 "const": "string|null"
@@ -7062,6 +6953,7 @@
                               "distro_queue_id",
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "outlet_id",
                               "outlet_name",
@@ -7082,6 +6974,10 @@
                               "label_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
                               },
                               "release_cat": {
                                 "type": "string",
@@ -7108,6 +7004,7 @@
                               "distro_queue_id",
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "outlet_id",
                               "outlet_name",
@@ -7129,6 +7026,10 @@
                               "label_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
                               },
                               "release_cat": {
                                 "type": "string",
@@ -7155,6 +7056,7 @@
                               "distro_queue_id",
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "outlet_id",
                               "outlet_name",
@@ -7172,6 +7074,10 @@
                               "label_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
                               },
                               "release_cat": {
                                 "type": "string",
@@ -7198,11 +7104,44 @@
                             "required": [
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "release_title",
                               "previous_status",
                               "new_status",
                               "review_issues"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "track_id": {
+                                "type": "string",
+                                "const": "integer"
+                              },
+                              "release_id": {
+                                "type": "string",
+                                "const": "integer"
+                              },
+                              "label_id": {
+                                "type": "string",
+                                "const": "integer"
+                              },
+                              "previous_status": {
+                                "type": "string",
+                                "const": "string|null"
+                              },
+                              "new_status": {
+                                "type": "string",
+                                "const": "string|null"
+                              }
+                            },
+                            "required": [
+                              "track_id",
+                              "release_id",
+                              "label_id",
+                              "previous_status",
+                              "new_status"
                             ]
                           },
                           {
@@ -7215,6 +7154,10 @@
                               "label_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
                               },
                               "release_cat": {
                                 "type": "string",
@@ -7243,6 +7186,7 @@
                             "required": [
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "release_title",
                               "generated_at",
@@ -7261,6 +7205,10 @@
                                 "type": "string",
                                 "const": "integer"
                               },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
+                              },
                               "release_cat": {
                                 "type": "string",
                                 "const": "string|null"
@@ -7277,6 +7225,7 @@
                             "required": [
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "release_title",
                               "delivery_status"
@@ -7301,6 +7250,10 @@
                                 "type": "string",
                                 "const": "number|null"
                               },
+                              "credit_amount": {
+                                "type": "string",
+                                "const": "number"
+                              },
                               "total_due_usd": {
                                 "type": "string",
                                 "const": "number"
@@ -7315,6 +7268,7 @@
                               "invoice_number",
                               "period",
                               "amount",
+                              "credit_amount",
                               "total_due_usd",
                               "currency"
                             ]
@@ -7330,9 +7284,18 @@
                                 "type": "string",
                                 "const": "integer"
                               },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
+                              },
                               "track_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "isrc": {
+                                "type": "string",
+                                "description": "The track's ISRC, null until one is assigned.",
+                                "const": "string|null"
                               },
                               "transcoder_queue_id": {
                                 "type": "string",
@@ -7350,14 +7313,16 @@
                               },
                               "files": {
                                 "type": "string",
-                                "description": "Per-file detail for the track: the asset type id and its current\nTrackFileStatus value.",
-                                "const": "array<{asset_type_id: integer|null, status: string|null}>"
+                                "description": "Per-file detail for the track: the file's own id, so an entry is\naddressable, plus its asset type and current TrackFileStatus value.",
+                                "const": "array<{track_file_id: integer, asset_type_id: integer|null, status: string|null}>"
                               }
                             },
                             "required": [
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "track_id",
+                              "isrc",
                               "transcoder_queue_id",
                               "status",
                               "status_message",
@@ -7378,6 +7343,10 @@
                               "label_id": {
                                 "type": "string",
                                 "const": "integer"
+                              },
+                              "barcode_number": {
+                                "type": "string",
+                                "const": "string|null"
                               },
                               "release_cat": {
                                 "type": "string",
@@ -7405,6 +7374,7 @@
                               "distro_queue_id",
                               "release_id",
                               "label_id",
+                              "barcode_number",
                               "release_cat",
                               "outlet_id",
                               "outlet_name",
@@ -8194,7 +8164,7 @@
     "/statements": {
       "get": {
         "operationId": "public-accounting-statements.index",
-        "description": "Retrieve a list of all available royalty statements for the authenticated user, ordered by period descending. Each statement includes a `periods_covered` array that indicates which actual sales periods are included in the payment, which may differ from the payment period when payments have been skipped or unclaimed in certain months. It is normal for multiple statements to cover overlapping periods if payments were delayed or reissued.\n\nNote: The `labelgrid_fee` field shows the fee rate that was in effect when this statement was generated. Actual fees applied to individual line items may differ from this reference value. Refer to the detailed CSV export or transactions ledger for precise fee calculations per line item.\n\n`labelgrid_fee` is also broken down into `platform_fee_usd` (the standard distribution fee, charged at `labelgrid_rate`) and `ugc_fee_usd` (the UGC / Content ID fee, charged at `labelgrid_ugc_rate`). The two parts add up to `labelgrid_fee`. Any of the three can be `null`, most often on statements generated before the breakdown was recorded, and they do not all move together: `platform_fee_usd` and `ugc_fee_usd` are always both present or both `null`, while `labelgrid_ugc_rate` moves independently of that pair and can be `null` on a statement carrying both amounts or set on a statement where both are `null`. Read each field on its own rather than inferring one from another, treat `null` as \"not broken down\" rather than as zero, and keep using `labelgrid_fee` as the fee total in every case. Totals are unchanged either way.\n\nOpt-in per-label filtering: pass any of `filter[label_id]`, `filter[release_id]`, `filter[isrc]` or `filter[upc]` to switch to server-recomputed per-label gross-revenue totals sourced from the royalty line-item layer (grouped by payment period). The filtered rows carry a `scope` of `label`, a single monetary `gross_usd`, and a `meta.gross_definition` discriminator; all account-level-only fields (`amount`, `opening_balance`, tax/vat/transfer, `total_due_usd`, `invoice_number`, `date_paid`) are `null`. `gross_usd` matches the customer-facing UI + CSV column of the same name: the gross revenue for your catalogue BEFORE LabelGrid platform/UGC fees; net revenue (after LabelGrid fees) and the final payout are on this statements endpoint (unfiltered). `filter[start_date]`/`filter[end_date]` (Y-m-d) narrow by payment period and require an entity filter. Only labels you directly own are visible; an unowned `label_id` returns `404` and an unowned `upc`/`isrc` returns an empty `data` array. With no filter the response is unchanged.\n\nThis endpoint returns one of two shapes depending on whether an entity filter is present. The `@response` schema below is the union of both — filtered-only keys (`scope`, `filter`, `gross_usd`) and the top-level `meta` block are present only in filtered mode, and every account-level field is nullable so a filtered row (where those fields are `null`) validates against the same schema.\n\n- **Unfiltered** (no `filter[*]` entity): full account-level statement rows. `invoice_number`, `period`, `status`, `currency`, `created_at` are strings; `opening_balance`, `amount`, `labelgrid_rate`, `labelgrid_fee`, `total_due_usd` are floats; `labelgrid_ugc_rate`, `platform_fee_usd` and `ugc_fee_usd` are floats or `null`; there is no top-level `meta`.\n- **Filtered** (any `filter[*]` entity present): server-recomputed per-label gross-revenue rows, one per payment period. Each row carries `scope: \"label\"`, the echoed `filter`, `period`, `currency`, and a single monetary `gross_usd` (gross revenue before LabelGrid platform/UGC fees — matching the customer-facing UI + CSV `gross_usd` column). All account-level-only fields (`invoice_number`, `status`, `invoice`, `ref`, `opening_balance`, `amount`, `labelgrid_rate`, `labelgrid_ugc_rate`, `labelgrid_fee`, `platform_fee_usd`, `ugc_fee_usd`, the tax/vat/transfer fields, `total_due_usd`, `date_paid`, `created_at`) are `null`. A top-level `meta` block adds `scope`, the echoed `filter`, `gross_definition: \"pre_labelgrid_fee\"`, and a `note` (net revenue after LabelGrid fees and the final payout are on the unfiltered statements endpoint). Consumers branch on `scope`; the filtered shape is not a strict superset of the unfiltered one.\n\nPer-release rollup: add `group_by=release` (which **requires** `filter[label_id]`) to get one row per release under that label, grouped by payment period, instead of one per-label total. Amounts not attributable to a specific release (and any per-release rounding residue) surface as an explicit remainder row with `release_id: null` per period — never silently apportioned or dropped — so the per-release rows plus the remainder always sum exactly to the per-label total the non-grouped path returns for the same filters. Grouped rows carry `scope: \"release\"` and a `release_id` (null on the remainder row); `meta` adds `group_by: \"release\"`. Any other `group_by` value, or `group_by=release` without `filter[label_id]`, returns `422`.",
+        "description": "Retrieve a list of all available royalty statements for the authenticated user, ordered by period descending. Each statement includes a `periods_covered` array that indicates which actual sales periods are included in the payment, which may differ from the payment period when payments have been skipped or unclaimed in certain months. It is normal for multiple statements to cover overlapping periods if payments were delayed or reissued.\n\nNote: The `labelgrid_fee` field shows the fee rate that was in effect when this statement was generated. Actual fees applied to individual line items may differ from this reference value. Refer to the detailed CSV export or transactions ledger for precise fee calculations per line item.\n\n`labelgrid_fee` is also broken down into `platform_fee_usd` (the standard distribution fee, charged at `labelgrid_rate`) and `ugc_fee_usd` (the UGC / Content ID fee, charged at `labelgrid_ugc_rate`). The two parts add up to `labelgrid_fee`. Any of the three can be `null`, most often on statements generated before the breakdown was recorded, and they do not all move together: `platform_fee_usd` and `ugc_fee_usd` are always both present or both `null`, while `labelgrid_ugc_rate` moves independently of that pair and can be `null` on a statement carrying both amounts or set on a statement where both are `null`. Read each field on its own rather than inferring one from another, treat `null` as \"not broken down\" rather than as zero, and keep using `labelgrid_fee` as the fee total in every case. Totals are unchanged either way.\n\nOpt-in per-label filtering: pass any of `filter[label_id]`, `filter[release_id]`, `filter[isrc]` or `filter[upc]` to return per-label gross-revenue totals grouped by payment period. The filtered rows carry a `scope` of `label`, a single monetary `gross_usd`, and a `meta.gross_definition` discriminator; all account-level-only fields (`amount`, `credit_amount`, `opening_balance`, tax/vat/transfer, `total_due_usd`, `invoice_number`, `date_paid`) are `null`. `gross_usd` matches the customer-facing UI + CSV column of the same name: the gross revenue for your catalogue BEFORE LabelGrid platform/UGC fees; net revenue (after LabelGrid fees) and the final payout are on this statements endpoint (unfiltered). `filter[start_date]`/`filter[end_date]` (Y-m-d) narrow by payment period and require an entity filter. Only labels you directly own are visible; an unowned `label_id` returns `404` and an unowned `upc`/`isrc` returns an empty `data` array. With no filter the response is unchanged.\n\nThis endpoint returns one of two shapes depending on whether an entity filter is present. The `@response` schema below is the union of both — filtered-only keys (`scope`, `filter`, `gross_usd`) and the top-level `meta` block are present only in filtered mode, and every account-level field is nullable so a filtered row (where those fields are `null`) validates against the same schema.\n\n- **Unfiltered** (no `filter[*]` entity): full account-level statement rows. `invoice_number`, `period`, `status`, `currency`, `created_at` are strings; `opening_balance`, `amount`, `credit_amount`, `labelgrid_rate`, `labelgrid_fee`, `total_due_usd` are floats; `labelgrid_ugc_rate`, `platform_fee_usd` and `ugc_fee_usd` are floats or `null`; there is no top-level `meta`.\n- **Filtered** (any `filter[*]` entity present): per-label gross-revenue rows, one per payment period. Each row carries `scope: \"label\"`, the echoed `filter`, `period`, `currency`, and a single monetary `gross_usd` (gross revenue before LabelGrid platform/UGC fees — matching the customer-facing UI + CSV `gross_usd` column). All account-level-only fields (`invoice_number`, `status`, `invoice`, `ref`, `opening_balance`, `amount`, `credit_amount`, `labelgrid_rate`, `labelgrid_ugc_rate`, `labelgrid_fee`, `platform_fee_usd`, `ugc_fee_usd`, the tax/vat/transfer fields, `total_due_usd`, `date_paid`, `created_at`) are `null`. A top-level `meta` block adds `scope`, the echoed `filter`, `gross_definition: \"pre_labelgrid_fee\"`, and a `note` (net revenue after LabelGrid fees and the final payout are on the unfiltered statements endpoint). Consumers branch on `scope`; the filtered shape is not a strict superset of the unfiltered one.\n\nPer-release rollup: add `group_by=release` (which **requires** `filter[label_id]`) to get one row per release under that label, grouped by payment period, instead of one per-label total. Amounts not attributable to a specific release (and any per-release rounding residue) surface as an explicit remainder row with `release_id: null` per period — never silently apportioned or dropped — so the per-release rows plus the remainder always sum exactly to the per-label total the non-grouped path returns for the same filters. Grouped rows carry `scope: \"release\"` and a `release_id` (null on the remainder row); `meta` adds `group_by: \"release\"`. Any other `group_by` value, or `group_by=release` without `filter[label_id]`, returns `422`.",
         "summary": "Get all statements",
         "tags": [
           "Statements"
@@ -8340,6 +8310,12 @@
                               "null"
                             ]
                           },
+                          "credit_amount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
                           "labelgrid_rate": {
                             "type": [
                               "number",
@@ -8435,6 +8411,7 @@
                           "currency",
                           "opening_balance",
                           "amount",
+                          "credit_amount",
                           "labelgrid_rate",
                           "labelgrid_ugc_rate",
                           "labelgrid_fee",
@@ -8561,6 +8538,9 @@
                         "amount": {
                           "type": "number"
                         },
+                        "credit_amount": {
+                          "type": "number"
+                        },
                         "labelgrid_rate": {
                           "type": "number"
                         },
@@ -8644,6 +8624,7 @@
                         "currency",
                         "opening_balance",
                         "amount",
+                        "credit_amount",
                         "labelgrid_rate",
                         "labelgrid_ugc_rate",
                         "labelgrid_fee",
@@ -9876,7 +9857,7 @@
     "/analytics/summary": {
       "get": {
         "operationId": "public-analytics.summary",
-        "description": "Returns the requested `metrics[]` sections in a single response, plus a\n`meta` block. Resolve the shared scope once and project only the sections a\ngiven view needs, rather than fetching every section on every call.\n\n`metrics[]` is REQUIRED and accepts 1 to 12 section keys per request.\nOmitting it, or passing an empty array, is a 422 whose message enumerates\nevery valid section key. Requesting more than 12 keys is a 422 asking you to\nsplit into multiple requests — each projection is cached independently per\nscope and window, so repeat calls are cheap after the first build. The\nresponse returns exactly the listed sections, in the canonical section order.\n\nA response that projects a social/UGC section also carries\n`meta.social_availability`, mapping each requested social section across the\nUGC platforms; `filter[ugc_platform]` narrows those sections to one platform.\n\nThe date range may span up to 400 days, so a full year (or a year plus a\ncomparison period) fits in one request. A longer range returns a 422 naming\nthe limit. Every section reports day-level points at every accepted span. A\nrange that is within the limit but still too heavy to compute returns a 422\nasking you to narrow it — retry with a shorter range or fewer `metrics[]`.",
+        "description": "Returns the requested `metrics[]` sections in a single response, plus a\n`meta` block. Resolve the shared scope once and project only the sections a\ngiven view needs, rather than fetching every section on every call.\n\n`metrics[]` is REQUIRED and accepts 1 to 12 section keys per request.\nOmitting it, or passing an empty array, is a 422 whose message enumerates\nevery valid section key. Requesting more than 12 keys is a 422 asking you to\nsplit into multiple requests — each projection is cached independently per\nscope and window, so repeat calls are cheap after the first build. The\nresponse returns exactly the listed sections, in the canonical section order.\n\nMost sections return one aggregate over the whole resolved scope. The\n`track-streams-daily` and `track-listeners-daily` sections are the per-track\ncounterpart — one row per date, platform and ISRC, so a request scoped to a\nrelease returns each of its tracks — and both require `filter[release_id]`,\n`filter[isrc]` or `filter[upc]`.\n\nA response that projects a social/UGC section also carries\n`meta.social_availability`, mapping each requested social section across the\nUGC platforms; `filter[ugc_platform]` narrows those sections to one platform.\n\nThe date range may span up to 400 days, so a full year (or a year plus a\ncomparison period) fits in one request. A longer range returns a 422 naming\nthe limit. Every section reports day-level points at every accepted span. A\nrange that is within the limit but still too heavy to compute returns a 422\nasking you to narrow it — retry with a shorter range or fewer `metrics[]`.",
         "summary": "Composite analytics summary",
         "tags": [
           "Analytics"
@@ -9915,7 +9896,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -9939,6 +9921,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -9947,6 +9930,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -9954,6 +9938,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -9961,6 +9946,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10132,6 +10118,25 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Analytics data is temporarily unavailable. Please try again shortly."
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -10139,7 +10144,7 @@
     "/analytics/leaderboards": {
       "get": {
         "operationId": "public-analytics.leaderboards",
-        "description": "`type=artists|tracks|albums` returns one list; `type=all` returns all three\n({artists, tracks, albums}) built in ONE request and cached as ONE entry, so\nthe set cannot be stitched from different cache epochs. Rows are ordered by\nsummed streams descending with a deterministic name tiebreak. `limit`\ndefaults to 10 and may not exceed 50.",
+        "description": "`type=artists|tracks|albums` returns one list; `type=all` returns all three\n({artists, tracks, albums}) built in ONE request and cached as ONE entry, so\nthe set cannot be stitched from different cache epochs. Rows are ordered by\nsummed streams descending with a deterministic name tiebreak. `limit`\ndefaults to 10 and may not exceed 50.\n\n`filter[release_id]`, `filter[isrc]`, `filter[upc]` and\n`filter[artist_names][]` narrow the ranking to that entity's tracks, so\n`type=tracks` scoped to a release ranks that release's tracks — by name, so\nrecordings sharing a title and artist combine into one row. For an exact\nper-ISRC breakdown call `GET /analytics/summary` with\n`metrics[]=track-streams-daily` or `metrics[]=track-listeners-daily`.\n\nTrack rows carry `isrc`, the recording the row's streams belong to. It is\nreturned whenever the row is one recording beyond doubt — including when the\nsame recording is reported by several platforms under a different `identifier`\non each, which is the usual case for a track available on more than one\nservice. `isrc` and `identifier` answer different questions: `identifier` is\nthe one platform track id when the row has exactly one, while `isrc` is the\nrecording when the whole row is one recording. A row carrying an `isrc` with\na `null` `identifier` is normal.\n\n`isrc` is `null` on unfiltered reads, on rows narrowed by\n`filter[artist_names][]` alone, and on any row that cannot be shown to be a\nsingle recording — for example a title and artist shared by two different\nrecordings. A `null` means the row cannot be attributed to one ISRC, never\nthat the recording has none; use the per-ISRC summary metrics above when\nevery row must carry one. Both `identifier` and `isrc` are `null` on a row\nwhose platform track ids cannot be established for the requested window, so\nread each as optional rather than as a property of the recording.",
         "summary": "Top artists, tracks or albums by streams",
         "tags": [
           "Analytics"
@@ -10178,7 +10183,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -10202,6 +10208,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -10210,6 +10217,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -10217,6 +10225,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -10224,6 +10233,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10297,6 +10307,25 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Analytics data is temporarily unavailable. Please try again shortly."
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -10343,7 +10372,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -10367,6 +10397,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -10375,6 +10406,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -10382,6 +10414,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -10389,6 +10422,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10447,6 +10481,25 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "Analytics data is temporarily unavailable. Please try again shortly."
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -10532,6 +10585,7 @@
     "/analytics/streams": {
       "get": {
         "operationId": "public-analytics.streams",
+        "description": "Each point totals every track in the resolved filter scope, so a\n`filter[upc]` or `filter[release_id]` read returns one album-wide series\nrather than a row per track. For an exact per-track daily series call\n`GET /analytics/summary` with `metrics[]=track-streams-daily`, which reports\nper ISRC; `GET /analytics/leaderboards?type=tracks` ranks the scope's tracks\nby name, so recordings sharing a title and artist combine into one row.",
         "summary": "Daily streams time-series grouped by date and platform",
         "tags": [
           "Analytics"
@@ -10570,7 +10624,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -10594,6 +10649,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -10602,6 +10658,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -10609,6 +10666,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -10616,6 +10674,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10673,6 +10732,7 @@
     "/analytics/listeners": {
       "get": {
         "operationId": "public-analytics.listeners",
+        "description": "Each point totals every track in the resolved filter scope, so a\n`filter[upc]` or `filter[release_id]` read returns one album-wide series\nrather than a row per track. For a per-track daily series call\n`GET /analytics/summary` with `metrics[]=track-listeners-daily`, or narrow to\na single track with `filter[isrc]`.",
         "summary": "Daily listeners time-series grouped by date and platform",
         "tags": [
           "Analytics"
@@ -10711,7 +10771,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -10735,6 +10796,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -10743,6 +10805,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -10750,6 +10813,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -10757,6 +10821,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10814,6 +10879,7 @@
     "/analytics/saves": {
       "get": {
         "operationId": "public-analytics.saves",
+        "description": "Each point totals every track in the resolved filter scope, so a\n`filter[upc]` or `filter[release_id]` read returns one album-wide series\nrather than a row per track. Narrow to a single track with `filter[isrc]` —\nthis metric has no per-track summary section.",
         "summary": "Daily saves time-series grouped by date and platform",
         "tags": [
           "Analytics"
@@ -10852,7 +10918,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -10876,6 +10943,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -10884,6 +10952,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -10891,6 +10960,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -10898,6 +10968,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -10955,6 +11026,7 @@
     "/analytics/skips": {
       "get": {
         "operationId": "public-analytics.skips",
+        "description": "Each point totals every track in the resolved filter scope, so a\n`filter[upc]` or `filter[release_id]` read returns one album-wide series\nrather than a row per track. Narrow to a single track with `filter[isrc]` —\nthis metric has no per-track summary section.",
         "summary": "Daily skips time-series grouped by date and platform",
         "tags": [
           "Analytics"
@@ -10993,7 +11065,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11017,6 +11090,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11025,6 +11099,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11032,6 +11107,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11039,6 +11115,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11096,7 +11173,7 @@
     "/analytics/streams-by-country": {
       "get": {
         "operationId": "public-analytics.streams-by-country",
-        "description": "Supports limit (default 10, max 50).",
+        "description": "Supports limit (default 10, max 50).\n\nEach row totals every track in the resolved filter scope, so a `filter[upc]`\nor `filter[release_id]` read is one album-wide breakdown, not one breakdown\nper track. Narrow to a single track with `filter[isrc]`.",
         "summary": "Total streams aggregated by country",
         "tags": [
           "Analytics"
@@ -11135,7 +11212,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11159,6 +11237,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11167,6 +11246,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11174,6 +11254,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11181,6 +11262,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11238,6 +11320,7 @@
     "/analytics/streams-by-gender": {
       "get": {
         "operationId": "public-analytics.streams-by-gender",
+        "description": "Each row totals every track in the resolved filter scope, so a `filter[upc]`\nor `filter[release_id]` read is one album-wide breakdown, not one breakdown\nper track. Narrow to a single track with `filter[isrc]`.",
         "summary": "Total streams aggregated by gender",
         "tags": [
           "Analytics"
@@ -11276,7 +11359,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11300,6 +11384,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11308,6 +11393,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11315,6 +11401,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11322,6 +11409,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11379,6 +11467,7 @@
     "/analytics/streams-by-age": {
       "get": {
         "operationId": "public-analytics.streams-by-age",
+        "description": "Each row totals every track in the resolved filter scope, so a `filter[upc]`\nor `filter[release_id]` read is one album-wide breakdown, not one breakdown\nper track. Narrow to a single track with `filter[isrc]`.",
         "summary": "Total streams aggregated by age group",
         "tags": [
           "Analytics"
@@ -11417,7 +11506,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11441,6 +11531,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11449,6 +11540,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11456,6 +11548,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11463,6 +11556,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11558,7 +11652,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11582,6 +11677,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11590,6 +11686,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11597,6 +11694,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11604,6 +11702,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11699,7 +11798,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11723,6 +11823,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11731,6 +11832,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11738,6 +11840,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11745,6 +11848,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11840,7 +11944,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -11864,6 +11969,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -11872,6 +11978,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -11879,6 +11986,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -11886,6 +11994,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -11981,7 +12090,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -12005,6 +12115,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12013,6 +12124,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -12020,6 +12132,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -12027,6 +12140,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -12122,7 +12236,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -12146,6 +12261,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12154,6 +12270,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -12161,6 +12278,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -12168,6 +12286,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -12263,7 +12382,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -12287,6 +12407,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12295,6 +12416,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -12302,6 +12424,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -12309,6 +12432,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -12404,7 +12528,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -12428,6 +12553,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12436,6 +12562,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -12443,6 +12570,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -12450,6 +12578,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -12546,7 +12675,8 @@
                 "AUDIOMACK",
                 "KUGOU",
                 "KUWO",
-                "QQMUSIC"
+                "QQMUSIC",
+                "AMAZON"
               ]
             }
           },
@@ -12570,6 +12700,7 @@
           {
             "name": "filter[release_id]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases. The\nscope is the whole release: the series and summary sections return one\nalbum-wide aggregate, never a row per track. For an exact per-track\nbreakdown use GET /analytics/summary with metrics[]=track-streams-daily\nor metrics[]=track-listeners-daily, which report per ISRC;\nGET /analytics/leaderboards with type=tracks ranks the release's tracks\nby name, so recordings sharing a title and artist combine into one row.",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12578,6 +12709,7 @@
           {
             "name": "filter[isrc]",
             "in": "query",
+            "description": "Narrows the response to a single one of your own tracks, by ISRC. The\nseries and summary sections still return one aggregate — it now covers\njust that track, which is the per-track view of any of these metrics.",
             "schema": {
               "type": "string"
             }
@@ -12585,6 +12717,7 @@
           {
             "name": "filter[upc]",
             "in": "query",
+            "description": "Narrows the response to the tracks on one of your own releases, by\nbarcode. Like filter[release_id] the scope is the whole release, so a\nUPC returns one album-wide series rather than one series per track. For\nan exact per-track breakdown use GET /analytics/summary with\nmetrics[]=track-streams-daily or metrics[]=track-listeners-daily, which\nreport per ISRC; GET /analytics/leaderboards with type=tracks ranks the\nrelease's tracks by name, so recordings sharing a title and artist\ncombine into one row.",
             "schema": {
               "type": "string"
             }
@@ -12592,6 +12725,7 @@
           {
             "name": "filter[artist_names][]",
             "in": "query",
+            "description": "Narrows the response to the tracks credited to these artist names. The\nseries and summary sections stay one aggregate over everything that\nmatched; GET /analytics/leaderboards with type=artists or type=tracks\nranks the matched entities by name, so tracks sharing a title and\nartist combine into one row.",
             "schema": {
               "type": "array",
               "items": {
@@ -12677,7 +12811,7 @@
     "/rate-limit": {
       "get": {
         "operationId": "public-rate-limit.show",
-        "description": "Report the rate limits that apply to the calling account, per request\ncategory (`read`, `write`, `export`, `analytics`): the per-minute ceiling,\nhow many requests remain in the current window, and when the window resets.\nUse it to pace requests and avoid `429` responses.\n\nThese budgets are the ACCOUNT's, keyed by account rather than by token, and\nare reported as observed by the presented token: every token on the account\nshares one budget, so requests made with one token reduce the `remaining`\nseen by another. This endpoint does not count against the categories it\nreports. A `limit` of `null` means no ceiling currently applies to that\ncategory.",
+        "description": "Report the rate limits that apply to the calling account, per request\ncategory (`read`, `write`, `export`, `analytics`): the per-minute ceiling,\nhow many requests remain in the current window, and when the window resets.\nUse it to pace requests and avoid `429` responses.\n\nThese budgets are the ACCOUNT's, keyed by account rather than by token, and\nare reported as observed by the presented token: every token on the account\nshares one budget, so requests made with one token reduce the `remaining`\nseen by another. This endpoint does not count against the categories it\nreports. A `limit` of `null` means no ceiling currently applies to that\ncategory.\n\n### Telling one `429` from another\n\nA `429` from an endpoint throttled by these limits can carry an\n`X-RateLimit-Scope` header naming the kind of limit that rejected it:\n\n- `account` — a per-account limit bound the request. That is usually one of\n  the budgets reported here, but some endpoints carry additional\n  per-account limits this endpoint does not report, so you can receive\n  `account` while every budget below still shows headroom.\n- `ip` — a per-IP limit bound the request. Honour `Retry-After`. None of\n  the budgets below is what rejected you, but a request rejected this way\n  can still count against them, so expect `remaining` to have moved even\n  though the call did not succeed.\n\nA `429` **without** the header states no scope at all. Read that as \"not\n     * stated\" — not as either value, and not as a claim about which limit was\nreached. Honour `Retry-After` and retry after the stated delay.",
         "summary": "Get the current token's rate budget",
         "tags": [
           "Rate Limit"
@@ -12757,7 +12891,7 @@
     "/stream-radar/flags": {
       "get": {
         "operationId": "public-stream-radar.flags.index",
-        "description": "Retrieve a paginated list of the authenticated account's Stream Radar\nflags — the anomalous-streaming alerts raised on your releases. Filter by\nstatus, severity, DSP, ISRC, release, and the last-detected date range.\nResults are ordered by most recent detection.\n\nEach flag carries an `updated_at` timestamp (ISO 8601, UTC) that advances\non every change — creation, re-detection, resolution, and reopen — so you\ncan order incremental changes reliably even within a single day.\n\n`updated_at` is stored at SECOND precision, so two changes to the same or\ndifferent flags within one second serialize to the identical timestamp. To\nsync without missing changes, poll `filter[updated_from]` with your last\nwatermark (either the exact watermark, since the bound is inclusive, or the\nwatermark minus a small overlap) and upsert idempotently keyed on the flag\n`id`: re-seeing a same-second row is then a harmless no-op. When\n`filter[updated_from]` is present, results are ordered by (`updated_at` ASC,\n`id` ASC) so a row updated mid-pagination only ever moves forward — it is\nnever skipped, at most re-seen (again harmless under idempotent upsert).\n\nRequires Stream Radar to be enabled for the account\n(`403 stream_radar_not_enabled` otherwise).",
+        "description": "Retrieve a paginated list of the authenticated account's Stream Radar\nflags — the anomalous-streaming alerts raised on your releases. Filter by\nstatus, severity, ISRC, release, and the last-detected date range.\nResults are ordered by most recent detection.\n\n**Every response is scoped to exactly one DSP and never mixes platforms.**\n`filter[dsp]` selects which one: `SPOTIFY` or `ITUNES` (Apple Music). When\nyou omit it the response is scoped to `SPOTIFY`, so read one platform at a\ntime and issue a second request for the other. The value matches the `dsp`\nfield on each returned flag exactly, so a value you read back always\nround-trips as a filter. Any other value — including a lowercase spelling —\nreturns `422`: an unrecognised DSP is rejected rather than silently\nreturning an empty page that would read as \"you have no flags\".\n\nPagination (`meta.total`, `links.next`) counts only the flags inside the\nselected DSP scope.\n\nEach flag carries an `updated_at` timestamp (ISO 8601, UTC) that advances\non every change — creation, re-detection, resolution, and reopen — so you\ncan order incremental changes reliably even within a single day.\n\n`updated_at` is stored at SECOND precision, so two changes to the same or\ndifferent flags within one second serialize to the identical timestamp. To\nsync without missing changes, poll `filter[updated_from]` with your last\nwatermark (either the exact watermark, since the bound is inclusive, or the\nwatermark minus a small overlap) and upsert idempotently keyed on the flag\n`id`: re-seeing a same-second row is then a harmless no-op. When\n`filter[updated_from]` is present, results are ordered by (`updated_at` ASC,\n`id` ASC) so a row updated mid-pagination only ever moves forward — it is\nnever skipped, at most re-seen (again harmless under idempotent upsert).\n\nRequires Stream Radar to be enabled for the account\n(`403 stream_radar_not_enabled` otherwise).",
         "summary": "List Stream Radar flags",
         "tags": [
           "Stream Radar"
@@ -12799,7 +12933,7 @@
           {
             "name": "filter[dsp]",
             "in": "query",
-            "description": "Filter by DSP.",
+            "description": "Scope the response to one DSP: SPOTIFY or ITUNES (Apple Music). Defaults to SPOTIFY when omitted — a response is always scoped to exactly one DSP and never mixes platforms. Any other value returns 422; matched case-sensitively against the value returned in each flag's `dsp` field.",
             "schema": {
               "type": "string"
             }
@@ -14186,6 +14320,87 @@
           }
         },
         "title": "ArtistUpdateData"
+      },
+      "AudioUploadAttemptResource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "track_id": {
+            "type": "integer"
+          },
+          "file_type": {
+            "type": "string",
+            "enum": [
+              "dolby",
+              "stereo"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "poll_after_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "const": 10
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "const": "audio_processing_failed"
+              },
+              "message": {
+                "type": "string",
+                "const": "We could not process this audio file. Upload it again. If the problem continues, contact support."
+              },
+              "can_retry": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "can_retry"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "failed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "track_id",
+          "file_type",
+          "status",
+          "status_url",
+          "poll_after_seconds",
+          "error",
+          "created_at",
+          "started_at",
+          "completed_at",
+          "failed_at"
+        ],
+        "title": "AudioUploadAttemptResource"
       },
       "CfgGenreCategory": {
         "type": "object",
@@ -16343,11 +16558,11 @@
       },
       "PublicReleaseDate": {
         "type": "object",
-        "description": "Public-API shape of a release date, used for both the create/update request\nand the release response.\n\nMirrors the per-region date fields. Set `exclude: true` on a date set to\nexclude those `countries` from delivery (territory exclusion — \"release\n * worldwide except X, Y\"). The flag round-trips faithfully on read.",
+        "description": "Public-API shape of a release date, used for both the create/update request\nand the release response.\n\nMirrors the per-region date fields. Set `exclude: true` on a date set to\nexclude those `countries` from delivery (territory exclusion — \"release\n * worldwide except X, Y\"). The flag round-trips faithfully on read.\n\nNested dates parse as UTC (date-only is midnight UTC) but keep a submitted\noffset in storage so flag-off DDEX flooring cannot shift the calendar date.\nExact-time delivery converts the instant at emission. Scalar `release_date`\nstill converts on write.",
         "properties": {
           "countries": {
             "type": "object",
-            "description": "ISO 3166-1 alpha-2 country codes (e.g. \"US\", \"GB\") or \"WW\" for worldwide",
+            "description": "ISO 3166-1 alpha-2 country codes (e.g. \"US\", \"GB\") or \"*\" for worldwide",
             "additionalProperties": {}
           },
           "exclude": {
@@ -16364,7 +16579,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "validity_period_end": {
@@ -16375,7 +16590,7 @@
             "format": "date-time",
             "description": "The date (or date-time) this territory set stops delivering — a\nscheduled per-territory takedown. Set a FUTURE value on a delivering\n(non-`exclude`) set to keep the release live now and end it on that\ndate; the value is emitted verbatim as the delivery window's end. Distinct\nfrom `exclude: true`, which is an immediate territory exclusion. Must be\non or after `validity_period_start`; `end == start` (a closed window) is\nvalid. A value in the PAST is rejected with `422` on create; on update\nit is rejected too, unless every country in the set already carries that\nexact same persisted end (so echoing a naturally-elapsed end returned by\nGET back unchanged is accepted). Omit for an open-ended window",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "display_date": {
@@ -16385,7 +16600,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "track_listing_preview": {
@@ -16395,7 +16610,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "cover_art_preview": {
@@ -16405,7 +16620,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "clip_preview": {
@@ -16415,7 +16630,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "pre_order_preview": {
@@ -16425,7 +16640,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           },
           "override_live_date": {
@@ -16435,7 +16650,7 @@
             ],
             "format": "date-time",
             "examples": [
-              "2025-05-23T00:00:00+00:00"
+              "2025-05-23T00:00:00Z"
             ]
           }
         },
@@ -16663,9 +16878,9 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Original release date",
+            "description": "Original release date.\n\nInterpreted as **UTC**. A value may carry a time, an explicit `Z`, or a\nnumeric UTC offset such as `+02:00`; an offset denotes the instant it\nnames, and that instant is the one delivered to stores. A date-only\nvalue such as `2025-08-01` means midnight UTC.\n\nThe time component reaches stores only when `enable_exact_release_time`\nis `true`. With the flag `false` or omitted the date is delivered on its\nown and each store applies its own local midnight per territory, so\nsending `00:00:00` is not meaningful. With the flag `true`, `00:00:00`\nIS meaningful: it delivers one simultaneous global midnight UTC",
             "examples": [
-              "2025-08-01T00:00:00"
+              "2025-08-01T00:00:00Z"
             ]
           },
           "release_pre_order_date": {
@@ -16674,11 +16889,11 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Pre-order release date"
+            "description": "Pre-order release date.\n\nSame time semantics as `release_date`: interpreted as UTC, offsets\nconverted, date-only means midnight UTC"
           },
           "release_dates": {
             "type": "array",
-            "description": "Advanced release dates - only use this if you wish to override the original release date",
+            "description": "Advanced release dates - only use this if you wish to override the original release date\n\nNested dates parse as UTC (date-only is midnight UTC). A submitted\noffset is kept in storage; exact-time delivery converts the instant\nat emission. The time component is honoured at delivery only when\n`enable_exact_release_time` is `true`",
             "items": {
               "$ref": "#/components/schemas/PublicReleaseDate"
             }
@@ -16826,7 +17041,7 @@
           },
           "enable_exact_release_time": {
             "type": "boolean",
-            "description": "Deliver the exact release time (GMT) instead of flooring the release\ndate to midnight (T00:00:00Z). When true, the time component of the\nrelease date is honoured in the delivered store metadata; a midnight\ntime with the flag set is legal and delivers midnight exactly. Omit\nthe field (or send false) to keep the date-only, floored behaviour",
+            "description": "Deliver the exact release time (UTC) instead of flooring the release\ndate to midnight (T00:00:00Z). When true, the time component of the\nrelease date is honoured in the delivered store metadata; a midnight\ntime with the flag set is legal and delivers midnight exactly. Omit\nthe field (or send false) to keep the date-only, floored behaviour.\n\nThe time honoured is the one you sent, read as UTC: a value carrying a\nnumeric offset is converted to the equivalent UTC instant, and a\ndate-only value is midnight UTC. Note that `T00:00:00Z` with this flag\n`true` is NOT the same as leaving it `false`: the flag delivers one\nsimultaneous global midnight UTC, while the flag off lets each store\napply its own local midnight per territory",
             "default": false
           },
           "spotify_url": {
@@ -17060,13 +17275,14 @@
             "description": "Auto-generated public unique identifier"
           },
           "artists": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/PartialReleaseArtistData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "titles": {
             "type": "array",
@@ -17141,14 +17357,21 @@
             "description": "Pre-order release date"
           },
           "release_dates": {
-            "type": [
-              "array",
-              "null"
-            ],
             "description": "Advanced release dates - only use this if you wish to override the original release date",
-            "items": {
-              "$ref": "#/components/schemas/PublicReleaseDate"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PublicReleaseDate"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "artwork_ai_usage": {
             "anyOf": [
@@ -17291,11 +17514,18 @@
             ]
           },
           "dsp_configs": {
-            "type": "array",
             "description": "Distro Queue Configurations",
-            "items": {
-              "$ref": "#/components/schemas/ReleaseDspConfigsData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ReleaseDspConfigsData"
+                }
+              }
+            ]
           },
           "enable_automatic_distro": {
             "type": "boolean",
@@ -17558,14 +17788,21 @@
             "description": "Auto-generated display artist for this release. This field is automatically inferred from the artists array"
           },
           "tracks": {
-            "type": [
-              "array",
-              "null"
-            ],
             "description": "Tracks associated with this release",
-            "items": {
-              "$ref": "#/components/schemas/MinimalTrackData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MinimalTrackData"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "review_status": {
             "anyOf": [
@@ -17601,10 +17838,11 @@
       },
       "ReleaseDate": {
         "type": "object",
+        "description": "Stored territory dates stay unnormalised so flag-off delivery preserves their calendar date.",
         "properties": {
           "countries": {
             "type": "array",
-            "description": "ISO 3166-1 alpha-2 country codes (e.g. \"US\", \"GB\") or \"WW\" for worldwide",
+            "description": "ISO 3166-1 alpha-2 country codes (e.g. \"US\", \"GB\") or \"*\" for worldwide",
             "items": {}
           },
           "validity_period_start": {
@@ -17992,9 +18230,9 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Original release date",
+            "description": "Original release date.\n\nInterpreted as **UTC**. A value may carry a time, an explicit `Z`, or a\nnumeric UTC offset such as `+02:00`; an offset denotes the instant it\nnames, and that instant is the one delivered to stores. A date-only\nvalue such as `2025-08-01` means midnight UTC.\n\nThe time component reaches stores only when `enable_exact_release_time`\nis `true`. With the flag `false` or omitted the date is delivered on its\nown and each store applies its own local midnight per territory, so\nsending `00:00:00` is not meaningful. With the flag `true`, `00:00:00`\nIS meaningful: it delivers one simultaneous global midnight UTC",
             "examples": [
-              "2025-08-01T00:00:00"
+              "2025-08-01T00:00:00Z"
             ]
           },
           "release_pre_order_date": {
@@ -18003,11 +18241,11 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Pre-order release date"
+            "description": "Pre-order release date.\n\nSame time semantics as `release_date`: interpreted as UTC, offsets\nconverted, date-only means midnight UTC"
           },
           "release_dates": {
             "type": "array",
-            "description": "Advanced release dates - only use this if you wish to override the original release date",
+            "description": "Advanced release dates - only use this if you wish to override the original release date\n\nNested dates parse as UTC (date-only is midnight UTC). A submitted\noffset is kept in storage; exact-time delivery converts the instant\nat emission. The time component is honoured at delivery only when\n`enable_exact_release_time` is `true`",
             "items": {
               "$ref": "#/components/schemas/PublicReleaseDate"
             }
@@ -18159,7 +18397,7 @@
           },
           "enable_exact_release_time": {
             "type": "boolean",
-            "description": "Deliver the exact release time (GMT) instead of flooring the release\ndate to midnight (T00:00:00Z). When true, the time component of the\nrelease date is honoured in the delivered store metadata; a midnight\ntime with the flag set is legal and delivers midnight exactly. Omit\nthe field to leave the current setting unchanged"
+            "description": "Deliver the exact release time (UTC) instead of flooring the release\ndate to midnight (T00:00:00Z). When true, the time component of the\nrelease date is honoured in the delivered store metadata; a midnight\ntime with the flag set is legal and delivers midnight exactly. Omit\nthe field to leave the current setting unchanged.\n\nThe time honoured is the one you sent, read as UTC: a value carrying a\nnumeric offset is converted to the equivalent UTC instant, and a\ndate-only value is midnight UTC. Note that `T00:00:00Z` with this flag\n`true` is NOT the same as leaving it `false`: the flag delivers one\nsimultaneous global midnight UTC, while the flag off lets each store\napply its own local midnight per territory"
           },
           "spotify_url": {
             "type": [
@@ -18408,6 +18646,10 @@
               "null"
             ],
             "maxLength": 255
+          },
+          "confirm_contract_hold": {
+            "type": "boolean",
+            "description": "Explicit acknowledgement that a term agreement is in force and the\ntakedown should proceed anyway. Only this boolean authorizes it."
           }
         },
         "title": "TakedownReleaseRequest"
@@ -18684,6 +18926,13 @@
           "mix_versions": {
             "type": "array",
             "description": "Do not include this field if this track does not have a mix version or sub-title",
+            "items": {
+              "$ref": "#/components/schemas/TrackTitleLocalizationData"
+            }
+          },
+          "lyrics": {
+            "type": "array",
+            "description": "Track lyrics in various languages",
             "items": {
               "$ref": "#/components/schemas/TrackTitleLocalizationData"
             }
@@ -19221,7 +19470,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Track-level original release date. Optional — omit to inherit the\nrelease-level date. Set this for a simple per-track date override\ninstead of the advanced per-territory release_dates array"
+            "description": "Track-level original release date. Optional — omit to inherit the\nrelease-level date. Set this for a simple per-track date override\ninstead of the advanced per-territory release_dates array.\n\nInterpreted as UTC: a numeric offset denotes the instant it names and\nthat instant is delivered, and a date-only value means midnight UTC.\nThe time component reaches stores only when the release's\n`enable_exact_release_time` is `true`"
           },
           "release_pre_order_date": {
             "type": [
@@ -19229,7 +19478,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Track-level pre-order date. Optional. When both are present it must be\nbefore release_date"
+            "description": "Track-level pre-order date. Optional. When both are present it must be\nbefore release_date. Same UTC time semantics as `release_date`"
           },
           "release_dates": {
             "type": [
@@ -19290,14 +19539,21 @@
             }
           },
           "artists": {
-            "type": [
-              "array",
-              "null"
-            ],
             "description": "Track artists and roles",
-            "items": {
-              "$ref": "#/components/schemas/TrackArtistData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrackArtistData"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "disc": {
             "type": [
@@ -19830,32 +20086,53 @@
             }
           },
           "writers": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/TrackWriterUpdateData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrackWriterUpdateData"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "contributors": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/TrackContributorUpdateData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrackContributorUpdateData"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "publishers": {
-            "type": [
-              "array",
-              "null"
-            ],
             "description": "Publisher Entity Splits",
-            "items": {
-              "$ref": "#/components/schemas/TrackPublisherUpdateData"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrackPublisherUpdateData"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "copyright_owners": {
             "type": [
@@ -19898,14 +20175,21 @@
             "description": "Track-level pre-order date. Optional. When both are present it must be\nbefore release_date"
           },
           "release_dates": {
-            "type": [
-              "array",
-              "null"
-            ],
             "description": "Advanced release dates - only use this if you wish to override the original release date",
-            "items": {
-              "$ref": "#/components/schemas/PublicReleaseDate"
-            }
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PublicReleaseDate"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "primary_genre_id": {
             "type": [
@@ -20942,7 +21226,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Track-level original release date. Optional — omit to leave unchanged,\nsend null to clear (track then inherits the release-level date). Set\nthis for a simple per-track date override instead of the advanced\nper-territory release_dates array"
+            "description": "Track-level original release date. Optional — omit to leave unchanged,\nsend null to clear (track then inherits the release-level date). Set\nthis for a simple per-track date override instead of the advanced\nper-territory release_dates array.\n\nInterpreted as UTC: a numeric offset denotes the instant it names and\nthat instant is delivered, and a date-only value means midnight UTC.\nThe time component reaches stores only when the release's\n`enable_exact_release_time` is `true`"
           },
           "release_pre_order_date": {
             "type": [
@@ -20950,7 +21234,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Track-level pre-order date. Optional. When both are present it must be\nbefore release_date"
+            "description": "Track-level pre-order date. Optional. When both are present it must be\nbefore release_date. Same UTC time semantics as `release_date`"
           },
           "release_dates": {
             "type": "array",
@@ -21202,45 +21486,30 @@
             "type": "object",
             "properties": {
               "tracks_count": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  {
-                    "type": "integer",
-                    "enum": [
-                      0
-                    ]
-                  }
-                ]
+                "type": "integer"
               },
               "labels_count": {
-                "anyOf": [
-                  {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  {
-                    "type": "integer",
-                    "enum": [
-                      0
-                    ]
-                  }
-                ]
+                "type": "integer"
               },
               "tracks_limit": {
-                "type": "integer"
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "null means \"no cap\", NOT \"0 allowed\". A 0 here is a real\nceiling of zero."
               },
               "labels_limit": {
-                "type": "integer"
+                "type": [
+                  "integer",
+                  "null"
+                ]
               },
               "tracks_remaining": {
                 "type": [
                   "integer",
                   "null"
                 ],
-                "description": "Derived convenience: remaining headroom, or null when the\nlimit is unlimited (-1 sentinel / null). null means\n\"unlimited\", NOT \"0 left\"."
+                "description": "Derived convenience: remaining headroom, or null when the\nlimit is null. null means \"unlimited\", NOT \"0 left\"."
               },
               "labels_remaining": {
                 "type": [

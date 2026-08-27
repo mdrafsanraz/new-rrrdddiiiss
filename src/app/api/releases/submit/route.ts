@@ -270,13 +270,16 @@ export async function POST(request: Request) {
       const result = await syncSubmittedReleaseToLabelGrid({
         release,
         artwork,
-        audio,
+        audios: release.tracks.map((t) => ({
+          localTrackId: t.id,
+          upload: audio,
+        })),
       });
       if (result.ok) {
         labelgrid = {
           draftSynced: true,
           releaseId: result.releaseId,
-          trackId: result.trackId,
+          trackId: result.trackIds[0],
         };
         await prisma.release.update({
           where: { id: release.id },

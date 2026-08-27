@@ -3,7 +3,10 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { pushMediaToLabelGrid } from "@/lib/labelgrid/sync-submit";
+import {
+  loadAllTrackAudios,
+  pushMediaToLabelGrid,
+} from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { getPlanLimits } from "@/lib/plans";
 import {
@@ -179,16 +182,15 @@ export async function POST(_request: Request, { params }: Params) {
     });
     if (forSync) {
       const artwork = await loadStoredUpload(forSync.artworkUrl);
-      const audio = await loadStoredUpload(forSync.tracks[0]?.audioUrl);
+      const audios = await loadAllTrackAudios(forSync.tracks);
 
       if (forSync.labelgridId) {
         // Already on LG — refresh media only when files are still available.
-        if (artwork || audio) {
+        if (artwork || audios.length > 0) {
           const result = await pushMediaToLabelGrid({
             release: forSync,
             artwork,
-            audio,
-            localTrackId: forSync.tracks[0]?.id,
+            audios,
           });
           if (result.ok) {
             labelgrid = {
@@ -223,12 +225,11 @@ export async function POST(_request: Request, { params }: Params) {
             },
           });
         }
-      } else if (artwork && audio) {
+      } else if (artwork && audios.length === forSync.tracks.length) {
         const result = await pushMediaToLabelGrid({
           release: forSync,
           artwork,
-          audio,
-          localTrackId: forSync.tracks[0]?.id,
+          audios,
         });
         if (result.ok) {
           labelgrid = { draftSynced: true, releaseId: result.releaseId };

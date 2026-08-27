@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
-import { submitLabelGridDraftForReview } from "@/lib/labelgrid/sync-submit";
+import {
+  loadAllTrackAudios,
+  submitLabelGridDraftForReview,
+} from "@/lib/labelgrid/sync-submit";
 import { prisma } from "@/lib/db";
 import {
   describeMissingUploads,
@@ -79,16 +82,26 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const artwork = await loadStoredUpload(release.artworkUrl);
-    const audio = await loadStoredUpload(release.tracks[0]?.audioUrl);
+    const audios = await loadAllTrackAudios(release.tracks);
 
-    // No local labelgridId yet — need files to POST release + upload media via LG API.
-    if (!release.labelgridId && (!artwork || !audio)) {
+    // No local labelgridId yet — need files for EVERY track to POST release +
+    // upload media via LG API.
+    if (
+      !release.labelgridId &&
+      (!artwork || audios.length < release.tracks.length)
+    ) {
       const missing = describeMissingUploads({
         artworkUrl: release.artworkUrl,
         audioUrl: release.tracks[0]?.audioUrl,
         artworkOnDisk: await storedUploadExists(release.artworkUrl),
         audioOnDisk: await storedUploadExists(release.tracks[0]?.audioUrl),
       });
+      const loaded = new Set(audios.map((a) => a.localTrackId));
+      for (const t of release.tracks) {
+        if (!loaded.has(t.id)) {
+          missing.push(`audio for “${t.title}” is missing on the server`);
+        }
+      }
       const message =
         `Cannot create LabelGrid draft: ${missing.join("; ")}. ` +
         "Send back to draft so the user can re-upload (files go to LabelGrid API), then approve again.";
@@ -176,7 +189,7 @@ export async function POST(request: Request, { params }: Params) {
     const result = await submitLabelGridDraftForReview({
       release: forSync,
       artwork,
-      audio,
+      audios,
     });
 
     if (!result.ok) {
@@ -233,7 +246,7 @@ export async function POST(request: Request, { params }: Params) {
       labelgrid: {
         submittedForReview: true,
         releaseId: result.releaseId,
-        trackId: result.trackId,
+        trackIds: result.trackIds,
       },
     });
   } catch (error) {

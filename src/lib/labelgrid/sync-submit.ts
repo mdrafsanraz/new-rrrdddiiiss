@@ -11,9 +11,11 @@ import {
   createTrack,
   listGenres,
   listLabels,
+  listTerritories,
   submitReleaseForReview,
   updateRelease,
   uploadReleasePhoto,
+  uploadTrackLicense,
   uploadTrackStereoAudio,
   validateRelease,
 } from "@/lib/labelgrid";
@@ -24,17 +26,22 @@ import {
   isLabelGridDraftMediaReady,
   unwrapLabelGridId,
 } from "@/lib/labelgrid/catalog";
-import type { StoredUpload } from "@/lib/uploads/store";
+import { loadStoredUpload, type StoredUpload } from "@/lib/uploads/store";
 import {
   parseJsonObject,
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
 
+type ReleaseWithRels = Release & { artist: Artist | null; tracks: Track[] };
+
+/** One audio file per local track — every track needs one to create the draft. */
+export type TrackAudioInput = { localTrackId: string; upload: StoredUpload };
+
 type SyncInput = {
-  release: Release & { artist: Artist | null; tracks: Track[] };
+  release: ReleaseWithRels;
   artwork: StoredUpload;
-  audio: StoredUpload;
+  audios: TrackAudioInput[];
 };
 
 function splitName(name: string): { first: string; last: string } {
@@ -214,14 +221,354 @@ async function ensureLabelGridArtist(artist: Artist): Promise<number> {
   return id;
 }
 
+let territoriesCache: string[] | null = null;
+
+/** All distributable alpha-2 codes from GET /territories (cached). */
+async function loadTerritoryCodes(): Promise<string[]> {
+  if (territoriesCache && territoriesCache.length > 0) return territoriesCache;
+  const rows = await listTerritories();
+  const list = Array.isArray(rows)
+    ? rows
+    : ((rows as unknown as { data?: unknown[] })?.data ?? []);
+  territoriesCache = (list as Array<{ code2?: string }>)
+    .map((t) => (t.code2 ?? "").toUpperCase())
+    .filter((c) => /^[A-Z]{2}$/.test(c));
+  return territoriesCache;
+}
+
 /**
- * Push release + cover + stereo audio into LabelGrid as a **draft**.
- * Does not submit for LabelGrid review — admin approval does that later.
- * Updates local labelgridId fields; stores syncError on failure.
+ * Store + territory selections → LabelGrid fields.
+ * - dsp_configs is sent explicitly on every create/update (not just the
+ *   narrowed case): "Updating this field replaces all existing
+ *   configurations" per document.json, so omitting it after a user narrows
+ *   stores and then switches back to "All stores" would leave the stale
+ *   restriction in place on LabelGrid. Sending the full desired state every
+ *   time keeps the two systems in sync.
+ * - Territory narrowing uses the documented exclusion form of release_dates
+ *   ("worldwide except X, Y"): exclude every territory NOT selected. Omitted
+ *   for the worldwide default (no documented "clear" semantics to reset a
+ *   prior exclusion via this field, so it is only sent while narrowing).
+ */
+async function buildDistributionFields(
+  release: Release
+): Promise<Record<string, unknown>> {
+  const fields: Record<string, unknown> = {};
+  const meta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+
+  const stores = parseJsonObject<{ allStores?: boolean; outletIds?: number[] }>(
+    release.storesJson
+  );
+  const allStores = stores.allStores ?? meta.allStores ?? true;
+  const outletIds = stores.outletIds ?? meta.selectedOutletIds ?? [];
+  fields.dsp_configs =
+    !allStores && outletIds.length > 0
+      ? [
+          { distro_outlet_id: "all_dsps", enabled: false },
+          ...outletIds.map((id) => ({
+            distro_outlet_id: String(id),
+            enabled: true,
+          })),
+        ]
+      : [{ distro_outlet_id: "all_dsps", enabled: true }];
+
+  const territories = parseJsonObject<{ worldwide?: boolean; codes?: string[] }>(
+    release.territoriesJson
+  );
+  const worldwide = territories.worldwide ?? meta.worldwide ?? true;
+  const codes = (territories.codes ?? meta.territoryCodes ?? []).map((c) =>
+    c.toUpperCase()
+  );
+  if (!worldwide && codes.length > 0) {
+    const all = await loadTerritoryCodes();
+    if (!all.length) {
+      throw new Error(
+        "Could not load LabelGrid territories to apply the territory selection."
+      );
+    }
+    const selected = new Set(codes);
+    const excluded = all.filter((c) => !selected.has(c));
+    if (excluded.length > 0) {
+      fields.release_dates = [{ countries: excluded, exclude: true }];
+    }
+  }
+
+  return fields;
+}
+
+type TrackSyncContext = {
+  lgReleaseId: number;
+  lgArtistId: number;
+  locale: string;
+  artisticRole: string;
+  releaseExplicit: string;
+  releasePrimaryGenre: string | null;
+  artist: Artist;
+};
+
+async function buildTrackContributors(
+  track: Track,
+  tMeta: TrackMetadata,
+  artist: Artist
+): Promise<
+  Array<{ writer_id: number; roles: Record<string, boolean>; ai_contribution: string }>
+> {
+  const contribList =
+    tMeta.contributors?.filter(
+      (c) => c.firstName?.trim() && c.lastName?.trim() && c.roles?.length
+    ) ?? [];
+
+  const fallbackName = splitName(artist.fullName || artist.name);
+  const contributorsInput =
+    contribList.length > 0
+      ? contribList
+      : [
+          {
+            firstName: fallbackName.first,
+            lastName: fallbackName.last,
+            roles: ["Composer", "Lyricist"],
+          },
+        ];
+
+  const lgContributors: Array<{
+    writer_id: number;
+    roles: Record<string, boolean>;
+    ai_contribution: string;
+  }> = [];
+
+  for (const c of contributorsInput) {
+    const writerId = await ensureWriter({
+      first_name: c.firstName.trim(),
+      last_name: c.lastName.trim(),
+      email: artist.email ?? undefined,
+    });
+    lgContributors.push({
+      writer_id: writerId,
+      roles: Object.fromEntries(c.roles.map((r) => [r, true])),
+      ai_contribution: "none",
+    });
+  }
+  return lgContributors;
+}
+
+async function buildTrackBody(
+  track: Track,
+  ctx: TrackSyncContext
+): Promise<Record<string, unknown>> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  const trackPrimaryGenreId = await resolveGenreId(
+    tMeta.primaryGenre ?? ctx.releasePrimaryGenre
+  );
+  const contributors = await buildTrackContributors(track, tMeta, ctx.artist);
+
+  const body: Record<string, unknown> = {
+    release_id: ctx.lgReleaseId,
+    disc: 1,
+    track_num: track.trackNumber || 1,
+    composition_type: tMeta.compositionType || "original_composition",
+    audio_ai_usage: tMeta.audioAiUsage || "none",
+    composition_ai_usage: tMeta.compositionAiUsage || "none",
+    commercial_samples: tMeta.commercialSamples || "no",
+    audio_language: tMeta.audioLanguage || "en",
+    preferred_localization: ctx.locale,
+    explicit: tMeta.explicit || ctx.releaseExplicit,
+    recording_country: tMeta.recordingCountry || undefined,
+    isrc: track.isrc || undefined,
+    iswc: tMeta.iswc || undefined,
+    has_mechanical_license: tMeta.hasMechanicalLicense ?? undefined,
+    preview_start_time: tMeta.previewStartTime ?? undefined,
+    preview_length: tMeta.previewLength ?? undefined,
+    album_only: tMeta.albumOnly ?? undefined,
+    free_download: tMeta.freeDownload ?? undefined,
+    instant_gratification: tMeta.instantGratification ?? undefined,
+    cline_year: tMeta.clineYear ?? undefined,
+    cline_name: tMeta.clineName || undefined,
+    pline_year: tMeta.plineYear ?? undefined,
+    pline_name: tMeta.plineName || undefined,
+    titles: [{ iso_code: ctx.locale, text: track.title }],
+    artists: [
+      {
+        artist_id: ctx.lgArtistId,
+        artistic_role: ctx.artisticRole,
+        position: 1,
+      },
+    ],
+    contributors,
+  };
+
+  if (trackPrimaryGenreId) body.primary_genre_id = trackPrimaryGenreId;
+  if (tMeta.mixVersion?.trim()) {
+    body.mix_versions = [{ iso_code: ctx.locale, text: tMeta.mixVersion.trim() }];
+  }
+  if (tMeta.lyrics?.trim()) {
+    body.lyrics = [{ iso_code: ctx.locale, text: tMeta.lyrics.trim() }];
+  }
+
+  return body;
+}
+
+/** Create the LG track if the local row has no labelgridId yet; persist the id. */
+async function ensureLabelGridTrack(
+  track: Track,
+  ctx: TrackSyncContext
+): Promise<number> {
+  if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
+    return Number(track.labelgridId);
+  }
+  const body = await buildTrackBody(track, ctx);
+  const created = await createTrack(body);
+  const lgTrackId = unwrapId(created);
+  await prisma.track.update({
+    where: { id: track.id },
+    data: { labelgridId: String(lgTrackId) },
+  });
+  return lgTrackId;
+}
+
+/**
+ * Upload stereo audio for one track and persist the async-processing state
+ * (attempt id + processing flag) in the local track metadata.
+ */
+/**
+ * A per-track audio failure (e.g. LabelGrid's async processing rejected the
+ * file) must not abort the whole release sync — other tracks still need to
+ * upload. Failures are recorded on the track and surfaced in the UI instead.
+ */
+async function uploadAudioForTrack(
+  track: Track,
+  lgTrackId: number,
+  upload: StoredUpload
+): Promise<{ processing: boolean }> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+
+  try {
+    const result = await uploadTrackStereoAudio(lgTrackId, {
+      buffer: upload.buffer,
+      filename: upload.filename,
+      mimeType: upload.mimeType,
+    });
+    tMeta.audioUploadAttemptId = result.attemptId;
+    tMeta.audioProcessing = result.processing;
+    tMeta.audioProcessingError = null;
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { metadataJson: JSON.stringify(tMeta) },
+    });
+    return { processing: result.processing };
+  } catch (error) {
+    tMeta.audioProcessing = false;
+    tMeta.audioProcessingError =
+      error instanceof Error ? error.message : "Audio upload failed";
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { metadataJson: JSON.stringify(tMeta) },
+    });
+    return { processing: false };
+  }
+}
+
+/**
+ * Push the track's cover/sample license to LabelGrid once
+ * (POST /tracks/{id}/licenses). No-op when absent or already synced.
+ */
+async function syncTrackLicense(track: Track, lgTrackId: number): Promise<void> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  if (!tMeta.licenseType || !tMeta.licenseUrl || tMeta.licenseSyncedAt) return;
+
+  const file = await loadStoredUpload(tMeta.licenseUrl);
+  if (!file) return;
+
+  await uploadTrackLicense(lgTrackId, {
+    buffer: file.buffer,
+    filename: file.filename,
+    mimeType: file.mimeType,
+    type: tMeta.licenseType,
+  });
+
+  tMeta.licenseSyncedAt = new Date().toISOString();
+  await prisma.track.update({
+    where: { id: track.id },
+    data: { metadataJson: JSON.stringify(tMeta) },
+  });
+}
+
+async function buildReleaseBody(
+  release: ReleaseWithRels,
+  input: {
+    labelId: number;
+    primaryGenreId: number;
+    lgArtistId: number;
+    locale: string;
+    artisticRole: string;
+  }
+): Promise<Record<string, unknown>> {
+  const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+
+  const body: Record<string, unknown> = {
+    content_type: release.contentType,
+    label_id: input.labelId,
+    cat: release.catalogNumber,
+    artwork_ai_usage: release.artworkAiUsage,
+    primary_genre_id: input.primaryGenreId,
+    preferred_localization: input.locale,
+    barcode_number: release.upc || undefined,
+    // Spec: release_date is UTC; date-only means midnight UTC. toISOString
+    // emits the canonical Z form.
+    release_date: release.releaseDate
+      ? release.releaseDate.toISOString()
+      : undefined,
+    explicit: release.explicit,
+    cline_year: rMeta.clineYear ?? undefined,
+    cline_name: rMeta.clineName || undefined,
+    pline_year: rMeta.plineYear ?? undefined,
+    pline_name: rMeta.plineName || undefined,
+    titles: [
+      {
+        iso_code: input.locale,
+        text: release.title,
+        phonetic: null,
+      },
+    ],
+    artists: [
+      {
+        artist_id: input.lgArtistId,
+        artistic_role: input.artisticRole,
+        position: 1,
+      },
+    ],
+  };
+
+  if (rMeta.mixVersion?.trim()) {
+    body.mix_versions = [
+      { iso_code: input.locale, text: rMeta.mixVersion.trim(), phonetic: null },
+    ];
+  }
+
+  Object.assign(body, await buildDistributionFields(release));
+
+  return body;
+}
+
+export type SyncOutcome =
+  | {
+      ok: true;
+      releaseId: number;
+      trackIds: number[];
+      /** true when at least one audio file is still processing on LabelGrid. */
+      audioProcessing: boolean;
+      /** Local track ids whose audio is still processing on LabelGrid. */
+      processingTrackIds: string[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Push release + cover + ALL track audio into LabelGrid as a **draft**.
+ * Create Release first, then Create Track per local track, then per-track
+ * stereo upload (presigned flow) and license upload. Does not submit for
+ * LabelGrid review — admin approval does that later.
  */
 export async function syncSubmittedReleaseToLabelGrid(
   input: SyncInput
-): Promise<{ ok: true; releaseId: number; trackId: number } | { ok: false; error: string }> {
+): Promise<SyncOutcome> {
   if (!isLabelGridLive()) {
     return {
       ok: false,
@@ -229,17 +576,19 @@ export async function syncSubmittedReleaseToLabelGrid(
     };
   }
 
-  const { release, artwork, audio } = input;
+  const { release, artwork, audios } = input;
   if (!release.artist) {
     return { ok: false, error: "Release has no artist to sync." };
   }
-  const track = release.tracks[0];
-  if (!track) {
+  if (!release.tracks.length) {
     return { ok: false, error: "Release has no track to sync." };
   }
 
+  // Tracks without audio are still created on LabelGrid — audio can follow
+  // in a later autosave. Completeness is enforced at distribute time.
+  const audioByTrackId = new Map(audios.map((a) => [a.localTrackId, a.upload]));
+
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
 
   try {
     const [labelId, primaryGenreId, lgArtistId] = await Promise.all([
@@ -248,89 +597,16 @@ export async function syncSubmittedReleaseToLabelGrid(
       ensureLabelGridArtist(release.artist),
     ]);
 
-    const trackPrimaryGenreId = await resolveGenreId(
-      tMeta.primaryGenre ?? release.primaryGenre
-    );
-
     const locale = rMeta.preferredLocalization || "en";
-    const titleText = release.title;
     const artisticRole = rMeta.artisticRole || "MainArtist";
 
-    const contribList =
-      tMeta.contributors?.filter(
-        (c) => c.firstName?.trim() && c.lastName?.trim() && c.roles?.length
-      ) ?? [];
-
-    const fallbackName = splitName(
-      release.artist.fullName || release.artist.name
-    );
-    const contributorsInput =
-      contribList.length > 0
-        ? contribList
-        : [
-            {
-              firstName: fallbackName.first,
-              lastName: fallbackName.last,
-              roles: ["Composer", "Lyricist"],
-            },
-          ];
-
-    const lgContributors: Array<{
-      writer_id: number;
-      roles: Record<string, boolean>;
-      ai_contribution: string;
-    }> = [];
-
-    for (const c of contributorsInput) {
-      const writerId = await ensureWriter({
-        first_name: c.firstName.trim(),
-        last_name: c.lastName.trim(),
-        email: release.artist.email ?? undefined,
-      });
-      lgContributors.push({
-        writer_id: writerId,
-        roles: Object.fromEntries(c.roles.map((r) => [r, true])),
-        ai_contribution: "none",
-      });
-    }
-
-    const releaseBody: Record<string, unknown> = {
-      content_type: release.contentType,
-      label_id: labelId,
-      cat: release.catalogNumber,
-      artwork_ai_usage: release.artworkAiUsage,
-      primary_genre_id: primaryGenreId,
-      preferred_localization: locale,
-      barcode_number: release.upc || undefined,
-      release_date: release.releaseDate
-        ? release.releaseDate.toISOString()
-        : undefined,
-      explicit: release.explicit,
-      cline_year: rMeta.clineYear ?? undefined,
-      cline_name: rMeta.clineName || undefined,
-      pline_year: rMeta.plineYear ?? undefined,
-      pline_name: rMeta.plineName || undefined,
-      titles: [
-        {
-          iso_code: locale,
-          text: titleText,
-          phonetic: null,
-        },
-      ],
-      artists: [
-        {
-          artist_id: lgArtistId,
-          artistic_role: artisticRole,
-          position: 1,
-        },
-      ],
-    };
-
-    if (rMeta.mixVersion?.trim()) {
-      releaseBody.mix_versions = [
-        { iso_code: locale, text: rMeta.mixVersion.trim(), phonetic: null },
-      ];
-    }
+    const releaseBody = await buildReleaseBody(release, {
+      labelId,
+      primaryGenreId,
+      lgArtistId,
+      locale,
+      artisticRole,
+    });
 
     const lgRelease = release.labelgridId
       ? await updateRelease(Number(release.labelgridId), releaseBody).then(
@@ -339,86 +615,63 @@ export async function syncSubmittedReleaseToLabelGrid(
       : await createRelease(releaseBody);
     const lgReleaseId = unwrapId(lgRelease);
 
+    // Persist the mapping immediately so a mid-sync failure never orphans
+    // the LabelGrid draft or creates a duplicate on retry.
+    await prisma.release.update({
+      where: { id: release.id },
+      data: { labelgridId: String(lgReleaseId) },
+    });
+
     await uploadReleasePhoto(
       lgReleaseId,
       new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
       artwork.filename
     );
 
-    const trackBody: Record<string, unknown> = {
-      release_id: lgReleaseId,
-      disc: 1,
-      track_num: track.trackNumber || 1,
-      composition_type: tMeta.compositionType || "original_composition",
-      audio_ai_usage: tMeta.audioAiUsage || "none",
-      composition_ai_usage: tMeta.compositionAiUsage || "none",
-      commercial_samples: tMeta.commercialSamples || "no",
-      audio_language: tMeta.audioLanguage || "en",
-      preferred_localization: locale,
-      explicit: tMeta.explicit || release.explicit,
-      recording_country: tMeta.recordingCountry || undefined,
-      isrc: track.isrc || undefined,
-      iswc: tMeta.iswc || undefined,
-      has_mechanical_license: tMeta.hasMechanicalLicense ?? undefined,
-      preview_start_time: tMeta.previewStartTime ?? undefined,
-      preview_length: tMeta.previewLength ?? undefined,
-      album_only: tMeta.albumOnly ?? undefined,
-      free_download: tMeta.freeDownload ?? undefined,
-      instant_gratification: tMeta.instantGratification ?? undefined,
-      cline_year: tMeta.clineYear ?? undefined,
-      cline_name: tMeta.clineName || undefined,
-      pline_year: tMeta.plineYear ?? undefined,
-      pline_name: tMeta.plineName || undefined,
-      titles: [{ iso_code: locale, text: track.title }],
-      artists: [
-        {
-          artist_id: lgArtistId,
-          artistic_role: artisticRole,
-          position: 1,
-        },
-      ],
-      contributors: lgContributors,
+    const ctx: TrackSyncContext = {
+      lgReleaseId,
+      lgArtistId,
+      locale,
+      artisticRole,
+      releaseExplicit: release.explicit,
+      releasePrimaryGenre: release.primaryGenre,
+      artist: release.artist,
     };
 
-    if (trackPrimaryGenreId) trackBody.primary_genre_id = trackPrimaryGenreId;
-    if (tMeta.mixVersion?.trim()) {
-      trackBody.mix_versions = [
-        { iso_code: locale, text: tMeta.mixVersion.trim() },
-      ];
-    }
-    if (tMeta.lyrics?.trim()) {
-      trackBody.lyrics = [{ iso_code: locale, text: tMeta.lyrics.trim() }];
+    const ordered = [...release.tracks].sort(
+      (a, b) => a.trackNumber - b.trackNumber
+    );
+    const trackIds: number[] = [];
+    const processingTrackIds: string[] = [];
+
+    for (const track of ordered) {
+      const lgTrackId = await ensureLabelGridTrack(track, ctx);
+      trackIds.push(lgTrackId);
+
+      const upload = audioByTrackId.get(track.id);
+      if (upload) {
+        const { processing } = await uploadAudioForTrack(
+          track,
+          lgTrackId,
+          upload
+        );
+        if (processing) processingTrackIds.push(track.id);
+      }
+      await syncTrackLicense(track, lgTrackId);
     }
 
-    const lgTrack = track.labelgridId
-      ? await (async () => {
-          // Track already on LabelGrid — metadata refresh only; audio uploaded below.
-          return { data: { id: Number(track.labelgridId) } };
-        })()
-      : await createTrack(trackBody);
-    const lgTrackId = unwrapId(lgTrack);
-
-    await uploadTrackStereoAudio(lgTrackId, {
-      buffer: audio.buffer,
-      filename: audio.filename,
-      mimeType: audio.mimeType,
+    await prisma.release.update({
+      where: { id: release.id },
+      data: { labelgridId: String(lgReleaseId), syncError: null },
     });
 
-    await prisma.$transaction([
-      prisma.release.update({
-        where: { id: release.id },
-        data: {
-          labelgridId: String(lgReleaseId),
-          syncError: null,
-        },
-      }),
-      prisma.track.update({
-        where: { id: track.id },
-        data: { labelgridId: String(lgTrackId) },
-      }),
-    ]);
-
-    return { ok: true, releaseId: lgReleaseId, trackId: lgTrackId };
+    return {
+      ok: true,
+      releaseId: lgReleaseId,
+      trackIds,
+      audioProcessing: processingTrackIds.length > 0,
+      processingTrackIds,
+    };
   } catch (error) {
     const message = formatLgError(error);
     console.error("[labelgrid/sync]", release.id, message);
@@ -431,18 +684,25 @@ export async function syncSubmittedReleaseToLabelGrid(
 }
 
 /**
- * Upload cover and/or stereo audio to LabelGrid via their API.
- * - No labelgridId yet → creates draft + uploads both files (requires artwork + audio).
- * - Existing draft → POST /releases/{id}/photo and/or track stereo upload-url flow.
+ * Upload cover and/or track audio to LabelGrid via their API.
+ * - No labelgridId yet → creates the draft (requires artwork + audio for
+ *   every track).
+ * - Existing draft → POST /releases/{id}/photo and/or per-track stereo
+ *   upload-url flow for each provided audio.
  */
 export async function pushMediaToLabelGrid(input: {
-  release: Release & { artist: Artist | null; tracks: Track[] };
+  release: ReleaseWithRels;
   artwork?: StoredUpload | null;
-  audio?: StoredUpload | null;
-  /** Local track id when uploading audio (defaults to first track). */
-  localTrackId?: string | null;
+  audios?: TrackAudioInput[];
 }): Promise<
-  | { ok: true; releaseId: number; trackId?: number; created: boolean }
+  | {
+      ok: true;
+      releaseId: number;
+      trackIds: number[];
+      created: boolean;
+      audioProcessing: boolean;
+      processingTrackIds: string[];
+    }
   | { ok: false; error: string }
 > {
   if (!isLabelGridLive()) {
@@ -452,40 +712,43 @@ export async function pushMediaToLabelGrid(input: {
     };
   }
 
-  const { release, artwork, audio } = input;
+  const { release, artwork } = input;
+  const audios = input.audios ?? [];
   const lgReleaseId = release.labelgridId ? Number(release.labelgridId) : NaN;
 
-  // First-time: create draft + upload both assets.
+  // First-time: create draft + upload available assets.
   if (!Number.isFinite(lgReleaseId)) {
-    if (!artwork || !audio) {
+    if (!artwork) {
       return {
         ok: false,
-        error:
-          "Need both cover artwork and audio in memory to create the LabelGrid draft.",
+        error: "Need cover artwork to create the LabelGrid draft.",
       };
     }
     const synced = await syncSubmittedReleaseToLabelGrid({
       release,
       artwork,
-      audio,
+      audios,
     });
     if (!synced.ok) return synced;
     return {
       ok: true,
       releaseId: synced.releaseId,
-      trackId: synced.trackId,
+      trackIds: synced.trackIds,
       created: true,
+      audioProcessing: synced.audioProcessing,
+      processingTrackIds: synced.processingTrackIds,
     };
   }
 
   try {
-    let lgTrackId: number | undefined;
-
-    if (!artwork && !audio) {
+    if (!artwork && audios.length === 0) {
       return {
         ok: true,
         releaseId: lgReleaseId,
+        trackIds: [],
         created: false,
+        audioProcessing: false,
+        processingTrackIds: [],
       };
     }
 
@@ -497,67 +760,39 @@ export async function pushMediaToLabelGrid(input: {
       );
     }
 
-    if (audio) {
-      const track =
-        (input.localTrackId
-          ? release.tracks.find((t) => t.id === input.localTrackId)
-          : release.tracks[0]) ?? null;
-      if (!track) {
-        return { ok: false, error: "No track found for audio upload." };
-      }
+    const trackIds: number[] = [];
+    const processingTrackIds: string[] = [];
 
-      if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
-        lgTrackId = Number(track.labelgridId);
-      } else {
-        // Track row exists locally but was never created on LabelGrid — create it.
-        if (!release.artist) {
-          return { ok: false, error: "Release has no artist to sync track." };
-        }
-        const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-        const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
-        const locale = rMeta.preferredLocalization || "en";
-        const artisticRole = rMeta.artisticRole || "MainArtist";
-        const lgArtistId = await ensureLabelGridArtist(release.artist);
-        const trackPrimaryGenreId = await resolveGenreId(
-          tMeta.primaryGenre ?? release.primaryGenre
+    if (audios.length > 0) {
+      if (!release.artist) {
+        return { ok: false, error: "Release has no artist to sync track." };
+      }
+      const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+      const ctx: TrackSyncContext = {
+        lgReleaseId,
+        lgArtistId: await ensureLabelGridArtist(release.artist),
+        locale: rMeta.preferredLocalization || "en",
+        artisticRole: rMeta.artisticRole || "MainArtist",
+        releaseExplicit: release.explicit,
+        releasePrimaryGenre: release.primaryGenre,
+        artist: release.artist,
+      };
+
+      for (const { localTrackId, upload } of audios) {
+        const track = release.tracks.find((t) => t.id === localTrackId);
+        if (!track) continue;
+
+        const lgTrackId = await ensureLabelGridTrack(track, ctx);
+        trackIds.push(lgTrackId);
+
+        const { processing } = await uploadAudioForTrack(
+          track,
+          lgTrackId,
+          upload
         );
-
-        const trackBody: Record<string, unknown> = {
-          release_id: lgReleaseId,
-          disc: 1,
-          track_num: track.trackNumber || 1,
-          composition_type: tMeta.compositionType || "original_composition",
-          audio_ai_usage: tMeta.audioAiUsage || "none",
-          composition_ai_usage: tMeta.compositionAiUsage || "none",
-          commercial_samples: tMeta.commercialSamples || "no",
-          audio_language: tMeta.audioLanguage || "en",
-          preferred_localization: locale,
-          explicit: tMeta.explicit || release.explicit,
-          isrc: track.isrc || undefined,
-          titles: [{ iso_code: locale, text: track.title }],
-          artists: [
-            {
-              artist_id: lgArtistId,
-              artistic_role: artisticRole,
-              position: 1,
-            },
-          ],
-        };
-        if (trackPrimaryGenreId) trackBody.primary_genre_id = trackPrimaryGenreId;
-
-        const lgTrack = await createTrack(trackBody);
-        lgTrackId = unwrapId(lgTrack);
-        await prisma.track.update({
-          where: { id: track.id },
-          data: { labelgridId: String(lgTrackId) },
-        });
+        if (processing) processingTrackIds.push(track.id);
+        await syncTrackLicense(track, lgTrackId);
       }
-
-      await uploadTrackStereoAudio(lgTrackId, {
-        buffer: audio.buffer,
-        filename: audio.filename,
-        mimeType: audio.mimeType,
-      });
     }
 
     await prisma.release.update({
@@ -571,8 +806,10 @@ export async function pushMediaToLabelGrid(input: {
     return {
       ok: true,
       releaseId: lgReleaseId,
-      trackId: lgTrackId,
+      trackIds,
       created: false,
+      audioProcessing: processingTrackIds.length > 0,
+      processingTrackIds,
     };
   } catch (error) {
     const message = formatLgError(error);
@@ -585,16 +822,28 @@ export async function pushMediaToLabelGrid(input: {
   }
 }
 
+/** Load every track's audio from local storage (null entries are dropped). */
+export async function loadAllTrackAudios(
+  tracks: Track[]
+): Promise<TrackAudioInput[]> {
+  const out: TrackAudioInput[] = [];
+  for (const track of tracks) {
+    const upload = await loadStoredUpload(track.audioUrl);
+    if (upload) out.push({ localTrackId: track.id, upload });
+  }
+  return out;
+}
+
 /**
  * Submit an already-synced LabelGrid draft into LG distribution review.
  * If local release has no labelgridId yet, syncs as draft first (with files).
  */
 export async function submitLabelGridDraftForReview(input: {
-  release: Release & { artist: Artist | null; tracks: Track[] };
+  release: ReleaseWithRels;
   artwork?: StoredUpload | null;
-  audio?: StoredUpload | null;
+  audios?: TrackAudioInput[];
 }): Promise<
-  | { ok: true; releaseId: number; trackId?: number }
+  | { ok: true; releaseId: number; trackIds: number[] }
   | { ok: false; error: string }
 > {
   if (!isLabelGridLive()) {
@@ -605,56 +854,61 @@ export async function submitLabelGridDraftForReview(input: {
   }
 
   const { release } = input;
-  let lgReleaseId = release.labelgridId
-    ? Number(release.labelgridId)
-    : NaN;
-  let lgTrackId = release.tracks[0]?.labelgridId
-    ? Number(release.tracks[0].labelgridId)
-    : undefined;
+  const audios = input.audios ?? [];
+  let lgReleaseId = release.labelgridId ? Number(release.labelgridId) : NaN;
+  let trackIds: number[] = release.tracks
+    .map((t) => (t.labelgridId ? Number(t.labelgridId) : NaN))
+    .filter((n) => Number.isFinite(n));
+
+  const expected = release.tracks.length;
 
   try {
     if (!Number.isFinite(lgReleaseId)) {
-      if (!input.artwork || !input.audio) {
+      if (!input.artwork || audios.length < expected) {
         return {
           ok: false,
           error:
-            "Release is not on LabelGrid yet. Upload cover art and audio (LabelGrid API), then approve again.",
+            "Release is not on LabelGrid yet and local files are incomplete. " +
+            "Upload cover art and audio for every track, then approve again.",
         };
       }
       const synced = await syncSubmittedReleaseToLabelGrid({
         release,
         artwork: input.artwork,
-        audio: input.audio,
+        audios,
       });
       if (!synced.ok) return synced;
       lgReleaseId = synced.releaseId;
-      lgTrackId = synced.trackId;
+      trackIds = synced.trackIds;
     } else {
-      // Draft exists on LabelGrid — verify media via GET release/tracks/files.
-      let mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
-      if (!isLabelGridDraftMediaReady(mediaStatus)) {
-        if (input.artwork || input.audio) {
-          const pushed = await pushMediaToLabelGrid({
-            release,
-            artwork: input.artwork,
-            audio: input.audio,
-            localTrackId: release.tracks[0]?.id,
-          });
-          if (!pushed.ok) return pushed;
-          lgTrackId = pushed.trackId ?? lgTrackId;
-          mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
-        }
+      // Draft exists on LabelGrid — refresh media if provided.
+      const mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
+      if (
+        !isLabelGridDraftMediaReady(mediaStatus, expected) &&
+        (input.artwork || audios.length > 0)
+      ) {
+        const pushed = await pushMediaToLabelGrid({
+          release,
+          artwork: input.artwork,
+          audios,
+        });
+        if (!pushed.ok) return pushed;
+        if (pushed.trackIds.length) trackIds = pushed.trackIds;
       }
+    }
 
-      if (!isLabelGridDraftMediaReady(mediaStatus)) {
-        const gaps = describeLabelGridMediaGaps(mediaStatus);
-        return {
-          ok: false,
-          error:
-            `LabelGrid draft is missing media: ${gaps.join("; ")}. ` +
-            "Re-upload in the release builder (uploads go to LabelGrid), then approve again.",
-        };
-      }
+    // Uniform gate before distribute: cover + stereo audio on EVERY track
+    // (also catches audio still processing after a fresh sync).
+    const mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
+    if (!isLabelGridDraftMediaReady(mediaStatus, expected)) {
+      const gaps = describeLabelGridMediaGaps(mediaStatus, expected);
+      return {
+        ok: false,
+        error:
+          `LabelGrid draft is missing media: ${gaps.join("; ")}. ` +
+          "If audio was just uploaded it may still be processing — try again shortly. " +
+          "Otherwise re-upload in the release builder, then approve again.",
+      };
     }
 
     // Best-effort validation before submit-for-review.
@@ -675,7 +929,7 @@ export async function submitLabelGridDraftForReview(input: {
       data: { syncError: null },
     });
 
-    return { ok: true, releaseId: lgReleaseId, trackId: lgTrackId };
+    return { ok: true, releaseId: lgReleaseId, trackIds };
   } catch (error) {
     const message = formatLgError(error);
     console.error("[labelgrid/submit-review]", release.id, message);

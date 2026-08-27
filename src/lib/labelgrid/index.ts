@@ -1,4 +1,8 @@
-import { labelgridFetch, labelgridUpload } from "@/lib/labelgrid/client";
+import {
+  labelgridFetch,
+  labelgridFetchRaw,
+  labelgridUpload,
+} from "@/lib/labelgrid/client";
 import type {
   ArtistData,
   FileData,
@@ -241,21 +245,76 @@ export function getTrackFileUploadUrl(
   );
 }
 
-export function storeTrackFile(
+/** Audio processing attempt from PUT file 202 / GET file-upload-attempts. */
+export type AudioUploadAttempt = {
+  id: string;
+  track_id: number;
+  file_type: "stereo" | "dolby";
+  status: "queued" | "processing" | "completed" | "failed" | "superseded";
+  status_url: string;
+  poll_after_seconds: number | null;
+  error: {
+    code: string;
+    message: string;
+    can_retry: boolean;
+  } | null;
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+};
+
+/**
+ * PUT /tracks/{track}/files/{fileType} — attach the uploaded S3 object.
+ * 201 → file stored synchronously; 202 → processing queued (poll the attempt).
+ */
+export async function storeTrackFile(
   trackId: number | string,
   fileType: "stereo" | "dolby" | "lyrics",
   body: { s3_key: string; checksum?: string | null }
-) {
-  return labelgridFetch<unknown>(`/tracks/${trackId}/files/${fileType}`, {
-    method: "PUT",
-    body,
-  });
+): Promise<{ queued: boolean; attempt: AudioUploadAttempt | null }> {
+  const { status, body: parsed } = await labelgridFetchRaw<unknown>(
+    `/tracks/${trackId}/files/${fileType}`,
+    { method: "PUT", body }
+  );
+  if (status === 202 && parsed && typeof parsed === "object") {
+    const attempt =
+      (parsed as { upload_attempt?: AudioUploadAttempt }).upload_attempt ??
+      null;
+    return { queued: true, attempt };
+  }
+  return { queued: false, attempt: null };
 }
 
+/** GET /tracks/{track}/file-upload-attempts/{uploadAttempt} */
+export function getAudioUploadStatus(
+  trackId: number | string,
+  uploadAttemptId: string
+) {
+  return labelgridFetch<AudioUploadAttempt>(
+    `/tracks/${trackId}/file-upload-attempts/${uploadAttemptId}`
+  );
+}
+
+export type StereoUploadResult = {
+  key: string;
+  /** true while LabelGrid is still processing the audio asynchronously. */
+  processing: boolean;
+  attemptId: string | null;
+};
+
+/**
+ * Full stereo upload flow per document.json:
+ * presigned upload-url → S3 PUT → PUT files/stereo {s3_key}.
+ * A 202 queued attempt is polled briefly; if still processing after the
+ * budget, returns processing=true so callers persist the attempt id and
+ * re-check later instead of failing.
+ */
 export async function uploadTrackStereoAudio(
   trackId: number | string,
-  file: { buffer: Buffer; filename: string; mimeType: string }
-) {
+  file: { buffer: Buffer; filename: string; mimeType: string },
+  opts: { pollBudgetMs?: number } = {}
+): Promise<StereoUploadResult> {
   const raw = await getTrackFileUploadUrl(trackId, "stereo", file.filename);
   const payload =
     raw && typeof raw === "object" && "data" in raw
@@ -283,8 +342,94 @@ export async function uploadTrackStereoAudio(
     );
   }
 
-  await storeTrackFile(trackId, "stereo", { s3_key: key });
-  return { key };
+  const stored = await storeTrackFile(trackId, "stereo", { s3_key: key });
+  if (!stored.queued || !stored.attempt) {
+    return { key, processing: false, attemptId: null };
+  }
+
+  const attemptId = stored.attempt.id;
+  const budget = opts.pollBudgetMs ?? 60_000;
+  const startedAt = Date.now();
+  let waitSec = Math.max(1, stored.attempt.poll_after_seconds ?? 3);
+
+  while (Date.now() - startedAt < budget) {
+    await new Promise((r) => setTimeout(r, waitSec * 1000));
+    const attempt = await getAudioUploadStatus(trackId, attemptId);
+    if (attempt.status === "completed") {
+      return { key, processing: false, attemptId };
+    }
+    if (attempt.status === "failed") {
+      const reason =
+        attempt.error?.message || "LabelGrid audio processing failed";
+      throw new Error(
+        `${reason}${attempt.error?.can_retry ? " — re-upload the audio to retry." : ""}`
+      );
+    }
+    if (attempt.status === "superseded") {
+      // A newer upload replaced this one; treat as done for this attempt.
+      return { key, processing: false, attemptId };
+    }
+    waitSec = Math.max(1, attempt.poll_after_seconds ?? waitSec);
+  }
+
+  return { key, processing: true, attemptId };
+}
+
+/** GET /territories — full distribution territory catalog. */
+export function listTerritories() {
+  return labelgridFetch<
+    Array<{
+      id: number;
+      name: string;
+      code2: string;
+      code3: string;
+      exclude_from_service: string | null;
+    }>
+  >("/territories");
+}
+
+/**
+ * POST /tracks/{track}/licenses — multipart license upload
+ * (required: file + type cover|sample; optional provider metadata).
+ */
+export async function uploadTrackLicense(
+  trackId: number | string,
+  input: {
+    buffer: Buffer;
+    filename: string;
+    mimeType: string;
+    type: "cover" | "sample";
+    licenseId?: string | null;
+    licenseProvider?: "licensing_agency" | "direct_from_publisher" | null;
+    licenseProviderName?: string | null;
+    originalTrackLink?: string | null;
+  }
+) {
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array(input.buffer)], {
+      type: input.mimeType || "application/octet-stream",
+    }),
+    input.filename
+  );
+  form.append("type", input.type);
+  if (input.licenseId) form.append("license_id", input.licenseId);
+  if (input.licenseProvider) {
+    form.append("license_provider", input.licenseProvider);
+  }
+  if (input.licenseProviderName) {
+    form.append("license_provider_name", input.licenseProviderName);
+  }
+  if (input.originalTrackLink) {
+    form.append("original_track_link", input.originalTrackLink);
+  }
+  return labelgridUpload<unknown>(`/tracks/${trackId}/licenses`, form);
+}
+
+/** GET /tracks/{track}/licenses */
+export function listTrackLicenses(trackId: number | string) {
+  return labelgridFetch<unknown>(`/tracks/${trackId}/licenses`);
 }
 
 /** GET /releases/{id}/quality-report — Preflight QC (optional add-on). */

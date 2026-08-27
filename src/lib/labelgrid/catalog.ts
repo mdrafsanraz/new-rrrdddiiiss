@@ -143,17 +143,48 @@ export async function listTracksForRelease(
   return rows;
 }
 
-export function isLabelGridDraftMediaReady(status: LabelGridMediaStatus): boolean {
-  return status.hasCover && status.tracks.some((t) => t.hasStereo);
+/**
+ * Draft is ready for distribute only when the cover is up and EVERY track
+ * has stereo audio (an album must not pass on one ready track). Pass
+ * expectedTrackCount to also catch tracks that never reached LabelGrid.
+ */
+export function isLabelGridDraftMediaReady(
+  status: LabelGridMediaStatus,
+  expectedTrackCount?: number
+): boolean {
+  if (!status.hasCover || status.tracks.length === 0) return false;
+  if (
+    typeof expectedTrackCount === "number" &&
+    status.tracks.length < expectedTrackCount
+  ) {
+    return false;
+  }
+  return status.tracks.every((t) => t.hasStereo);
 }
 
-export function describeLabelGridMediaGaps(status: LabelGridMediaStatus): string[] {
+export function describeLabelGridMediaGaps(
+  status: LabelGridMediaStatus,
+  expectedTrackCount?: number
+): string[] {
   const missing: string[] = [];
   if (!status.hasCover) missing.push("cover artwork is not on LabelGrid yet");
   if (!status.tracks.length) {
     missing.push("no tracks on LabelGrid yet");
-  } else if (!status.tracks.some((t) => t.hasStereo)) {
-    missing.push("stereo audio is not on LabelGrid yet");
+  } else {
+    if (
+      typeof expectedTrackCount === "number" &&
+      status.tracks.length < expectedTrackCount
+    ) {
+      missing.push(
+        `only ${status.tracks.length} of ${expectedTrackCount} tracks are on LabelGrid`
+      );
+    }
+    const withoutAudio = status.tracks.filter((t) => !t.hasStereo);
+    if (withoutAudio.length) {
+      missing.push(
+        `${withoutAudio.length} track${withoutAudio.length === 1 ? " is" : "s are"} missing stereo audio on LabelGrid`
+      );
+    }
   }
   return missing;
 }

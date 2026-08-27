@@ -5,7 +5,10 @@ import { prisma } from "@/lib/db";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { canUserEditRelease, isFinalRejection } from "@/lib/releases/status";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { pushMediaToLabelGrid } from "@/lib/labelgrid/sync-submit";
+import {
+  pushMediaToLabelGrid,
+  type TrackAudioInput,
+} from "@/lib/labelgrid/sync-submit";
 import {
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
@@ -17,6 +20,7 @@ import {
 import {
   saveArtwork,
   saveAudio,
+  saveGenericUpload,
   type StoredUpload,
 } from "@/lib/uploads/store";
 
@@ -45,6 +49,8 @@ const trackSchema = z.object({
   featuredArtistNames: z.array(z.string()).optional(),
   hasMechanicalLicense: z.boolean().optional(),
   lyrics: z.string().max(20000).optional().or(z.literal("")),
+  /** Cover/sample clearance doc type; file arrives as license_{clientId|id}. */
+  licenseType: z.enum(["cover", "sample"]).nullable().optional(),
   contributors: z
     .array(
       z.object({
@@ -239,7 +245,22 @@ export async function PATCH(request: Request, { params }: Params) {
           fields.contributors ??
           [];
 
+        // Preserve server-managed fields (license sync, audio attempts).
+        const prevTrackMeta = t.id
+          ? parseJsonObject<TrackMetadata>(
+              existing.tracks.find((x) => x.id === t.id)?.metadataJson
+            )
+          : ({} as TrackMetadata);
+
+        const licenseKey = `license_${t.clientId ?? t.id ?? index}`;
+        const licenseFile = form.get(licenseKey);
+        let licenseUpload: StoredUpload | null = null;
+        if (licenseFile instanceof File && licenseFile.size > 0) {
+          licenseUpload = await saveGenericUpload(user.id, licenseFile, "license");
+        }
+
         const tMeta: TrackMetadata = {
+          ...prevTrackMeta,
           mixVersion: t.mixVersion || undefined,
           compositionType: t.compositionType,
           audioAiUsage: t.audioAiUsage,
@@ -253,6 +274,12 @@ export async function PATCH(request: Request, { params }: Params) {
           contributors,
           featuredArtistNames: t.featuredArtistNames,
         };
+        if (t.licenseType !== undefined) tMeta.licenseType = t.licenseType;
+        if (licenseUpload) {
+          tMeta.licenseUrl = licenseUpload.publicUrl;
+          // New file → needs a fresh LabelGrid license upload.
+          tMeta.licenseSyncedAt = null;
+        }
 
         if (t.id) {
           const owned = existing.tracks.find((x) => x.id === t.id);
@@ -330,7 +357,7 @@ export async function PATCH(request: Request, { params }: Params) {
       actorUserId: user.id,
     });
 
-    const fresh = await prisma.release.findUnique({
+    let fresh = await prisma.release.findUnique({
       where: { id },
       include: {
         artist: true,
@@ -338,26 +365,27 @@ export async function PATCH(request: Request, { params }: Params) {
       },
     });
 
-    let labelgrid: { uploaded: boolean; error?: string } | undefined;
+    let labelgrid:
+      | { uploaded: boolean; error?: string; processingTrackIds?: string[] }
+      | undefined;
     if (
       fresh &&
       isLabelGridLive() &&
       (artworkUpload || audioUploads.size > 0)
     ) {
-      const firstTrack = fresh.tracks[0];
-      const audioUpload =
-        (firstTrack &&
-          [...audioUploads.values()].find((u) => u.publicUrl === firstTrack.audioUrl)) ??
-        [...audioUploads.values()][0] ??
-        null;
+      // Match each saved upload back to its (possibly newly created) track row.
+      const uploads = [...audioUploads.values()];
+      const audios: TrackAudioInput[] = fresh.tracks.flatMap((track) => {
+        const upload = uploads.find((u) => u.publicUrl === track.audioUrl);
+        return upload ? [{ localTrackId: track.id, upload }] : [];
+      });
       const pushResult = await pushMediaToLabelGrid({
         release: fresh,
         artwork: artworkUpload,
-        audio: audioUpload,
-        localTrackId: firstTrack?.id,
+        audios,
       });
       labelgrid = pushResult.ok
-        ? { uploaded: true }
+        ? { uploaded: true, processingTrackIds: pushResult.processingTrackIds }
         : { uploaded: false, error: pushResult.error };
       if (!pushResult.ok && !fresh.labelgridId) {
         await prisma.release.update({
@@ -367,6 +395,12 @@ export async function PATCH(request: Request, { params }: Params) {
           },
         });
       }
+      // Re-fetch so the response reflects the labelgridId + per-track audio
+      // processing state written during the push above.
+      fresh = await prisma.release.findUnique({
+        where: { id },
+        include: { artist: true, tracks: { orderBy: { trackNumber: "asc" } } },
+      });
     }
 
     return NextResponse.json({ release: fresh, labelgrid });

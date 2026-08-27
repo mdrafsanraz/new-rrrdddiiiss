@@ -124,7 +124,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   if (release.labelgridId && isLabelGridLive()) {
     try {
       const lgMedia = await getLabelGridMediaStatus(Number(release.labelgridId));
-      mediaReadyForLg = isLabelGridDraftMediaReady(lgMedia);
+      mediaReadyForLg = isLabelGridDraftMediaReady(lgMedia, release.tracks.length);
     } catch {
       mediaReadyForLg = Boolean(release.labelgridId) && artworkOnDisk && !needsAudio;
     }

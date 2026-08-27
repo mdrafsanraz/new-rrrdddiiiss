@@ -166,6 +166,16 @@ export type TrackMetadata = {
     lastName: string;
     roles: string[];
   }>;
+  /** Cover/sample clearance document (POST /tracks/{id}/licenses). */
+  licenseType?: "cover" | "sample" | null;
+  licenseUrl?: string | null;
+  /** Set once the license has been uploaded to LabelGrid. */
+  licenseSyncedAt?: string | null;
+  /** LabelGrid async audio processing (PUT stereo → 202 upload_attempt). */
+  audioUploadAttemptId?: string | null;
+  audioProcessing?: boolean;
+  /** Set when the upload_attempt resolved to status "failed". */
+  audioProcessingError?: string | null;
 };
 
 export function parseJsonObject<T extends object>(

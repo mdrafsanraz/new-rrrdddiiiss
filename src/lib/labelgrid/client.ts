@@ -22,10 +22,15 @@ type RequestOptions = {
   searchParams?: Record<string, string | number | undefined>;
 };
 
-export async function labelgridFetch<T>(
+/**
+ * Like labelgridFetch but also returns the HTTP status — needed where the
+ * OpenAPI contract branches on it (e.g. PUT track file: 201 stored vs
+ * 202 queued upload_attempt).
+ */
+export async function labelgridFetchRaw<T>(
   path: string,
   options: RequestOptions = {}
-): Promise<T> {
+): Promise<{ status: number; body: T }> {
   const token = getLabelGridToken();
   if (!token) {
     throw new LabelGridConfigError(
@@ -34,9 +39,7 @@ export async function labelgridFetch<T>(
   }
 
   const base = getLabelGridBaseUrl();
-  const url = new URL(
-    `${base}${path.startsWith("/") ? path : `/${path}`}`
-  );
+  const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
 
   if (options.searchParams) {
     for (const [key, value] of Object.entries(options.searchParams)) {
@@ -76,7 +79,15 @@ export async function labelgridFetch<T>(
     );
   }
 
-  return parsed as T;
+  return { status: res.status, body: parsed as T };
+}
+
+export async function labelgridFetch<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const { body } = await labelgridFetchRaw<T>(path, options);
+  return body;
 }
 
 /** Multipart upload (cover art, etc.) — do not set Content-Type manually. */

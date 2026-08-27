@@ -3,7 +3,11 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { pushMediaToLabelGrid } from "@/lib/labelgrid/sync-submit";
+import {
+  loadAllTrackAudios,
+  pushMediaToLabelGrid,
+  type TrackAudioInput,
+} from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import {
   canUserReplaceMedia,
@@ -138,6 +142,7 @@ export async function POST(request: Request, { params }: Params) {
       trackId?: number;
       created?: boolean;
       error?: string;
+      processingTrackIds?: string[];
     } = { uploaded: false };
 
     if (isLabelGridLive()) {
@@ -151,33 +156,34 @@ export async function POST(request: Request, { params }: Params) {
 
       if (forSync) {
         // Existing LG draft: upload only files from this request.
-        // New draft: need both artwork + audio (load the other from disk if needed).
+        // New draft: need artwork + audio for EVERY track (load from disk).
         let artwork: StoredUpload | null = artworkUpload;
-        let audio: StoredUpload | null = audioUpload;
+        let audios: TrackAudioInput[] =
+          audioUpload && updatedTrackId
+            ? [{ localTrackId: updatedTrackId, upload: audioUpload }]
+            : [];
 
         if (!forSync.labelgridId) {
           if (!artwork) artwork = await loadStoredUpload(forSync.artworkUrl);
-          if (!audio) {
-            const t =
-              forSync.tracks.find((tr) => tr.id === updatedTrackId) ??
-              forSync.tracks[0];
-            audio = t ? await loadStoredUpload(t.audioUrl) : null;
-          }
+          const fromDisk = await loadAllTrackAudios(
+            forSync.tracks.filter((t) => t.id !== updatedTrackId)
+          );
+          audios = [...audios, ...fromDisk];
         }
 
         const pushResult = await pushMediaToLabelGrid({
           release: forSync,
           artwork,
-          audio,
-          localTrackId: updatedTrackId,
+          audios,
         });
 
         if (pushResult.ok) {
           labelgrid = {
             uploaded: true,
             releaseId: pushResult.releaseId,
-            trackId: pushResult.trackId,
+            trackId: pushResult.trackIds[0],
             created: pushResult.created,
+            processingTrackIds: pushResult.processingTrackIds,
           };
         } else {
           labelgrid = { uploaded: false, error: pushResult.error };

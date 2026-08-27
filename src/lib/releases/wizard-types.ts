@@ -23,9 +23,14 @@ export type WizardTrack = {
   audioFile: File | null;
   audioUrl: string | null;
   audioDurationSec: number | null;
+  /** LabelGrid async audio processing (PUT stereo → 202 upload_attempt). */
+  audioProcessing: boolean;
+  audioProcessingError: string | null;
   /** Cover/sample license file for progressive disclosure */
   licenseFile: File | null;
   licenseType: "cover" | "sample" | null;
+  /** Already-saved license document (server storage; synced to LabelGrid). */
+  licenseUrl: string | null;
 };
 
 export type WizardState = {
@@ -83,8 +88,11 @@ export function newTrack(partial?: Partial<WizardTrack>): WizardTrack {
     audioFile: null,
     audioUrl: null,
     audioDurationSec: null,
+    audioProcessing: false,
+    audioProcessingError: null,
     licenseFile: null,
     licenseType: null,
+    licenseUrl: null,
     ...partial,
   };
 }
