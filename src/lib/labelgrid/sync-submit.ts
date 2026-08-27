@@ -559,20 +559,43 @@ async function ensureLabelGridTrack(
   track: Track,
   ctx: TrackSyncContext
 ): Promise<number> {
-  if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
-    const lgTrackId = Number(track.labelgridId);
-    const body = await buildTrackBody(track, ctx, { forUpdate: true });
-    await updateTrack(lgTrackId, body);
+  try {
+    if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
+      const lgTrackId = Number(track.labelgridId);
+      const body = await buildTrackBody(track, ctx, { forUpdate: true });
+      await updateTrack(lgTrackId, body);
+      return lgTrackId;
+    }
+    const body = await buildTrackBody(track, ctx);
+    const created = await createTrack(body);
+    const lgTrackId = unwrapId(created);
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { labelgridId: String(lgTrackId) },
+    });
     return lgTrackId;
+  } catch (error) {
+    // The roles-dict format is undocumented (no example anywhere in the
+    // spec) and has already been rejected in several shapes — log exactly
+    // what we sent and what the live catalog said so the next 422 in the
+    // server logs is self-explanatory instead of another guessing round.
+    if (error instanceof LabelGridApiError && error.status === 422) {
+      try {
+        const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+        const catalog = await loadContributorRoles();
+        console.error(
+          "[labelgrid/track-422-debug]",
+          JSON.stringify({
+            selectedRoleLabels: tMeta.contributors?.map((c) => c.roles),
+            contributorRolesCatalog: catalog.slice(0, 40),
+          })
+        );
+      } catch {
+        // Diagnostics must never mask the original error.
+      }
+    }
+    throw error;
   }
-  const body = await buildTrackBody(track, ctx);
-  const created = await createTrack(body);
-  const lgTrackId = unwrapId(created);
-  await prisma.track.update({
-    where: { id: track.id },
-    data: { labelgridId: String(lgTrackId) },
-  });
-  return lgTrackId;
 }
 
 /**
