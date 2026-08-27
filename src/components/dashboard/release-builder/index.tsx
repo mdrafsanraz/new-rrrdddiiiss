@@ -863,6 +863,9 @@ export function ReleaseBuilder({
     : { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const };
   const stepMeta = WIZARD_STEPS[state.step];
   const artist = artists.find((a) => a.id === state.artistId);
+  const hasPendingAudioUpload = state.tracks.some((t) => t.audioFile);
+  const showAudioUploadProgress =
+    continuing && state.step === STEP_CREDITS && hasPendingAudioUpload;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
@@ -919,6 +922,29 @@ export function ReleaseBuilder({
             </button>
           </div>
         </div>
+
+        {showAudioUploadProgress ? (
+          <div className="space-y-1.5" role="status" aria-live="polite">
+            <p className="text-xs font-medium text-muted-foreground">
+              Uploading audio to your distributor…
+            </p>
+            <div className="relative h-1.5 w-full overflow-hidden bg-muted">
+              {reduceMotion ? (
+                <div className="absolute inset-y-0 left-0 w-2/5 bg-primary" />
+              ) : (
+                <motion.div
+                  className="absolute inset-y-0 w-2/5 bg-primary"
+                  animate={{ left: ["-40%", "100%"] }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
 
         {error ? (
           <div
