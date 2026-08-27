@@ -33,6 +33,7 @@ import {
 import { loadStoredUpload, type ValidatedFile } from "@/lib/uploads/store";
 import {
   parseJsonObject,
+  WRITER_SPLIT_ROLE_ALLOWLIST,
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
@@ -482,21 +483,36 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
   publishers: TrackSyncContext["publishers"];
 }> {
   // Writer-split roles resolve against the LIVE GET /contributor-roles
-  // catalog, restricted to the "Composition & Lyrics" category — the
-  // sandbox accepted Composer/Songwriter (that category) as writer roles
-  // while rejecting Producer/Artist (other categories) and any raw
-  // non-catalog string. Nothing is hardcoded; a label that doesn't resolve
-  // to a C&L catalog row is dropped rather than guessed.
+  // catalog, then narrowed to WRITER_SPLIT_ROLE_ALLOWLIST (Composer,
+  // Lyricist). This is narrower than "Composition & Lyrics category" —
+  // confirmed against the live API: a writers[] payload with roles
+  // {Composer, Lyricist, Songwriter, Arranger} was accepted for indices
+  // 0/1 and rejected ("The selected writer role is not valid.") for
+  // Songwriter/Arranger at indices 2/3, even though all four belong to
+  // that same catalog category. Every row still has to exist in the live
+  // catalog (nothing hardcoded that isn't first resolved against it) — the
+  // allowlist only narrows which of the live rows are offered to writers.
+  const writerAllowlist = new Set(
+    WRITER_SPLIT_ROLE_ALLOWLIST.map((r) => r.toLowerCase())
+  );
   const writers: TrackSyncContext["writers"] = [];
   for (const w of rMeta.writerSplits ?? []) {
     if (!w.writerId || !w.roles?.length) continue;
     const resolved = await Promise.all(
       w.roles.map((label) => resolveContributorRole(label))
     );
+    const dropped = w.roles.filter(
+      (label, i) => !resolved[i] || !writerAllowlist.has(label.trim().toLowerCase())
+    );
+    if (dropped.length > 0) {
+      console.log(
+        "[labelgrid/writer-roles] dropped stale/ineligible writer roles",
+        JSON.stringify({ writerId: w.writerId, dropped })
+      );
+    }
     const rows = resolved.filter(
       (r): r is ContributorRoleRow =>
-        Boolean(r) &&
-        (r!.category ?? "").trim().toLowerCase() === "composition & lyrics"
+        Boolean(r) && writerAllowlist.has(r!.display_value.trim().toLowerCase())
     );
     const roles = rolesDictFromRows(rows);
     if (Object.keys(roles).length === 0) continue;

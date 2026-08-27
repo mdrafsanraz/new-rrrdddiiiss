@@ -108,6 +108,24 @@ export const PRIMARY_GENRES = [
 // Contributor roles are never hardcoded — the Credits step fetches
 // LabelGrid's live catalog via GET /api/labelgrid/contributor-roles.
 
+/**
+ * Publishing-split (track `writers[].roles`) eligibility is narrower than
+ * the "Composition & Lyrics" catalog category — confirmed against the live
+ * API, not guessed. A writers[] payload with roles {Composer, Lyricist,
+ * Songwriter, Arranger} came back with:
+ *   writers.0.roles.2 ("Songwriter") → "The selected writer role is not valid."
+ *   writers.0.roles.3 ("Arranger")   → "The selected writer role is not valid."
+ * while Composer/Lyricist (indices 0/1) were accepted. So even though
+ * Songwriter/Arranger belong to the same catalog category, LabelGrid's
+ * track validator rejects them specifically for writers[]. This list is
+ * still matched against the live catalog (never sent unless the catalog
+ * actually returns that display_value) — it only narrows which of the
+ * live roles are OFFERED/ACCEPTED for a publishing split. "Songwriter"
+ * remains available as a contributor role, just not as a writer-split role,
+ * and is never auto-expanded into Composer + Lyricist.
+ */
+export const WRITER_SPLIT_ROLE_ALLOWLIST = ["Composer", "Lyricist"] as const;
+
 export type ContributorDraft = {
   id: string;
   /** LabelGrid writer id when picked from the live catalog (GET /writers). */

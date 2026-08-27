@@ -21,7 +21,10 @@ import { Plus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
-import type { ContributorDraft } from "@/lib/releases/constants";
+import {
+  WRITER_SPLIT_ROLE_ALLOWLIST,
+  type ContributorDraft,
+} from "@/lib/releases/constants";
 import {
   newContributor,
   newPublisherSplit,
@@ -59,20 +62,24 @@ function groupRolesByCategory(items: ContributorRole[]): RoleGroup[] {
 }
 
 /**
- * The ONLY category-level rule this step encodes, and it isn't a guess: the
- * sandbox's own 422s pinned it down — roles from "Composition & Lyrics"
- * (Composer, Songwriter, …) pass writer-split validation, roles from
- * "Performer" or "Production & Engineering" (Artist, Producer, …) don't.
- * Every role NAME still comes from the live catalog; this only decides
- * which category group is offered to writer splits vs. contributors.
+ * Publishing-split roles are narrower than the "Composition & Lyrics"
+ * catalog category — confirmed against the live API, not guessed: a
+ * writers[] payload with {Composer, Lyricist, Songwriter, Arranger} was
+ * accepted for Composer/Lyricist and rejected ("The selected writer role
+ * is not valid.") for Songwriter/Arranger, even though all four share that
+ * category. See WRITER_SPLIT_ROLE_ALLOWLIST. Every role NAME still comes
+ * from the live catalog — this only narrows which of the live rows are
+ * offered for a writer split; "Songwriter" stays available as a
+ * contributor role.
  */
-const WRITER_ELIGIBLE_CATEGORY = "composition & lyrics";
-
 export function pickWriterSplitRoles(
   catalog: CatalogState<ContributorRole>
 ): ContributorRole[] {
-  return catalog.items.filter(
-    (r) => (r.category ?? "").trim().toLowerCase() === WRITER_ELIGIBLE_CATEGORY
+  const allowlist = new Set(
+    WRITER_SPLIT_ROLE_ALLOWLIST.map((r) => r.toLowerCase())
+  );
+  return catalog.items.filter((r) =>
+    allowlist.has(r.display_value.trim().toLowerCase())
   );
 }
 
@@ -389,8 +396,8 @@ export function StepCredits({
               <span className="text-destructive">· Required</span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Writer shares of the composition — roles are restricted to
-              LabelGrid&rsquo;s composition/songwriting category. Totals must
+              Writer shares of the composition — LabelGrid only accepts
+              Composer and/or Lyricist for a publishing split. Totals must
               equal 100%.
             </p>
           </div>
@@ -476,7 +483,7 @@ export function StepCredits({
                 groups={writerGroups}
                 selected={w.roles}
                 scope="writer-split"
-                emptyLabel="No composition/songwriting roles returned by LabelGrid yet."
+                emptyLabel="Composer/Lyricist roles not available from LabelGrid yet."
                 onToggle={(role) =>
                   setState((prev) => ({
                     ...prev,
