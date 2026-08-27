@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
 import {
@@ -132,14 +133,17 @@ function TrackLicenseUpload({
             {hasFile ? "Replace" : "Upload"}
           </Button>
           {track.licenseFile ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-9 px-2 text-destructive"
-              onClick={() => onFile(null)}
-            >
-              <Trash size={16} weight="regular" aria-hidden />
-            </Button>
+            <Tooltip content="Remove file">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-9 px-2 text-destructive"
+                aria-label="Remove file"
+                onClick={() => onFile(null)}
+              >
+                <Trash size={16} weight="regular" aria-hidden />
+              </Button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
@@ -252,22 +256,24 @@ export function StepTracks({
                 Edit
               </Button>
               {state.contentType !== "Single" && state.tracks.length > 1 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 px-2 text-destructive"
-                  aria-label="Remove track"
-                  onClick={() =>
-                    setState((prev) => ({
-                      ...prev,
-                      tracks: prev.tracks.filter(
-                        (x) => x.clientId !== t.clientId
-                      ),
-                    }))
-                  }
-                >
-                  <Trash size={16} />
-                </Button>
+                <Tooltip content="Remove track">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-2 text-destructive"
+                    aria-label="Remove track"
+                    onClick={() =>
+                      setState((prev) => ({
+                        ...prev,
+                        tracks: prev.tracks.filter(
+                          (x) => x.clientId !== t.clientId
+                        ),
+                      }))
+                    }
+                  >
+                    <Trash size={16} />
+                  </Button>
+                </Tooltip>
               ) : null}
             </div>
 

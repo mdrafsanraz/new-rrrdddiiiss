@@ -26,6 +26,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { WIZARD_STEPS } from "@/lib/releases/wizard-types";
 
@@ -736,14 +737,16 @@ export function EntityPicker({
     return (
       <span className="inline-flex items-center gap-2 border border-border bg-muted px-3 py-2 text-sm font-medium">
         {selectedLabel}
-        <button
-          type="button"
-          aria-label="Change selection"
-          className="cursor-pointer text-muted-foreground hover:text-foreground"
-          onClick={onClear}
-        >
-          <X size={14} weight="bold" />
-        </button>
+        <Tooltip content="Change selection">
+          <button
+            type="button"
+            aria-label="Change selection"
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+            onClick={onClear}
+          >
+            <X size={14} weight="bold" />
+          </button>
+        </Tooltip>
       </span>
     );
   }
