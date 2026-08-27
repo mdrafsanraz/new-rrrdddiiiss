@@ -94,9 +94,11 @@ function TrackAudioDropzone({
 function TrackLicenseUpload({
   track,
   onFile,
+  onOriginalTrackLinkChange,
 }: {
   track: WizardTrack;
   onFile: (file: File | null) => void;
+  onOriginalTrackLinkChange: (value: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const label =
@@ -108,7 +110,7 @@ function TrackLicenseUpload({
   const hasFile = Boolean(track.licenseFile || track.licenseUrl);
 
   return (
-    <div className="border border-border bg-background px-4 py-3">
+    <div className="space-y-3 border border-border bg-background px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-foreground">{label}</p>
@@ -151,6 +153,31 @@ function TrackLicenseUpload({
           e.target.value = "";
         }}
       />
+
+      {track.licenseType === "cover" ? (
+        <div className="grid gap-1.5">
+          <label
+            htmlFor={`original-track-link-${track.clientId}`}
+            className="text-sm font-medium text-foreground"
+          >
+            Link to original recording{" "}
+            <span className="text-destructive">*</span>
+          </label>
+          <input
+            id={`original-track-link-${track.clientId}`}
+            type="url"
+            required
+            value={track.originalTrackLink ?? ""}
+            onChange={(e) => onOriginalTrackLinkChange(e.target.value)}
+            placeholder="https://open.spotify.com/track/..."
+            className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+          />
+          <p className="text-xs text-muted-foreground">
+            Required by LabelGrid for cover licenses — a streaming or store
+            link to the original track being covered.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -442,6 +469,9 @@ export function StepTracks({
                     track={t}
                     onFile={(file) =>
                       updateTrack(t.clientId, { licenseFile: file })
+                    }
+                    onOriginalTrackLinkChange={(value) =>
+                      updateTrack(t.clientId, { originalTrackLink: value })
                     }
                   />
                 ) : null}

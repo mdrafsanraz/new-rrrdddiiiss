@@ -249,6 +249,11 @@ export type TrackMetadata = {
   /** Cover/sample clearance document (POST /tracks/{id}/licenses). */
   licenseType?: "cover" | "sample" | null;
   licenseUrl?: string | null;
+  /**
+   * Required by LabelGrid for cover licenses specifically (not sample) —
+   * a link to the original recording being covered.
+   */
+  originalTrackLink?: string | null;
   /** Set once the license has been uploaded to LabelGrid. */
   licenseSyncedAt?: string | null;
   /** LabelGrid async audio processing (PUT stereo → 202 upload_attempt). */

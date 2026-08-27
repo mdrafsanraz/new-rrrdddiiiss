@@ -61,6 +61,8 @@ const trackSchema = z.object({
   lyrics: z.string().max(20000).optional().or(z.literal("")),
   /** Cover/sample clearance doc type; file arrives as license_{clientId|id}. */
   licenseType: z.enum(["cover", "sample"]).nullable().optional(),
+  /** Required by LabelGrid for cover licenses only — link to the original recording. */
+  originalTrackLink: z.string().trim().max(2048).nullable().optional(),
   contributors: z.array(contributorSchema).optional(),
 });
 
@@ -309,6 +311,14 @@ export async function PATCH(request: Request, { params }: Params) {
           featuredArtistNames: t.featuredArtistNames,
         };
         if (t.licenseType !== undefined) tMeta.licenseType = t.licenseType;
+        if (t.originalTrackLink !== undefined) {
+          const nextLink = t.originalTrackLink?.trim() || null;
+          if (nextLink !== (tMeta.originalTrackLink ?? null)) {
+            // Link changed — needs a fresh LabelGrid license upload.
+            tMeta.licenseSyncedAt = null;
+          }
+          tMeta.originalTrackLink = nextLink;
+        }
         if (licenseUpload) {
           tMeta.licenseUrl = licenseUpload.publicUrl;
           // New file → needs a fresh LabelGrid license upload.

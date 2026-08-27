@@ -167,6 +167,9 @@ function validateStep(
       if (!t.audioFile && !t.audioUrl) {
         return `Please upload audio for “${t.title.trim() || `track ${i + 1}`}”.`;
       }
+      if (t.licenseType === "cover" && !t.originalTrackLink?.trim()) {
+        return `Please add a link to the original recording for “${t.title.trim() || `track ${i + 1}`}” (required for cover licenses).`;
+      }
     }
     return null;
   }
@@ -313,6 +316,7 @@ function buildPayload(state: WizardState) {
     hasMechanicalLicense: t.hasMechanicalLicense,
     lyrics: t.lyrics,
     licenseType: t.licenseType,
+    originalTrackLink: t.originalTrackLink,
     contributors: validContributors,
   }));
 
@@ -596,6 +600,8 @@ export function ReleaseBuilder({
                     audioProcessingError: tMeta.audioProcessingError ?? null,
                     licenseFile: null,
                     licenseUrl: tMeta.licenseUrl ?? existing.licenseUrl,
+                    originalTrackLink:
+                      tMeta.originalTrackLink ?? existing.originalTrackLink,
                   };
                 }
               )

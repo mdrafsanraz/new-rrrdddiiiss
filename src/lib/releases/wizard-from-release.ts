@@ -55,6 +55,7 @@ export function wizardStateFromRelease(
             licenseFile: null,
             licenseType: tMeta.licenseType ?? null,
             licenseUrl: tMeta.licenseUrl ?? null,
+            originalTrackLink: tMeta.originalTrackLink ?? null,
           });
         })
       : [newTrack()];

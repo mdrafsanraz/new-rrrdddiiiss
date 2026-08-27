@@ -805,6 +805,11 @@ async function syncTrackLicense(track: Track, lgTrackId: number): Promise<void> 
     filename: file.filename,
     mimeType: file.mimeType,
     type: tMeta.licenseType,
+    // LabelGrid requires this specifically for cover licenses (confirmed
+    // via live 422: "The link to original track is required for cover
+    // licenses.") — never sent for sample licenses, where it doesn't apply.
+    originalTrackLink:
+      tMeta.licenseType === "cover" ? tMeta.originalTrackLink?.trim() || null : null,
   });
 
   tMeta.licenseSyncedAt = new Date().toISOString();

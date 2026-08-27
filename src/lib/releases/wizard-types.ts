@@ -39,6 +39,12 @@ export type WizardTrack = {
   licenseType: "cover" | "sample" | null;
   /** Already-saved license document (server storage; synced to LabelGrid). */
   licenseUrl: string | null;
+  /**
+   * URL to the original recording — LabelGrid requires this for cover
+   * licenses specifically (confirmed via live 422:
+   * "The link to original track is required for cover licenses.").
+   */
+  originalTrackLink: string | null;
 };
 
 export type WizardState = {
@@ -109,6 +115,7 @@ export function newTrack(partial?: Partial<WizardTrack>): WizardTrack {
     licenseFile: null,
     licenseType: null,
     licenseUrl: null,
+    originalTrackLink: null,
     ...partial,
   };
 }
