@@ -126,6 +126,16 @@ export const PRIMARY_GENRES = [
  */
 export const WRITER_SPLIT_ROLE_ALLOWLIST = ["Composer", "Lyricist"] as const;
 
+/**
+ * Roles preselected when a new contributor is added — a UI convenience
+ * default only, never a required set (validateStep's category-coverage
+ * check is the actual requirement). Still resolved against the live
+ * GET /contributor-roles catalog before use, exactly like every other role
+ * value in this app — if the live catalog doesn't have one of these three,
+ * it's simply not preselected rather than sent unresolved.
+ */
+export const DEFAULT_CONTRIBUTOR_ROLES = ["Artist", "Lyricist", "Producer"] as const;
+
 export type ContributorDraft = {
   id: string;
   /** LabelGrid writer id when picked from the live catalog (GET /writers). */
@@ -136,6 +146,15 @@ export type ContributorDraft = {
   roles: string[];
   /** LabelGrid AiContributionEnum: none | partly | all. */
   aiContribution?: "none" | "partly" | "all";
+  /**
+   * Client-only bookkeeping (never sent to the server): whether
+   * DEFAULT_CONTRIBUTOR_ROLES has already been resolved onto this
+   * contributor. Lets the Credits step backfill defaults once the live
+   * catalog loads (this contributor may have been created before that
+   * finished) without ever re-applying them after the user removes a
+   * default role on purpose.
+   */
+  defaultsApplied?: boolean;
 };
 
 /** Publishing split for LabelGrid's track `writers` array. */

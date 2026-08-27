@@ -113,15 +113,24 @@ export function newTrack(partial?: Partial<WizardTrack>): WizardTrack {
   };
 }
 
-export function newContributor(): ContributorDraft {
+export function newContributor(
+  defaultRoles: string[] = [],
+  catalogLoaded = false
+): ContributorDraft {
   return {
     id: crypto.randomUUID(),
     writerId: null,
     firstName: "",
     lastName: "",
-    // No default roles — only the live LabelGrid catalog may supply labels.
-    roles: [],
+    // Caller resolves defaultRoles against the live catalog first — this
+    // factory never invents a label on its own.
+    roles: defaultRoles,
     aiContribution: "none",
+    // False only when the catalog wasn't loaded yet at creation time, so
+    // the Credits step's backfill effect fills defaults in once it is.
+    // True whenever the catalog WAS consulted, even if it resolved to no
+    // roles — otherwise the backfill effect would retry forever.
+    defaultsApplied: catalogLoaded,
   };
 }
 

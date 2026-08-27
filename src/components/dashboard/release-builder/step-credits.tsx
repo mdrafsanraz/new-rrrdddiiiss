@@ -16,12 +16,13 @@
  * role name is ever offered unless this catalog actually returned it.
  */
 
-import { useEffect, useMemo } from "react";
-import { Plus } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_CONTRIBUTOR_ROLES,
   WRITER_SPLIT_ROLE_ALLOWLIST,
   type ContributorDraft,
 } from "@/lib/releases/constants";
@@ -49,7 +50,7 @@ type RoleGroup = { category: string; roles: ContributorRole[] };
 function groupRolesByCategory(items: ContributorRole[]): RoleGroup[] {
   const map = new Map<string, ContributorRole[]>();
   for (const r of items) {
-    const key = r.category?.trim() || "Uncategorized";
+    const key = r.category?.trim() || "Other";
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(r);
   }
@@ -59,6 +60,20 @@ function groupRolesByCategory(items: ContributorRole[]): RoleGroup[] {
   return [...map.entries()]
     .map(([category, roles]) => ({ category, roles }))
     .sort((a, b) => a.category.localeCompare(b.category));
+}
+
+/**
+ * Resolve DEFAULT_CONTRIBUTOR_ROLES against the live catalog, preserving
+ * the catalog's own casing/spelling — a name that isn't actually in the
+ * live response is simply skipped rather than sent unresolved.
+ */
+function resolveDefaultRoles(items: ContributorRole[]): string[] {
+  const byLower = new Map(
+    items.map((r) => [r.display_value.trim().toLowerCase(), r.display_value])
+  );
+  return DEFAULT_CONTRIBUTOR_ROLES.map((name) =>
+    byLower.get(name.toLowerCase())
+  ).filter((v): v is string => Boolean(v));
 }
 
 /**
@@ -171,6 +186,133 @@ function RoleGroupPicker({
   );
 }
 
+/** A selected contributor role, shown as a removable tag. */
+function SelectedRoleChip({
+  role,
+  onRemove,
+}: {
+  role: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+      {role}
+      <button
+        type="button"
+        aria-label={`Remove ${role}`}
+        onClick={onRemove}
+        className="cursor-pointer hover:opacity-70"
+      >
+        <X size={12} weight="bold" aria-hidden />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * "+ Add role" trigger that opens a searchable, category-grouped dropdown
+ * of roles NOT already selected — the live catalog is fetched once by the
+ * parent step; this only filters/searches it client-side.
+ */
+function AddRoleDropdown({
+  catalog,
+  selected,
+  scope,
+  onAdd,
+}: {
+  catalog: CatalogState<ContributorRole>;
+  selected: string[];
+  scope: "contributor" | "writer-split";
+  onAdd: (role: ContributorRole) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const available = catalog.items.filter((r) => !selected.includes(r.display_value));
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? available.filter((r) => r.display_value.toLowerCase().includes(q))
+    : available;
+  const groups = groupRolesByCategory(filtered);
+
+  return (
+    <div ref={containerRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="cursor-pointer border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground"
+      >
+        + Add role
+      </button>
+      {open ? (
+        <div className="absolute z-20 mt-1 w-64 border border-border bg-card shadow-md">
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search roles"
+            className="h-9 w-full border-b border-border bg-background px-3 text-sm outline-none focus:border-primary"
+          />
+          <div className="max-h-56 overflow-y-auto py-1 text-sm">
+            {!catalog.loaded ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">
+                Loading roles…
+              </p>
+            ) : catalog.error ? (
+              <p className="px-3 py-2 text-xs text-destructive">{catalog.error}</p>
+            ) : groups.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">
+                {available.length === 0
+                  ? "All available roles added."
+                  : "No matching roles."}
+              </p>
+            ) : (
+              groups.map((g) => (
+                <div key={g.category}>
+                  <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {g.category}
+                  </p>
+                  {g.roles.map((r) => (
+                    <button
+                      key={r.display_value}
+                      type="button"
+                      title={r.description ?? undefined}
+                      className="block w-full cursor-pointer px-3 py-1.5 text-left hover:bg-muted"
+                      onClick={() => {
+                        logRoleSelection(scope, r);
+                        onAdd(r);
+                        setQuery("");
+                      }}
+                    >
+                      {r.display_value}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   const total = splitTotal(rows);
   const ok = Math.abs(total - 100) < 0.001;
@@ -200,11 +342,7 @@ export function StepCredits({
   // Contributors may hold ANY role LabelGrid returns — there's no category
   // restriction on a single contributor, only a coverage requirement across
   // all of them (enforced in validateStep). Writer splits are restricted to
-  // the one category the API has actually validated for that payload.
-  const contributorGroups = useMemo(
-    () => groupRolesByCategory(contributorRoles.items),
-    [contributorRoles.items]
-  );
+  // the allowlist the live API has actually validated for that payload.
   const writerEligibleRoles = useMemo(
     () => pickWriterSplitRoles(contributorRoles),
     [contributorRoles]
@@ -253,6 +391,26 @@ export function StepCredits({
     setState,
   ]);
 
+  // Backfill DEFAULT_CONTRIBUTOR_ROLES onto any contributor created before
+  // the live catalog finished loading (e.g. the wizard's initial row).
+  // Runs once per contributor — defaultsApplied flips true immediately
+  // after, whether or not any default actually resolved, so a user who
+  // deliberately removes all three default roles never sees them return.
+  useEffect(() => {
+    if (!contributorRoles.loaded) return;
+    const defaults = resolveDefaultRoles(contributorRoles.items);
+    setState((prev) => {
+      let changed = false;
+      const contributors = prev.contributors.map((c) => {
+        if (c.defaultsApplied) return c;
+        changed = true;
+        const roles = c.roles.length === 0 ? defaults : c.roles;
+        return { ...c, roles, defaultsApplied: true };
+      });
+      return changed ? { ...prev, contributors } : prev;
+    });
+  }, [contributorRoles.loaded, contributorRoles.items, setState]);
+
   return (
     <div className="space-y-5">
       {/* CONTRIBUTORS */}
@@ -275,7 +433,13 @@ export function StepCredits({
             onClick={() =>
               setState((prev) => ({
                 ...prev,
-                contributors: [...prev.contributors, newContributor()],
+                contributors: [
+                  ...prev.contributors,
+                  newContributor(
+                    resolveDefaultRoles(contributorRoles.items),
+                    contributorRoles.loaded
+                  ),
+                ],
               }))
             }
           >
@@ -323,25 +487,44 @@ export function StepCredits({
 
             <div className="grid gap-2">
               <p className="text-sm font-medium">Roles</p>
-              <RoleGroupPicker
-                catalog={contributorRoles}
-                groups={contributorGroups}
-                selected={c.roles}
-                scope="contributor"
-                emptyLabel="No contributor roles available from LabelGrid."
-                onToggle={(role) =>
-                  setState((prev) => ({
-                    ...prev,
-                    contributors: prev.contributors.map((x) => {
-                      if (x.id !== c.id) return x;
-                      const roles = x.roles.includes(role.display_value)
-                        ? x.roles.filter((r) => r !== role.display_value)
-                        : [...x.roles, role.display_value];
-                      return { ...x, roles };
-                    }),
-                  }))
-                }
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                {c.roles.map((role) => (
+                  <SelectedRoleChip
+                    key={role}
+                    role={role}
+                    onRemove={() =>
+                      setState((prev) => ({
+                        ...prev,
+                        contributors: prev.contributors.map((x) =>
+                          x.id === c.id
+                            ? { ...x, roles: x.roles.filter((r) => r !== role) }
+                            : x
+                        ),
+                      }))
+                    }
+                  />
+                ))}
+                <AddRoleDropdown
+                  catalog={contributorRoles}
+                  selected={c.roles}
+                  scope="contributor"
+                  onAdd={(role) =>
+                    setState((prev) => ({
+                      ...prev,
+                      contributors: prev.contributors.map((x) =>
+                        x.id === c.id && !x.roles.includes(role.display_value)
+                          ? { ...x, roles: [...x.roles, role.display_value] }
+                          : x
+                      ),
+                    }))
+                  }
+                />
+              </div>
+              {c.roles.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No roles selected yet — use “+ Add role” above.
+                </p>
+              ) : null}
             </div>
 
             <Field
