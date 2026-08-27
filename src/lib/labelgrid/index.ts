@@ -196,6 +196,27 @@ export function createWriter(body: {
   });
 }
 
+export function listPublishers(page = 1, perPage = 50, nameFilter?: string) {
+  return labelgridFetch<Paginated<{ id: number; name?: string | null }>>(
+    "/publishers",
+    {
+      searchParams: {
+        page,
+        per_page: perPage,
+        ...(nameFilter ? { "filter[name]": nameFilter } : {}),
+      },
+    }
+  );
+}
+
+/** POST /publishers — PublisherCreateData (only `name` is required). */
+export function createPublisher(body: { name: string }) {
+  return labelgridFetch<{ data: { id: number } }>("/publishers", {
+    method: "POST",
+    body,
+  });
+}
+
 export function listWriters(page = 1, perPage = 50, nameFilter?: string) {
   return labelgridFetch<Paginated<WriterData>>("/writers", {
     searchParams: {

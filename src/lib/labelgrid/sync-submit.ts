@@ -430,8 +430,64 @@ type TrackSyncContext = {
   artisticRole: string;
   releaseExplicit: string;
   releasePrimaryGenre: string | null;
+  /** Live LabelGrid genre id chosen in Step 1 (preferred over name lookup). */
+  releasePrimaryGenreId: number | null;
   artist: Artist;
+  /** LabelGrid track `writers` array (publishing splits), same for all tracks. */
+  writers: Array<{
+    writer_id: number;
+    roles: Record<string, string>;
+    percentage_share: number;
+  }>;
+  /** LabelGrid track `publishers` array, same for all tracks. */
+  publishers: Array<{
+    id: number;
+    regions: Record<string, string>;
+    percentage_share: number;
+  }>;
 };
+
+/**
+ * Resolve the Credits step's publishing splits into LabelGrid's track
+ * `writers` / `publishers` arrays. Splits missing a real LabelGrid id or
+ * a resolvable role are dropped (never guessed); percentage totals were
+ * validated client-side before the checkpoint sync.
+ */
+async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
+  writers: TrackSyncContext["writers"];
+  publishers: TrackSyncContext["publishers"];
+}> {
+  const writers: TrackSyncContext["writers"] = [];
+  for (const w of rMeta.writerSplits ?? []) {
+    if (!w.writerId || !w.roles?.length) continue;
+    const resolved = await Promise.all(
+      w.roles.map((label) => resolveContributorRole(label))
+    );
+    const rows = resolved.filter((r): r is ContributorRoleRow => Boolean(r));
+    const roles = rolesDictFromRows(rows);
+    if (Object.keys(roles).length === 0) continue;
+    writers.push({
+      writer_id: w.writerId,
+      roles,
+      percentage_share: w.share,
+    });
+  }
+
+  const publishers: TrackSyncContext["publishers"] = [];
+  if (!rMeta.selfPublished) {
+    for (const p of rMeta.publisherSplits ?? []) {
+      if (!p.publisherId) continue;
+      publishers.push({
+        id: p.publisherId,
+        // Spec: "*" means worldwide; same index-keyed dict shape as roles.
+        regions: { "0": "*" },
+        percentage_share: p.share,
+      });
+    }
+  }
+
+  return { writers, publishers };
+}
 
 async function buildTrackContributors(
   track: Track,
@@ -510,9 +566,11 @@ async function buildTrackBody(
   opts: { forUpdate?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
-  const trackPrimaryGenreId = await resolveGenreId(
-    tMeta.primaryGenre ?? ctx.releasePrimaryGenre
-  );
+  // Prefer the live genre id picked in Step 1; name lookup is only the
+  // legacy-draft fallback.
+  const trackPrimaryGenreId =
+    ctx.releasePrimaryGenreId ??
+    (await resolveGenreId(tMeta.primaryGenre ?? ctx.releasePrimaryGenre));
   const contributors = await buildTrackContributors(track, tMeta, ctx.artist);
 
   const body: Record<string, unknown> = {
@@ -557,6 +615,8 @@ async function buildTrackBody(
   if (tMeta.lyrics?.trim()) {
     body.lyrics = [{ iso_code: ctx.locale, text: tMeta.lyrics.trim() }];
   }
+  if (ctx.writers.length > 0) body.writers = ctx.writers;
+  if (ctx.publishers.length > 0) body.publishers = ctx.publishers;
 
   return body;
 }
@@ -703,11 +763,15 @@ async function buildReleaseBody(
     primary_genre_id: input.primaryGenreId,
     preferred_localization: input.locale,
     barcode_number: release.upc || undefined,
-    // Spec: release_date is UTC; date-only means midnight UTC. toISOString
-    // emits the canonical Z form.
-    release_date: release.releaseDate
-      ? release.releaseDate.toISOString()
-      : undefined,
+    // Spec: release_date is the ORIGINAL release date, interpreted as UTC
+    // (date-only means midnight UTC; toISOString emits the canonical Z
+    // form). For distributor transfers the user-entered original date wins
+    // over the planned date.
+    release_date: rMeta.originalReleaseDate
+      ? new Date(`${rMeta.originalReleaseDate}T00:00:00.000Z`).toISOString()
+      : release.releaseDate
+        ? release.releaseDate.toISOString()
+        : undefined,
     explicit: release.explicit,
     transfer_from_distributor: rMeta.transferFromDistributor || undefined,
     cline_year: rMeta.clineYear ?? undefined,
@@ -750,11 +814,14 @@ async function ensureLabelGridReleaseMetadata(
   }
 
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-  const [labelId, primaryGenreId, lgArtistId] = await Promise.all([
+  const [labelId, lgArtistId] = await Promise.all([
     resolveLabelId(),
-    requireGenreId(release.primaryGenre),
     ensureLabelGridArtist(release.artist),
   ]);
+  // Step 1 stores the live LabelGrid genre id; the name lookup only covers
+  // legacy drafts created before genres were fetched live.
+  const primaryGenreId =
+    rMeta.primaryGenreId ?? (await requireGenreId(release.primaryGenre));
 
   const locale = rMeta.preferredLocalization || "en";
   const artisticRole = rMeta.artisticRole || "MainArtist";
@@ -828,6 +895,9 @@ export async function syncReleaseToLabelGrid(input: {
     const { lgReleaseId, lgArtistId, locale, artisticRole } =
       await ensureLabelGridReleaseMetadata(release);
 
+    const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+    const splits = await buildSplitArrays(rMeta);
+
     const ctx: TrackSyncContext = {
       lgReleaseId,
       lgArtistId,
@@ -835,7 +905,10 @@ export async function syncReleaseToLabelGrid(input: {
       artisticRole,
       releaseExplicit: release.explicit,
       releasePrimaryGenre: release.primaryGenre,
+      releasePrimaryGenreId: rMeta.primaryGenreId ?? null,
       artist: release.artist!,
+      writers: splits.writers,
+      publishers: splits.publishers,
     };
 
     // Every local track must exist on LabelGrid before any asset upload is

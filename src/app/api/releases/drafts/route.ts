@@ -8,7 +8,6 @@ import { logReleaseActivity } from "@/lib/releases/activity";
 import {
   ARTWORK_AI_USAGE,
   CONTENT_TYPES,
-  PRIMARY_GENRES,
   makeCatalogCandidate,
   type ReleaseMetadata,
 } from "@/lib/releases/constants";
@@ -18,15 +17,17 @@ const schema = z.object({
   artistId: z.string().min(1),
   title: z.string().min(1).max(200).optional().or(z.literal("")),
   contentType: z.enum(["Single", "EP", "Album"]).default("Single"),
-  primaryGenre: z.string().optional(),
+  /** Live LabelGrid genre id + display name (GET /genres). */
+  primaryGenreId: z.number().int().positive().nullable().optional(),
+  primaryGenreName: z.string().max(120).optional().or(z.literal("")),
   releaseDate: z.string().optional().or(z.literal("")),
+  /** Original release date for distributor transfers. */
+  originalReleaseDate: z.string().optional().or(z.literal("")),
   upc: z.string().max(13).optional().or(z.literal("")),
   mixVersion: z.string().max(200).optional().or(z.literal("")),
   preferredLocalization: z.string().default("en"),
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).default("none"),
-  explicit: z.enum(["off", "on", "edited"]).default("off"),
   transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
-  secondaryGenre: z.string().optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
   clineName: z.string().optional().or(z.literal("")),
   plineYear: z.string().optional().or(z.literal("")),
@@ -50,8 +51,11 @@ async function allocateCatalogNumber(): Promise<string> {
 }
 
 /**
- * Create a local draft release (does not consume Free quota, does not submit
- * to LabelGrid review). Optional artwork upload.
+ * Checkpoint A (leaving Distribution): create the local mapping row AND the
+ * LabelGrid release in one shot — Steps 1+2 data combined into the first
+ * POST /releases. The local row stores ownership/mapping + cached display
+ * fields only; LabelGrid is the catalog source of truth. Does not consume
+ * Free quota and does not submit anything for review.
  */
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
     const title = fields.title?.trim() || "Untitled release";
     const year = new Date().getFullYear();
 
-    const meta: ReleaseMetadata & Record<string, unknown> = {
+    const meta: ReleaseMetadata = {
       mixVersion: fields.mixVersion || undefined,
       preferredLocalization: fields.preferredLocalization,
       artisticRole: "MainArtist",
@@ -92,8 +96,9 @@ export async function POST(request: Request) {
       clineName: fields.clineName || artist.name,
       plineYear: fields.plineYear ? Number(fields.plineYear) : year,
       plineName: fields.plineName || artist.name,
-      secondaryGenre: fields.secondaryGenre || undefined,
+      primaryGenreId: fields.primaryGenreId ?? null,
       transferFromDistributor: fields.transferFromDistributor || undefined,
+      originalReleaseDate: fields.originalReleaseDate || undefined,
       allStores: fields.allStores ?? true,
       selectedOutletKeys: fields.selectedOutletKeys ?? [],
       worldwide: fields.worldwide ?? true,
@@ -109,13 +114,8 @@ export async function POST(request: Request) {
         contentType: CONTENT_TYPES.includes(fields.contentType as never)
           ? fields.contentType
           : "Single",
-        primaryGenre:
-          fields.primaryGenre &&
-          (PRIMARY_GENRES as readonly string[]).includes(fields.primaryGenre)
-            ? fields.primaryGenre
-            : "Pop",
+        primaryGenre: fields.primaryGenreName?.trim() || null,
         artworkAiUsage: fields.artworkAiUsage,
-        explicit: fields.explicit,
         upc: fields.upc?.trim() || null,
         releaseDate: fields.releaseDate
           ? new Date(`${fields.releaseDate}T00:00:00.000Z`)
@@ -141,10 +141,6 @@ export async function POST(request: Request) {
       actorUserId: user.id,
     });
 
-    // Create the LabelGrid release right away (section 6: don't wait for
-    // the whole form) so cover art / audio have a release to attach to as
-    // soon as the user provides them. Artwork uploads straight to LabelGrid
-    // now — never staged on our own disk.
     let labelgrid: { synced: boolean; releaseId?: number; error?: string } = {
       synced: false,
     };

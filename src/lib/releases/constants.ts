@@ -120,6 +120,27 @@ export type ContributorDraft = {
   aiContribution?: "none" | "partly" | "all";
 };
 
+/** Publishing split for LabelGrid's track `writers` array. */
+export type WriterSplitDraft = {
+  id: string;
+  writerId?: number | null;
+  firstName: string;
+  lastName: string;
+  /** Role display_values from the live GET /contributor-roles catalog. */
+  roles: string[];
+  /** percentage_share 0..100; all rows must total 100. */
+  share: number;
+};
+
+/** Publisher split for LabelGrid's track `publishers` array (regions = worldwide). */
+export type PublisherSplitDraft = {
+  id: string;
+  publisherId?: number | null;
+  name: string;
+  /** percentage_share 0..100; all rows must total 100. */
+  share: number;
+};
+
 export type ReleaseMetadata = {
   mixVersion?: string;
   preferredLocalization?: string;
@@ -128,14 +149,33 @@ export type ReleaseMetadata = {
   clineName?: string;
   plineYear?: number | null;
   plineName?: string;
-  secondaryGenre?: string;
+  /** Live LabelGrid genre id (GET /genres) — the value actually sent. */
+  primaryGenreId?: number | null;
   /** Name of the previous distributor when this release is a transfer. */
   transferFromDistributor?: string;
+  /** Original release date (ISO yyyy-mm-dd) for transferred releases. */
+  originalReleaseDate?: string;
   allStores?: boolean;
   /** LabelGrid distro outlet slugs (the `key` field) — not numeric ids. */
   selectedOutletKeys?: string[];
   worldwide?: boolean;
   territoryCodes?: string[];
+  /** Publishing splits (LabelGrid track `writers`), applied to every track. */
+  writerSplits?: Array<{
+    writerId?: number | null;
+    firstName: string;
+    lastName: string;
+    roles: string[];
+    share: number;
+  }>;
+  /** Publisher splits (LabelGrid track `publishers`), applied to every track. */
+  publisherSplits?: Array<{
+    publisherId?: number | null;
+    name: string;
+    share: number;
+  }>;
+  /** True = no publisher / self-published: omit publishers entirely. */
+  selfPublished?: boolean;
 };
 
 export type TrackMetadata = {

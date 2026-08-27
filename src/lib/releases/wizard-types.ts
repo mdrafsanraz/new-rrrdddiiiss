@@ -1,9 +1,17 @@
 /**
  * Client-side draft shape for the 5-step Create Release wizard.
- * Maps to local DB + LabelGrid via /api/releases/drafts and submit.
+ * Order: Release → Distribution → Tracks → Credits → Review.
+ * Every field maps to a real LabelGrid field or a genuine RDISTRO need —
+ * no decorative state. Catalog values (genres, outlets, territories,
+ * contributor roles, writers, publishers) come from live LabelGrid
+ * fetches, never hardcoded lists.
  */
 
-import type { ContributorDraft } from "@/lib/releases/constants";
+import type {
+  ContributorDraft,
+  PublisherSplitDraft,
+  WriterSplitDraft,
+} from "@/lib/releases/constants";
 
 export type WizardTrack = {
   clientId: string;
@@ -36,39 +44,44 @@ export type WizardTrack = {
 export type WizardState = {
   releaseId: string | null;
   step: number;
-  // Step 1
+  // Step 1 — Release
   artworkFile: File | null;
   artworkUrl: string | null;
   artworkPreview: string | null;
+  artworkAiUsage: "none" | "some" | "material" | "all";
+  /** Transferring from another distributor? */
+  isTransfer: boolean;
+  transferFromDistributor: string;
+  /** Original release date (transfers) — sent as LabelGrid release_date. */
+  originalReleaseDate: string;
   title: string;
   artistId: string;
   contentType: "Single" | "EP" | "Album";
-  primaryGenre: string;
-  secondaryGenre: string;
+  mixVersion: string;
+  /** Live LabelGrid genre id + display name (GET /genres). */
+  primaryGenreId: number | null;
+  primaryGenreName: string;
   releaseDate: string;
   upc: string;
-  mixVersion: string;
   preferredLocalization: string;
-  artworkAiUsage: "none" | "some" | "material" | "all";
-  explicit: "off" | "on" | "edited";
-  /** Name of the previous distributor when this release is a transfer. */
-  transferFromDistributor: string;
   // Step 2 — Distribution
   allStores: boolean;
-  /** LabelGrid distro outlet slugs (the `key` field, e.g. "spotify") — not numeric ids. */
+  /** LabelGrid distro outlet key slugs (GET /distro-outlets). */
   selectedOutletKeys: string[];
   worldwide: boolean;
+  /** ISO alpha-2 codes from live GET /territories. */
   territoryCodes: string[];
   // Step 3 — Tracks
   tracks: WizardTrack[];
   // Step 4 — Credits
   contributors: ContributorDraft[];
+  writerSplits: WriterSplitDraft[];
+  publisherSplits: PublisherSplitDraft[];
+  selfPublished: boolean;
   clineYear: string;
   clineName: string;
   plineYear: string;
   plineName: string;
-  hasSamples: boolean;
-  isRemix: boolean;
   // Step 5 — Review
   rightsConfirmed: boolean;
 };
@@ -103,12 +116,32 @@ export function newTrack(partial?: Partial<WizardTrack>): WizardTrack {
 export function newContributor(): ContributorDraft {
   return {
     id: crypto.randomUUID(),
+    writerId: null,
     firstName: "",
     lastName: "",
-    // No default roles — the Credits step offers only LabelGrid's live
-    // contributor-role catalog, so nothing here can pre-select a label
-    // that may not actually exist in it.
+    // No default roles — only the live LabelGrid catalog may supply labels.
     roles: [],
+    aiContribution: "none",
+  };
+}
+
+export function newWriterSplit(share = 100): WriterSplitDraft {
+  return {
+    id: crypto.randomUUID(),
+    writerId: null,
+    firstName: "",
+    lastName: "",
+    roles: [],
+    share,
+  };
+}
+
+export function newPublisherSplit(share = 100): PublisherSplitDraft {
+  return {
+    id: crypto.randomUUID(),
+    publisherId: null,
+    name: "",
+    share,
   };
 }
 
@@ -119,3 +152,9 @@ export const WIZARD_STEPS = [
   { id: "credits", label: "Credits", title: "Credits & rights" },
   { id: "review", label: "Review", title: "Review your release" },
 ] as const;
+
+export const STEP_RELEASE = 0;
+export const STEP_DISTRIBUTION = 1;
+export const STEP_TRACKS = 2;
+export const STEP_CREDITS = 3;
+export const STEP_REVIEW = 4;

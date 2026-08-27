@@ -206,6 +206,7 @@ model User {
   internalNotesAuthored InternalNote[]   @relation("InternalNoteAuthor")
   takedownsRequested TakedownRequest[]   @relation("TakedownRequester")
   writerMappings   WriterMapping[]
+  publisherMappings PublisherMapping[]
 }
 
 /** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
@@ -259,6 +260,24 @@ model WriterMapping {
   labelgridId Int
   firstName   String
   lastName    String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, labelgridId])
+  @@index([userId])
+}
+
+/**
+ * Ownership mapping for LabelGrid publishers — same pattern as
+ * WriterMapping: the entity lives on LabelGrid, this row records which
+ * RDISTRO user created it (name cached for search/display only).
+ */
+model PublisherMapping {
+  id          String   @id @default(cuid())
+  userId      String
+  labelgridId Int
+  name        String
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

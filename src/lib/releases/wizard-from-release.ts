@@ -34,10 +34,7 @@ export function wizardStateFromRelease(
             compositionType:
               (tMeta.compositionType as WizardTrack["compositionType"]) ??
               "original_composition",
-            explicit:
-              (tMeta.explicit as WizardTrack["explicit"]) ??
-              (release.explicit as WizardTrack["explicit"]) ??
-              "off",
+            explicit: (tMeta.explicit as WizardTrack["explicit"]) ?? "off",
             audioAiUsage:
               (tMeta.audioAiUsage as WizardTrack["audioAiUsage"]) ?? "none",
             compositionAiUsage:
@@ -62,20 +59,38 @@ export function wizardStateFromRelease(
         })
       : [newTrack()];
 
-  const contributors =
-    release.tracks[0] &&
-    parseJsonObject<TrackMetadata>(release.tracks[0].metadataJson).contributors
-      ?.length
-      ? parseJsonObject<TrackMetadata>(release.tracks[0].metadataJson)
-          .contributors!.map((c) => ({
-            id: crypto.randomUUID(),
-            writerId: c.writerId ?? null,
-            firstName: c.firstName,
-            lastName: c.lastName,
-            roles: c.roles,
-            aiContribution: c.aiContribution ?? ("none" as const),
-          }))
-      : [newContributor()];
+  const firstTrackMeta = release.tracks[0]
+    ? parseJsonObject<TrackMetadata>(release.tracks[0].metadataJson)
+    : ({} as TrackMetadata);
+
+  const contributors = firstTrackMeta.contributors?.length
+    ? firstTrackMeta.contributors.map((c) => ({
+        id: crypto.randomUUID(),
+        writerId: c.writerId ?? null,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        roles: c.roles,
+        aiContribution: c.aiContribution ?? ("none" as const),
+      }))
+    : [newContributor()];
+
+  const writerSplits = (rMeta.writerSplits ?? []).map((w) => ({
+    id: crypto.randomUUID(),
+    writerId: w.writerId ?? null,
+    firstName: w.firstName,
+    lastName: w.lastName,
+    roles: w.roles,
+    share: w.share,
+  }));
+
+  const publisherSplits = (rMeta.publisherSplits ?? []).map((p) => ({
+    id: crypto.randomUUID(),
+    publisherId: p.publisherId ?? null,
+    name: p.name,
+    share: p.share,
+  }));
+
+  const year = String(new Date().getFullYear());
 
   return {
     releaseId: release.id,
@@ -83,33 +98,35 @@ export function wizardStateFromRelease(
     artworkFile: null,
     artworkUrl: release.artworkUrl,
     artworkPreview: release.artworkUrl,
+    artworkAiUsage:
+      (release.artworkAiUsage as WizardState["artworkAiUsage"]) ?? "none",
+    isTransfer: Boolean(rMeta.transferFromDistributor),
+    transferFromDistributor: rMeta.transferFromDistributor ?? "",
+    originalReleaseDate: rMeta.originalReleaseDate ?? "",
     title: release.title === "Untitled release" ? "" : release.title,
     artistId: release.artistId ?? "",
     contentType: (release.contentType as WizardState["contentType"]) ?? "Single",
-    primaryGenre: release.primaryGenre ?? "Pop",
-    secondaryGenre: rMeta.secondaryGenre ?? "",
+    mixVersion: rMeta.mixVersion ?? "",
+    primaryGenreId: rMeta.primaryGenreId ?? null,
+    primaryGenreName: release.primaryGenre ?? "",
     releaseDate: release.releaseDate
       ? release.releaseDate.toISOString().slice(0, 10)
       : "",
     upc: release.upc ?? "",
-    mixVersion: rMeta.mixVersion ?? "",
     preferredLocalization: rMeta.preferredLocalization ?? "en",
-    artworkAiUsage:
-      (release.artworkAiUsage as WizardState["artworkAiUsage"]) ?? "none",
-    explicit: (release.explicit as WizardState["explicit"]) ?? "off",
-    transferFromDistributor: rMeta.transferFromDistributor ?? "",
-    tracks,
-    contributors,
-    clineYear: rMeta.clineYear ? String(rMeta.clineYear) : String(new Date().getFullYear()),
-    clineName: rMeta.clineName ?? artistName,
-    plineYear: rMeta.plineYear ? String(rMeta.plineYear) : String(new Date().getFullYear()),
-    plineName: rMeta.plineName ?? artistName,
-    hasSamples: tracks.some((t) => t.commercialSamples !== "no"),
-    isRemix: false,
     allStores: rMeta.allStores ?? true,
     selectedOutletKeys: rMeta.selectedOutletKeys ?? [],
     worldwide: rMeta.worldwide ?? true,
     territoryCodes: rMeta.territoryCodes ?? [],
+    tracks,
+    contributors,
+    writerSplits,
+    publisherSplits,
+    selfPublished: rMeta.selfPublished ?? true,
+    clineYear: rMeta.clineYear ? String(rMeta.clineYear) : year,
+    clineName: rMeta.clineName ?? artistName,
+    plineYear: rMeta.plineYear ? String(rMeta.plineYear) : year,
+    plineName: rMeta.plineName ?? artistName,
     rightsConfirmed: false,
   };
 }

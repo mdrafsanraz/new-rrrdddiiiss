@@ -64,18 +64,33 @@ const trackSchema = z.object({
   contributors: z.array(contributorSchema).optional(),
 });
 
+const writerSplitSchema = z.object({
+  writerId: z.number().int().positive().nullable().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  roles: z.array(z.string()).min(1),
+  share: z.number().min(0).max(100),
+});
+
+const publisherSplitSchema = z.object({
+  publisherId: z.number().int().positive().nullable().optional(),
+  name: z.string().min(1),
+  share: z.number().min(0).max(100),
+});
+
 const schema = z.object({
   title: z.string().min(1).max(200).optional(),
   artistId: z.string().optional(),
   contentType: z.enum(["Single", "EP", "Album"]).optional(),
-  primaryGenre: z.string().optional(),
-  secondaryGenre: z.string().optional().or(z.literal("")),
+  /** Live LabelGrid genre id + display name (GET /genres). */
+  primaryGenreId: z.number().int().positive().nullable().optional(),
+  primaryGenreName: z.string().max(120).optional().or(z.literal("")),
   releaseDate: z.string().optional().nullable(),
+  originalReleaseDate: z.string().optional().or(z.literal("")),
   upc: z.string().max(13).optional().nullable(),
   mixVersion: z.string().optional().or(z.literal("")),
   preferredLocalization: z.string().optional(),
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).optional(),
-  explicit: z.enum(["off", "on", "edited"]).optional(),
   transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
   clineName: z.string().optional().or(z.literal("")),
@@ -87,6 +102,9 @@ const schema = z.object({
   territoryCodes: z.array(z.string()).optional(),
   tracks: z.array(trackSchema).optional(),
   contributors: z.array(contributorSchema).optional(),
+  writerSplits: z.array(writerSplitSchema).optional(),
+  publisherSplits: z.array(publisherSplitSchema).optional(),
+  selfPublished: z.boolean().optional(),
   /**
    * Wizard checkpoint: force a LabelGrid metadata sync (release/distribution
    * after the Distribution step, tracks/credits after the Credits step)
@@ -154,14 +172,26 @@ export async function PATCH(request: Request, { params }: Params) {
       ...(fields.preferredLocalization
         ? { preferredLocalization: fields.preferredLocalization }
         : {}),
-      ...(fields.secondaryGenre !== undefined
-        ? { secondaryGenre: fields.secondaryGenre || undefined }
+      ...(fields.primaryGenreId !== undefined
+        ? { primaryGenreId: fields.primaryGenreId }
+        : {}),
+      ...(fields.originalReleaseDate !== undefined
+        ? { originalReleaseDate: fields.originalReleaseDate || undefined }
         : {}),
       ...(fields.transferFromDistributor !== undefined
         ? {
             transferFromDistributor:
               fields.transferFromDistributor || undefined,
           }
+        : {}),
+      ...(fields.writerSplits !== undefined
+        ? { writerSplits: fields.writerSplits }
+        : {}),
+      ...(fields.publisherSplits !== undefined
+        ? { publisherSplits: fields.publisherSplits }
+        : {}),
+      ...(fields.selfPublished !== undefined
+        ? { selfPublished: fields.selfPublished }
         : {}),
       ...(fields.clineYear !== undefined
         ? {
@@ -199,11 +229,12 @@ export async function PATCH(request: Request, { params }: Params) {
         ...(fields.title ? { title: fields.title.trim() } : {}),
         ...(fields.artistId ? { artistId: fields.artistId } : {}),
         ...(fields.contentType ? { contentType: fields.contentType } : {}),
-        ...(fields.primaryGenre ? { primaryGenre: fields.primaryGenre } : {}),
+        ...(fields.primaryGenreName
+          ? { primaryGenre: fields.primaryGenreName.trim() }
+          : {}),
         ...(fields.artworkAiUsage
           ? { artworkAiUsage: fields.artworkAiUsage }
           : {}),
-        ...(fields.explicit ? { explicit: fields.explicit } : {}),
         ...(fields.upc !== undefined
           ? { upc: fields.upc?.trim() || null }
           : {}),
@@ -267,7 +298,10 @@ export async function PATCH(request: Request, { params }: Params) {
           compositionAiUsage: t.compositionAiUsage,
           commercialSamples: t.commercialSamples,
           audioLanguage: t.audioLanguage,
-          primaryGenre: fields.primaryGenre ?? existing.primaryGenre ?? undefined,
+          primaryGenre:
+            fields.primaryGenreName?.trim() ||
+            existing.primaryGenre ||
+            undefined,
           hasMechanicalLicense: Boolean(t.hasMechanicalLicense),
           lyrics: t.lyrics || undefined,
           explicit: t.explicit,
@@ -332,6 +366,18 @@ export async function PATCH(request: Request, { params }: Params) {
 
       await prisma.track.deleteMany({
         where: { releaseId: id, id: { notIn: keepIds } },
+      });
+
+      // Release-level explicit is derived, not user-entered: explicit if any
+      // track is explicit, otherwise clean/edited if any, otherwise off.
+      const releaseExplicit = fields.tracks.some((t) => t.explicit === "on")
+        ? "on"
+        : fields.tracks.some((t) => t.explicit === "edited")
+          ? "edited"
+          : "off";
+      await prisma.release.update({
+        where: { id },
+        data: { explicit: releaseExplicit },
       });
     } else if (fields.contributors && existing.tracks[0]) {
       const trackId = existing.tracks[0].id;
