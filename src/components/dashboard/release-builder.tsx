@@ -174,6 +174,7 @@ function initialState(
     preferredLocalization: "en",
     artworkAiUsage: "none",
     explicit: "off",
+    transferFromDistributor: "",
     tracks: [newTrack()],
     contributors: [newContributor()],
     clineYear: String(currentYear),
@@ -183,7 +184,7 @@ function initialState(
     hasSamples: false,
     isRemix: false,
     allStores: true,
-    selectedOutletIds: [],
+    selectedOutletKeys: [],
     worldwide: true,
     territoryCodes: [],
     rightsConfirmed: false,
@@ -728,7 +729,7 @@ function validateStep(state: WizardState, step: number): string | null {
     return null;
   }
   if (step === STEP_DISTRIBUTION) {
-    if (!state.allStores && state.selectedOutletIds.length === 0) {
+    if (!state.allStores && state.selectedOutletKeys.length === 0) {
       return "Select all stores, or choose at least one store.";
     }
     if (!state.worldwide && state.territoryCodes.length === 0) {
@@ -818,12 +819,13 @@ function buildPayload(state: WizardState) {
     preferredLocalization: state.preferredLocalization,
     artworkAiUsage: state.artworkAiUsage,
     explicit: state.explicit,
+    transferFromDistributor: state.transferFromDistributor,
     clineYear: state.clineYear,
     clineName: state.clineName,
     plineYear: state.plineYear,
     plineName: state.plineName,
     allStores: state.allStores,
-    selectedOutletIds: state.selectedOutletIds,
+    selectedOutletKeys: state.selectedOutletKeys,
     worldwide: state.worldwide,
     territoryCodes: state.territoryCodes,
     tracks,
@@ -974,13 +976,14 @@ export function ReleaseBuilder({
             preferredLocalization: current.preferredLocalization,
             artworkAiUsage: current.artworkAiUsage,
             explicit: current.explicit,
+            transferFromDistributor: current.transferFromDistributor,
             secondaryGenre: current.secondaryGenre,
             clineYear: current.clineYear,
             clineName: current.clineName,
             plineYear: current.plineYear,
             plineName: current.plineName,
             allStores: current.allStores,
-            selectedOutletIds: current.selectedOutletIds,
+            selectedOutletKeys: current.selectedOutletKeys,
             worldwide: current.worldwide,
             territoryCodes: current.territoryCodes,
           })
@@ -1822,6 +1825,16 @@ export function ReleaseBuilder({
                             </option>
                           ))}
                         </Field>
+                        <Field
+                          id="transferFromDistributor"
+                          label="Transferring from another distributor?"
+                          value={state.transferFromDistributor}
+                          onChange={(e) =>
+                            patch({ transferFromDistributor: e.target.value })
+                          }
+                          helper="e.g. DistroKid — leave blank for a new release."
+                          placeholder="Optional"
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -2289,9 +2302,9 @@ export function ReleaseBuilder({
                         const on = e.target.checked;
                         patch({
                           allStores: on,
-                          selectedOutletIds: on
+                          selectedOutletKeys: on
                             ? []
-                            : state.selectedOutletIds,
+                            : state.selectedOutletKeys,
                         });
                         if (on) setStoresManual(false);
                       }}
@@ -2342,10 +2355,12 @@ export function ReleaseBuilder({
                           </p>
                         ) : (
                           outlets.map((o) => {
-                            const on = state.selectedOutletIds.includes(o.id);
+                            const on = state.selectedOutletKeys.includes(
+                              o.key
+                            );
                             return (
                               <label
-                                key={o.id}
+                                key={o.key}
                                 className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 text-sm"
                               >
                                 <input
@@ -2355,13 +2370,13 @@ export function ReleaseBuilder({
                                   onChange={() => {
                                     patch({
                                       allStores: false,
-                                      selectedOutletIds: on
-                                        ? state.selectedOutletIds.filter(
-                                            (id) => id !== o.id
+                                      selectedOutletKeys: on
+                                        ? state.selectedOutletKeys.filter(
+                                            (key) => key !== o.key
                                           )
                                         : [
-                                            ...state.selectedOutletIds,
-                                            o.id,
+                                            ...state.selectedOutletKeys,
+                                            o.key,
                                           ],
                                     });
                                   }}
@@ -2585,7 +2600,7 @@ export function ReleaseBuilder({
                           ? "All available stores"
                           : outlets
                               .filter((o) =>
-                                state.selectedOutletIds.includes(o.id)
+                                state.selectedOutletKeys.includes(o.key)
                               )
                               .map((o) => o.name)
                               .join(", ") || "None selected"

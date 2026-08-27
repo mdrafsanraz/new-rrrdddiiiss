@@ -95,6 +95,7 @@ export function wizardStateFromRelease(
     artworkAiUsage:
       (release.artworkAiUsage as WizardState["artworkAiUsage"]) ?? "none",
     explicit: (release.explicit as WizardState["explicit"]) ?? "off",
+    transferFromDistributor: rMeta.transferFromDistributor ?? "",
     tracks,
     contributors,
     clineYear: rMeta.clineYear ? String(rMeta.clineYear) : String(new Date().getFullYear()),
@@ -104,7 +105,7 @@ export function wizardStateFromRelease(
     hasSamples: tracks.some((t) => t.commercialSamples !== "no"),
     isRemix: false,
     allStores: rMeta.allStores ?? true,
-    selectedOutletIds: rMeta.selectedOutletIds ?? [],
+    selectedOutletKeys: rMeta.selectedOutletKeys ?? [],
     worldwide: rMeta.worldwide ?? true,
     territoryCodes: rMeta.territoryCodes ?? [],
     rightsConfirmed: false,

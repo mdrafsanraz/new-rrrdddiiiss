@@ -253,17 +253,19 @@ async function buildDistributionFields(
   const fields: Record<string, unknown> = {};
   const meta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
 
-  const stores = parseJsonObject<{ allStores?: boolean; outletIds?: number[] }>(
+  const stores = parseJsonObject<{ allStores?: boolean; outletKeys?: string[] }>(
     release.storesJson
   );
   const allStores = stores.allStores ?? meta.allStores ?? true;
-  const outletIds = stores.outletIds ?? meta.selectedOutletIds ?? [];
+  // distro_outlet_id is the outlet's `key` slug (e.g. "spotify"), fetched
+  // live from GET /distro-outlets — never a hardcoded numeric id.
+  const outletKeys = stores.outletKeys ?? meta.selectedOutletKeys ?? [];
   fields.dsp_configs =
-    !allStores && outletIds.length > 0
+    !allStores && outletKeys.length > 0
       ? [
           { distro_outlet_id: "all_dsps", enabled: false },
-          ...outletIds.map((id) => ({
-            distro_outlet_id: String(id),
+          ...outletKeys.map((key) => ({
+            distro_outlet_id: key,
             enabled: true,
           })),
         ]
@@ -534,6 +536,7 @@ async function buildReleaseBody(
       ? release.releaseDate.toISOString()
       : undefined,
     explicit: release.explicit,
+    transfer_from_distributor: rMeta.transferFromDistributor || undefined,
     cline_year: rMeta.clineYear ?? undefined,
     cline_name: rMeta.clineName || undefined,
     pline_year: rMeta.plineYear ?? undefined,

@@ -75,12 +75,13 @@ const schema = z.object({
   preferredLocalization: z.string().optional(),
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).optional(),
   explicit: z.enum(["off", "on", "edited"]).optional(),
+  transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
   clineName: z.string().optional().or(z.literal("")),
   plineYear: z.string().optional().or(z.literal("")),
   plineName: z.string().optional().or(z.literal("")),
   allStores: z.boolean().optional(),
-  selectedOutletIds: z.array(z.number()).optional(),
+  selectedOutletKeys: z.array(z.string()).optional(),
   worldwide: z.boolean().optional(),
   territoryCodes: z.array(z.string()).optional(),
   tracks: z.array(trackSchema).optional(),
@@ -163,6 +164,12 @@ export async function PATCH(request: Request, { params }: Params) {
       ...(fields.secondaryGenre !== undefined
         ? { secondaryGenre: fields.secondaryGenre || undefined }
         : {}),
+      ...(fields.transferFromDistributor !== undefined
+        ? {
+            transferFromDistributor:
+              fields.transferFromDistributor || undefined,
+          }
+        : {}),
       ...(fields.clineYear !== undefined
         ? {
             clineYear: fields.clineYear
@@ -184,8 +191,8 @@ export async function PATCH(request: Request, { params }: Params) {
         ? { plineName: fields.plineName || undefined }
         : {}),
       ...(fields.allStores !== undefined ? { allStores: fields.allStores } : {}),
-      ...(fields.selectedOutletIds !== undefined
-        ? { selectedOutletIds: fields.selectedOutletIds }
+      ...(fields.selectedOutletKeys !== undefined
+        ? { selectedOutletKeys: fields.selectedOutletKeys }
         : {}),
       ...(fields.worldwide !== undefined ? { worldwide: fields.worldwide } : {}),
       ...(fields.territoryCodes !== undefined
@@ -217,7 +224,7 @@ export async function PATCH(request: Request, { params }: Params) {
         metadataJson: JSON.stringify(nextMeta),
         storesJson: JSON.stringify({
           allStores: nextMeta.allStores ?? true,
-          outletIds: nextMeta.selectedOutletIds ?? [],
+          outletKeys: nextMeta.selectedOutletKeys ?? [],
         }),
         territoriesJson: JSON.stringify({
           worldwide: nextMeta.worldwide ?? true,

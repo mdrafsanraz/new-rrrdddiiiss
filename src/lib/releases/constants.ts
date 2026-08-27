@@ -131,8 +131,11 @@ export type ReleaseMetadata = {
   plineYear?: number | null;
   plineName?: string;
   secondaryGenre?: string;
+  /** Name of the previous distributor when this release is a transfer. */
+  transferFromDistributor?: string;
   allStores?: boolean;
-  selectedOutletIds?: number[];
+  /** LabelGrid distro outlet slugs (the `key` field) — not numeric ids. */
+  selectedOutletKeys?: string[];
   worldwide?: boolean;
   territoryCodes?: string[];
 };

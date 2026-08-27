@@ -51,9 +51,12 @@ export type WizardState = {
   preferredLocalization: string;
   artworkAiUsage: "none" | "some" | "material" | "all";
   explicit: "off" | "on" | "edited";
+  /** Name of the previous distributor when this release is a transfer. */
+  transferFromDistributor: string;
   // Step 2 — Distribution
   allStores: boolean;
-  selectedOutletIds: number[];
+  /** LabelGrid distro outlet slugs (the `key` field, e.g. "spotify") — not numeric ids. */
+  selectedOutletKeys: string[];
   worldwide: boolean;
   territoryCodes: string[];
   // Step 3 — Tracks

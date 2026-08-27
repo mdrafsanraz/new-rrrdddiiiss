@@ -25,13 +25,14 @@ const schema = z.object({
   preferredLocalization: z.string().default("en"),
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).default("none"),
   explicit: z.enum(["off", "on", "edited"]).default("off"),
+  transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
   secondaryGenre: z.string().optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
   clineName: z.string().optional().or(z.literal("")),
   plineYear: z.string().optional().or(z.literal("")),
   plineName: z.string().optional().or(z.literal("")),
   allStores: z.boolean().optional(),
-  selectedOutletIds: z.array(z.number()).optional(),
+  selectedOutletKeys: z.array(z.string()).optional(),
   worldwide: z.boolean().optional(),
   territoryCodes: z.array(z.string()).optional(),
 });
@@ -92,8 +93,9 @@ export async function POST(request: Request) {
       plineYear: fields.plineYear ? Number(fields.plineYear) : year,
       plineName: fields.plineName || artist.name,
       secondaryGenre: fields.secondaryGenre || undefined,
+      transferFromDistributor: fields.transferFromDistributor || undefined,
       allStores: fields.allStores ?? true,
-      selectedOutletIds: fields.selectedOutletIds ?? [],
+      selectedOutletKeys: fields.selectedOutletKeys ?? [],
       worldwide: fields.worldwide ?? true,
       territoryCodes: fields.territoryCodes ?? [],
     };
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
         status: "draft",
         storesJson: JSON.stringify({
           allStores: meta.allStores,
-          outletIds: meta.selectedOutletIds,
+          outletKeys: meta.selectedOutletKeys,
         }),
         territoriesJson: JSON.stringify({
           worldwide: meta.worldwide,
