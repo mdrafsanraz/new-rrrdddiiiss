@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { LiveRelease, LiveTrack } from "@/lib/labelgrid/live-release";
 import {
   deliveryStateLabel,
@@ -132,6 +133,7 @@ export function ReleaseTabs({
   activities: ReleaseActivityRow[];
 }) {
   const [tab, setTab] = useState<Tab>("Overview");
+  const reduceMotion = useReducedMotion();
 
   return (
     <div>
@@ -159,31 +161,41 @@ export function ReleaseTabs({
       </div>
 
       <div className="mt-5">
-        {tab === "Overview" ? <OverviewTab live={live} /> : null}
-        {tab === "Tracks" ? (
-          <TracksTab
-            tracks={live.tracks}
-            trackDurationsByLgId={trackDurationsByLgId}
-          />
-        ) : null}
-        {tab === "Credits & Rights" ? (
-          <CreditsTab live={live} documents={documents} />
-        ) : null}
-        {tab === "Distribution" ? (
-          <DistributionTab
-            live={live}
-            outletNames={outletNames}
-            territoryNames={territoryNames}
-          />
-        ) : null}
-        {tab === "Delivery" ? (
-          <DeliveryTab
-            delivery={delivery}
-            deliveryError={deliveryError}
-            outletNames={outletNames}
-          />
-        ) : null}
-        {tab === "Activity" ? <ActivityTab activities={activities} /> : null}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={tab}
+            initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {tab === "Overview" ? <OverviewTab live={live} /> : null}
+            {tab === "Tracks" ? (
+              <TracksTab
+                tracks={live.tracks}
+                trackDurationsByLgId={trackDurationsByLgId}
+              />
+            ) : null}
+            {tab === "Credits & Rights" ? (
+              <CreditsTab live={live} documents={documents} />
+            ) : null}
+            {tab === "Distribution" ? (
+              <DistributionTab
+                live={live}
+                outletNames={outletNames}
+                territoryNames={territoryNames}
+              />
+            ) : null}
+            {tab === "Delivery" ? (
+              <DeliveryTab
+                delivery={delivery}
+                deliveryError={deliveryError}
+                outletNames={outletNames}
+              />
+            ) : null}
+            {tab === "Activity" ? <ActivityTab activities={activities} /> : null}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
