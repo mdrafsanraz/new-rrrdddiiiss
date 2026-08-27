@@ -371,7 +371,7 @@ async function fetchStereoUrl(trackId: number | string): Promise<string | null> 
  * through, since a rejection here silently drops the audio while the rest
  * of the release still syncs fine.
  */
-function sanitizeUploadFilename(original: string): string {
+export function sanitizeUploadFilename(original: string): string {
   const trimmed = original.trim();
   const dot = trimmed.lastIndexOf(".");
   const rawExt = dot > 0 ? trimmed.slice(dot + 1) : "";
@@ -425,6 +425,21 @@ export async function uploadTrackStereoAudio(
     );
   }
 
+  return registerTrackStereoAudio(trackId, key, opts);
+}
+
+/**
+ * Register an already-uploaded S3 key (PUT files/stereo {s3_key}) and poll
+ * until LabelGrid resolves it — the "register + wait" half of the stereo
+ * upload flow, split out so a caller who put the bytes to the presigned URL
+ * itself (e.g. a browser uploading directly, never touching our server)
+ * can resume from here without re-uploading anything.
+ */
+export async function registerTrackStereoAudio(
+  trackId: number | string,
+  key: string,
+  opts: { pollBudgetMs?: number } = {}
+): Promise<StereoUploadResult> {
   const stored = await storeTrackFile(trackId, "stereo", { s3_key: key });
   if (!stored.queued || !stored.attempt) {
     return {

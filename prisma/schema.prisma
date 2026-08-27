@@ -350,6 +350,8 @@ model Release {
    */
   permanentlyLocked Boolean     @default(false)
   labelgridId     String?
+  /** Mutex for the Step-5 submission flow — prevents two concurrent runs (double-click, two tabs) from both creating a LabelGrid release/track. Reclaimable after staleness timeout. */
+  submissionLockedAt DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

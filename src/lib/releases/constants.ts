@@ -261,6 +261,12 @@ export type TrackMetadata = {
   audioProcessing?: boolean;
   /** Set when the upload_attempt resolved to status "failed". */
   audioProcessingError?: string | null;
+  /**
+   * Set immediately after a Step-5 submission track create/update whose
+   * body already included the current contributors/writers/publishers —
+   * lets the Credits & Rights stage verify instead of re-PATCHing.
+   */
+  creditsSyncedAt?: string | null;
 };
 
 export function parseJsonObject<T extends object>(

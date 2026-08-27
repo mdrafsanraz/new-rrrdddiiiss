@@ -14,6 +14,7 @@ import {
   listGenres,
   listLabels,
   listTerritories,
+  registerTrackStereoAudio,
   submitReleaseForReview,
   updateRelease,
   updateTrack,
@@ -324,7 +325,7 @@ function unwrapId(res: unknown): number {
   return unwrapLabelGridId(res);
 }
 
-async function ensureLabelGridArtist(artist: Artist): Promise<number> {
+export async function ensureLabelGridArtist(artist: Artist): Promise<number> {
   if (artist.labelgridId && /^\d+$/.test(artist.labelgridId)) {
     return Number(artist.labelgridId);
   }
@@ -741,6 +742,61 @@ async function ensureLabelGridTrack(
 }
 
 /**
+ * Stage 4 (Create Tracks) of the Step-5 submission flow. `ensureLabelGridTrack`
+ * already sends the FULL current contributors/writers/publishers in the same
+ * create/update body — by Step 5 the user has already filled out Credits, so
+ * there's no "create now, patch credits later" need like the old checkpoint
+ * model had. Stamping creditsSyncedAt here means Stage 7 can verify instead
+ * of re-sending an identical PATCH.
+ */
+export async function ensureLabelGridTrackForSubmit(
+  track: Track,
+  ctx: TrackSyncContext
+): Promise<number> {
+  const lgTrackId = await ensureLabelGridTrack(track, ctx);
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  tMeta.creditsSyncedAt = new Date().toISOString();
+  await prisma.track.update({
+    where: { id: track.id },
+    data: { metadataJson: JSON.stringify(tMeta) },
+  });
+  return lgTrackId;
+}
+
+/** Persist a resolved (non-throwing) stereo upload/registration result onto the track row. */
+async function persistAudioUploadResult(
+  track: Track,
+  result: { attemptId: string | null; processing: boolean; url: string | null }
+): Promise<void> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  tMeta.audioUploadAttemptId = result.attemptId;
+  tMeta.audioProcessing = result.processing;
+  tMeta.audioProcessingError = null;
+  await prisma.track.update({
+    where: { id: track.id },
+    data: {
+      metadataJson: JSON.stringify(tMeta),
+      // LabelGrid's hosted URL is the only record of this file we keep.
+      ...(result.url ? { audioUrl: result.url } : {}),
+    },
+  });
+}
+
+/** Persist a stereo upload/registration failure onto the track row. */
+async function persistAudioUploadFailure(
+  track: Track,
+  message: string
+): Promise<void> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  tMeta.audioProcessing = false;
+  tMeta.audioProcessingError = message;
+  await prisma.track.update({
+    where: { id: track.id },
+    data: { metadataJson: JSON.stringify(tMeta) },
+  });
+}
+
+/**
  * Upload stereo audio for one track, persist the resulting LabelGrid file
  * URL (our only durable record of it — the bytes never touch our disk), and
  * persist the async-processing state (attempt id + processing flag).
@@ -754,35 +810,52 @@ async function uploadAudioForTrack(
   lgTrackId: number,
   upload: ValidatedFile
 ): Promise<{ processing: boolean }> {
-  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
-
   try {
     const result = await uploadTrackStereoAudio(lgTrackId, {
       buffer: upload.buffer,
       filename: upload.filename,
       mimeType: upload.mimeType,
     });
-    tMeta.audioUploadAttemptId = result.attemptId;
-    tMeta.audioProcessing = result.processing;
-    tMeta.audioProcessingError = null;
-    await prisma.track.update({
-      where: { id: track.id },
-      data: {
-        metadataJson: JSON.stringify(tMeta),
-        // LabelGrid's hosted URL is the only record of this file we keep.
-        ...(result.url ? { audioUrl: result.url } : {}),
-      },
-    });
+    await persistAudioUploadResult(track, result);
     return { processing: result.processing };
   } catch (error) {
-    tMeta.audioProcessing = false;
-    tMeta.audioProcessingError =
-      error instanceof Error ? error.message : "Audio upload failed";
-    await prisma.track.update({
-      where: { id: track.id },
-      data: { metadataJson: JSON.stringify(tMeta) },
-    });
+    await persistAudioUploadFailure(
+      track,
+      error instanceof Error ? error.message : "Audio upload failed"
+    );
     return { processing: false };
+  }
+}
+
+/**
+ * Stage 5b (Upload Audio — register) of the Step-5 submission flow. The
+ * browser PUTs the bytes directly to LabelGrid's presigned URL itself (that
+ * PUT sends no Authorization header, so there's nothing server-side to
+ * proxy) — this only registers the already-uploaded S3 key and polls for
+ * processing, reusing the exact persistence logic `uploadAudioForTrack`
+ * uses so both paths leave identical state on the track row.
+ */
+export async function registerUploadedAudio(
+  track: Track,
+  key: string
+): Promise<{ processing: boolean; error?: string }> {
+  if (!track.labelgridId || !/^\d+$/.test(track.labelgridId)) {
+    throw new Error(
+      "Track has not been created on LabelGrid yet — run the Create Tracks stage first."
+    );
+  }
+  try {
+    const result = await registerTrackStereoAudio(
+      Number(track.labelgridId),
+      key
+    );
+    await persistAudioUploadResult(track, result);
+    return { processing: result.processing };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Audio registration failed";
+    await persistAudioUploadFailure(track, message);
+    return { processing: false, error: message };
   }
 }
 
@@ -817,6 +890,76 @@ async function syncTrackLicense(track: Track, lgTrackId: number): Promise<void> 
     where: { id: track.id },
     data: { metadataJson: JSON.stringify(tMeta) },
   });
+}
+
+/**
+ * Stage 7 (Credits & Rights) of the Step-5 submission flow — a verification
+ * stage, not a duplicate PATCH. Stage 4 already sent the full current
+ * credits in the same call that created/updated the track, so if
+ * `creditsSyncedAt` is already set this does no network call at all for
+ * credits. It only re-PATCHes if that flag is somehow missing (e.g.
+ * resuming a run where Stage 4 succeeded on LabelGrid but the flag failed
+ * to persist). The license-document upload is a genuinely separate
+ * LabelGrid endpoint (not part of track create/update), so it always runs
+ * via its own existing `licenseSyncedAt` guard regardless.
+ */
+export async function verifyOrSyncTrackCredits(
+  track: Track,
+  ctx: TrackSyncContext
+): Promise<{ alreadySynced: boolean }> {
+  const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  const alreadySynced = Boolean(tMeta.creditsSyncedAt);
+
+  if (!alreadySynced) {
+    if (!track.labelgridId || !/^\d+$/.test(track.labelgridId)) {
+      throw new Error(
+        "Track has not been created on LabelGrid yet — run the Create Tracks stage first."
+      );
+    }
+    const lgTrackId = Number(track.labelgridId);
+    const body = await buildTrackBody(track, ctx, { forUpdate: true });
+    logTrackCreditsPayload("PATCH /tracks (credits verify)", body);
+    await updateTrack(lgTrackId, body);
+    tMeta.creditsSyncedAt = new Date().toISOString();
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { metadataJson: JSON.stringify(tMeta) },
+    });
+  }
+
+  if (track.labelgridId) {
+    await syncTrackLicense(track, Number(track.labelgridId));
+  }
+
+  return { alreadySynced };
+}
+
+/**
+ * Stage 3 (Upload Artwork) of the Step-5 submission flow — extracted from
+ * the inline block `syncReleaseToLabelGrid` already runs, as its own
+ * throwing function (the old inline version treats a cover-art failure as
+ * non-fatal to the surrounding release sync; a dedicated submit stage
+ * should surface the failure directly to its own caller instead).
+ */
+export async function uploadArtworkForSubmit(
+  release: Release,
+  artwork: ValidatedFile
+): Promise<{ url: string | null }> {
+  if (!release.labelgridId || !/^\d+$/.test(release.labelgridId)) {
+    throw new Error(
+      "Release has not been created on LabelGrid yet — run the Create Release stage first."
+    );
+  }
+  const file = await uploadReleasePhoto(
+    Number(release.labelgridId),
+    new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
+    artwork.filename
+  );
+  await prisma.release.update({
+    where: { id: release.id },
+    data: { artworkUrl: file?.url ?? null },
+  });
+  return { url: file?.url ?? null };
 }
 
 async function buildReleaseBody(
@@ -925,6 +1068,67 @@ async function ensureLabelGridReleaseMetadata(
   });
 
   return { lgReleaseId, lgArtistId, locale, artisticRole };
+}
+
+/**
+ * Stage 2 (Create Release) of the Step-5 submission flow — thin wrapper
+ * around ensureLabelGridReleaseMetadata that also stamps
+ * labelgridReviewStatus on first creation (the old monolith did this at
+ * the very end of the whole sync; here it happens right when the release
+ * itself is created, since that's the only thing this stage does).
+ */
+export async function ensureLabelGridReleaseForSubmit(
+  release: ReleaseWithRels
+): Promise<{ lgReleaseId: number; lgArtistId: number; locale: string; artisticRole: string }> {
+  const created = !release.labelgridId;
+  const result = await ensureLabelGridReleaseMetadata(release);
+  if (created) {
+    await prisma.release.update({
+      where: { id: release.id },
+      data: { labelgridReviewStatus: "draft" },
+    });
+  }
+  return result;
+}
+
+/**
+ * Build the per-track sync context for Stages 4/7 of the submission flow.
+ * Assumes Stage 2 already ran (release.labelgridId is set) — deliberately
+ * does NOT re-create/re-PATCH the release here, since this is called once
+ * per track and re-syncing release metadata on every call would be an
+ * unnecessary duplicate API call. `ensureLabelGridArtist` is cheap to call
+ * repeatedly — it's a no-op network-wise once artist.labelgridId is set.
+ */
+export async function buildTrackSyncContext(
+  release: ReleaseWithRels
+): Promise<TrackSyncContext> {
+  if (!release.labelgridId || !/^\d+$/.test(release.labelgridId)) {
+    throw new Error(
+      "Release has not been created on LabelGrid yet — run the Create Release stage first."
+    );
+  }
+  if (!release.artist) {
+    throw new Error("Release has no artist to sync.");
+  }
+
+  const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const lgArtistId = await ensureLabelGridArtist(release.artist);
+  const locale = rMeta.preferredLocalization || "en";
+  const artisticRole = rMeta.artisticRole || "MainArtist";
+  const splits = await buildSplitArrays(rMeta);
+
+  return {
+    lgReleaseId: Number(release.labelgridId),
+    lgArtistId,
+    locale,
+    artisticRole,
+    releaseExplicit: release.explicit,
+    releasePrimaryGenre: release.primaryGenre,
+    releasePrimaryGenreId: rMeta.primaryGenreId ?? null,
+    artist: release.artist,
+    writers: splits.writers,
+    publishers: splits.publishers,
+  };
 }
 
 export type SyncOutcome =
