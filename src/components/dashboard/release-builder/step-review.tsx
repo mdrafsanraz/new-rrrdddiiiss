@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Step 5 — Review. Read-only summaries with an Edit action per section, a
- * live "Confirmed on LabelGrid" strip fetched from the release itself (not
- * the local cache), and the rights confirmation gate before submit.
+ * Step 5 — Review. Read-only summary of everything collected so far, with
+ * an Edit action per section and the rights confirmation gate before
+ * submit. Nothing here is fetched from LabelGrid — under the current
+ * architecture nothing exists there yet at this point; the release is only
+ * created once the user clicks Submit (see <SubmissionProgress>).
  */
 
-import { Check, ImageSquare, MusicNotes, WarningCircle } from "@phosphor-icons/react";
+import { ImageSquare, MusicNotes } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   STEP_CREDITS,
   STEP_DISTRIBUTION,
@@ -23,28 +24,6 @@ import {
   type CatalogState,
   type Outlet,
 } from "./shared";
-
-/** Mirrors the server's /labelgrid-snapshot response — live, not cached. */
-export type LiveReleaseSnapshot = {
-  id: number;
-  title: string | null;
-  artist: string | null;
-  primary_genre: string | null;
-  content_type: string | null;
-  release_date: string | null;
-  barcode_number: string | null;
-  cover_url: string | null;
-  review_status: string | null;
-  store_count: number | null;
-  all_stores: boolean;
-  tracks: Array<{
-    id: number;
-    track_num: number | null;
-    title: string | null;
-    mix_version: string | null;
-    default_display_artist: string | null;
-  }>;
-};
 
 function SectionHeader({
   title,
@@ -68,50 +47,16 @@ export function StepReview({
   patch,
   artistName,
   outlets,
-  liveSnapshot,
-  liveSnapshotError,
   onJump,
 }: {
   state: WizardState;
   patch: (partial: Partial<WizardState>) => void;
   artistName: string;
   outlets: CatalogState<Outlet>;
-  liveSnapshot: LiveReleaseSnapshot | null;
-  liveSnapshotError: string | null;
   onJump: (step: number) => void;
 }) {
   return (
     <div className="space-y-5">
-      <div
-        className={cn(
-          "flex items-center gap-2 border px-3 py-2 text-xs font-medium",
-          liveSnapshot
-            ? "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
-            : liveSnapshotError
-              ? "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400"
-              : "border-border bg-muted text-muted-foreground"
-        )}
-      >
-        {!liveSnapshot && !liveSnapshotError ? (
-          <>
-            <span className="size-1.5 animate-pulse rounded-full bg-current" />
-            Checking LabelGrid…
-          </>
-        ) : liveSnapshot ? (
-          <>
-            <Check size={14} weight="bold" aria-hidden />
-            Confirmed on LabelGrid: {liveSnapshot.title ?? "Untitled"}
-            {liveSnapshot.artist ? ` · ${liveSnapshot.artist}` : ""}
-            {` · ${liveSnapshot.tracks.length} track${liveSnapshot.tracks.length === 1 ? "" : "s"}`}
-          </>
-        ) : (
-          <>
-            <WarningCircle size={14} weight="fill" aria-hidden />
-            {liveSnapshotError ?? "Could not verify this release on LabelGrid."}
-          </>
-        )}
-      </div>
-
       <Panel>
         <SectionHeader
           title="Artwork & Release"

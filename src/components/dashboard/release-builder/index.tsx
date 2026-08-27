@@ -3,28 +3,28 @@
 /**
  * Release Builder — Release → Distribution → Tracks → Credits → Review.
  *
- * Network model (no autosave):
- * - Leaving Distribution (checkpoint A): Steps 1+2 combine into the FIRST
- *   LabelGrid Create Release (or Update if a labelgridId already exists —
- *   never a duplicate). Continue blocks until LabelGrid confirms.
- * - Leaving Credits (checkpoint B): tracks + audio + credits sync against
- *   the existing LabelGrid release id (create-or-update per track).
- * - Submit for Review: final defensive sync, then RDISTRO internal review;
- *   LabelGrid stays DRAFT until admin approval.
- * LabelGrid is the catalog source of truth; RDISTRO stores ownership,
- * mapping ids, and workflow state only.
+ * Network model: Steps 1-4 are LOCAL DATA ENTRY ONLY. Every "Continue"
+ * click (and Save & Exit) saves metadata to the RDISTRO database — title,
+ * tracks, contributors, splits, license documents — but NEVER touches
+ * LabelGrid: no release/track is created or updated there, and artwork/
+ * audio files stay as in-memory File objects in this component's state,
+ * never uploaded anywhere, until the user reaches Step 5 and clicks
+ * "Submit Release". That single action drives the whole LabelGrid sync
+ * (create release → upload artwork → create tracks → upload audio → wait
+ * for processing → sync credits) through <SubmissionProgress>, which is
+ * resumable and idempotent — see /api/releases/[id]/submit/*.
+ *
+ * LabelGrid is the catalog source of truth once Submit has run; RDISTRO
+ * stores ownership, mapping ids, and workflow state only.
  */
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, WarningCircle } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, WarningCircle, Check } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  parseJsonObject,
-  type TrackMetadata,
-} from "@/lib/releases/constants";
+import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
 import {
   newContributor,
   newTrack,
@@ -49,18 +49,13 @@ import { StepRelease, type ArtistOption } from "./step-release";
 import { StepDistribution } from "./step-distribution";
 import { StepTracks } from "./step-tracks";
 import { splitTotal, StepCredits } from "./step-credits";
-import { StepReview, type LiveReleaseSnapshot } from "./step-review";
+import { StepReview } from "./step-review";
+import { SubmissionProgress } from "./submission-progress";
 
-type SaveStatus = "idle" | "saving" | "saved" | "error" | "sync-error";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 type SaveDraftResult = {
-  /** The local save request itself succeeded. */
   ok: boolean;
-  /**
-   * When syncToLabelGrid was requested: true only if LabelGrid confirmed.
-   * Otherwise mirrors `ok`.
-   */
-  labelgridOk: boolean;
   error?: string;
 };
 
@@ -348,30 +343,20 @@ export function ReleaseBuilder({
   );
   const createInFlight = useRef<Promise<{
     id: string | null;
-    labelgridOk: boolean;
+    ok: boolean;
     error?: string;
   }> | null>(null);
   const saveInFlight = useRef<Promise<SaveDraftResult> | null>(null);
-  const queuedSaveOpts = useRef<{
-    forceArtwork?: boolean;
-    syncToLabelGrid?: boolean;
-  } | null>(null);
+  const queuedSave = useRef(false);
 
   const [state, setState] = useState<WizardState>(
     () => initialWizard ?? initialState(artists, defaultArtistId)
   );
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const [submissionStarted, setSubmissionStarted] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
-  const [liveSnapshot, setLiveSnapshot] = useState<LiveReleaseSnapshot | null>(
-    null
-  );
-  const [liveSnapshotError, setLiveSnapshotError] = useState<string | null>(
-    null
-  );
 
   // Live LabelGrid catalogs — nothing in the wizard hardcodes these.
   const genres = useCatalog<GenreOption>("/api/labelgrid/genres", (d) =>
@@ -420,13 +405,13 @@ export function ReleaseBuilder({
   );
 
   // -------------------------------------------------------------------------
-  // Checkpoint A: first LabelGrid release create (Steps 1+2 combined)
+  // Local draft persistence — Steps 1-4 only. Never touches LabelGrid.
 
   async function createDraft(
     current: WizardState
-  ): Promise<{ id: string | null; labelgridOk: boolean; error?: string }> {
+  ): Promise<{ id: string | null; ok: boolean; error?: string }> {
     if (current.releaseId) {
-      return { id: current.releaseId, labelgridOk: true };
+      return { id: current.releaseId, ok: true };
     }
     if (createInFlight.current) return createInFlight.current;
 
@@ -435,7 +420,6 @@ export function ReleaseBuilder({
       try {
         const fd = new FormData();
         fd.set("payload", JSON.stringify(releasePayloadFields(current)));
-        if (current.artworkFile) fd.set("artwork", current.artworkFile);
         const res = await fetch("/api/releases/drafts", {
           method: "POST",
           body: fd,
@@ -444,29 +428,16 @@ export function ReleaseBuilder({
         if (!res.ok) {
           setSaveStatus("error");
           setError(data.error ?? "Could not create draft");
-          return { id: null, labelgridOk: false, error: data.error };
+          return { id: null, ok: false, error: data.error };
         }
         const id = data.release.id as string;
-        const artworkLanded = Boolean(data.release.artworkUrl);
-        const labelgridOk = Boolean(data.release.labelgridId);
-        setState((prev) => ({
-          ...prev,
-          releaseId: id,
-          artworkUrl: data.release.artworkUrl ?? prev.artworkUrl,
-          artworkFile:
-            current.artworkFile && !artworkLanded ? prev.artworkFile : null,
-        }));
-        if (!labelgridOk) {
-          setSaveStatus("sync-error");
-          setSyncErrorMessage(data.labelgrid?.error ?? null);
-        } else {
-          setSaveStatus("saved");
-        }
-        return { id, labelgridOk, error: data.labelgrid?.error };
+        setState((prev) => ({ ...prev, releaseId: id }));
+        setSaveStatus("saved");
+        return { id, ok: true };
       } catch {
         setSaveStatus("error");
         setError("Network error while saving draft.");
-        return { id: null, labelgridOk: false, error: "Network error" };
+        return { id: null, ok: false, error: "Network error" };
       } finally {
         createInFlight.current = null;
       }
@@ -476,29 +447,17 @@ export function ReleaseBuilder({
     return run;
   }
 
-  // -------------------------------------------------------------------------
-  // Serialized draft save (checkpoint B + explicit saves)
-
-  async function saveDraft(
-    current: WizardState,
-    opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
-  ): Promise<SaveDraftResult> {
+  async function saveDraft(current: WizardState): Promise<SaveDraftResult> {
     if (saveInFlight.current) {
-      queuedSaveOpts.current = {
-        forceArtwork:
-          queuedSaveOpts.current?.forceArtwork || opts?.forceArtwork,
-        syncToLabelGrid:
-          queuedSaveOpts.current?.syncToLabelGrid || opts?.syncToLabelGrid,
-      };
+      queuedSave.current = true;
       return saveInFlight.current;
     }
 
-    const run = performSaveDraft(current, opts).finally(() => {
+    const run = performSaveDraft(current).finally(() => {
       saveInFlight.current = null;
-      if (queuedSaveOpts.current) {
-        const nextOpts = queuedSaveOpts.current;
-        queuedSaveOpts.current = null;
-        void saveDraft(stateRef.current, nextOpts);
+      if (queuedSave.current) {
+        queuedSave.current = false;
+        void saveDraft(stateRef.current);
       }
     });
     saveInFlight.current = run;
@@ -506,38 +465,23 @@ export function ReleaseBuilder({
   }
 
   async function performSaveDraft(
-    current: WizardState,
-    opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
+    current: WizardState
   ): Promise<SaveDraftResult> {
     let id = current.releaseId;
     if (!id) {
       const created = await createDraft(current);
       if (!created.id) {
-        return { ok: false, labelgridOk: false, error: created.error };
+        return { ok: false, error: created.error };
       }
       id = created.id;
       current = { ...stateRef.current, releaseId: id };
     }
 
     setSaveStatus("saving");
-    // LabelGrid is the only store for artwork/audio — if an upload doesn't
-    // visibly land, keep the file in memory so the next save retries it.
-    const hadArtworkFile = Boolean(current.artworkFile);
-    const pendingAudioClientIds = new Set(
-      current.tracks.filter((t) => t.audioFile).map((t) => t.clientId)
-    );
     try {
       const fd = new FormData();
-      fd.set(
-        "payload",
-        JSON.stringify({
-          ...buildPayload(current),
-          syncToLabelGrid: opts?.syncToLabelGrid ?? false,
-        })
-      );
-      if (current.artworkFile) fd.set("artwork", current.artworkFile);
+      fd.set("payload", JSON.stringify(buildPayload(current)));
       for (const t of current.tracks) {
-        if (t.audioFile) fd.set(`audio_${t.clientId}`, t.audioFile);
         if (t.licenseFile) fd.set(`license_${t.clientId}`, t.licenseFile);
       }
       const res = await fetch(`/api/releases/${id}/draft`, {
@@ -547,34 +491,18 @@ export function ReleaseBuilder({
       const data = await res.json();
       if (!res.ok) {
         setSaveStatus("error");
-        if (opts?.forceArtwork) setError(data.error ?? "Save failed");
-        return { ok: false, labelgridOk: false, error: data.error };
+        setError(data.error ?? "Save failed");
+        return { ok: false, error: data.error };
       }
 
       const release = data.release;
-      const labelgridError: string | undefined = data.labelgrid?.error;
-      const anyTrackAudioFailed = (release.tracks ?? []).some(
-        (rt: { metadataJson?: string }) =>
-          Boolean(
-            parseJsonObject<TrackMetadata>(rt.metadataJson).audioProcessingError
-          )
-      );
-      const labelgridOk = opts?.syncToLabelGrid
-        ? !labelgridError && !anyTrackAudioFailed
-        : true;
-
       setState((prev) => {
         const byClient = new Map(prev.tracks.map((t) => [t.clientId, t]));
         const nextTracks: WizardTrack[] =
           Array.isArray(release.tracks) && release.tracks.length
             ? release.tracks.map(
                 (
-                  rt: {
-                    id: string;
-                    title: string;
-                    audioUrl: string | null;
-                    metadataJson?: string;
-                  },
+                  rt: { id: string; title: string; metadataJson?: string },
                   i: number
                 ) => {
                   const existing =
@@ -582,22 +510,10 @@ export function ReleaseBuilder({
                     [...byClient.values()].find((t) => t.title === rt.title) ??
                     newTrack();
                   const tMeta = parseJsonObject<TrackMetadata>(rt.metadataJson);
-                  const audioLanded =
-                    Boolean(rt.audioUrl) ||
-                    Boolean(tMeta.audioProcessing) ||
-                    Boolean(tMeta.audioProcessingError);
-                  const wasPending = pendingAudioClientIds.has(
-                    existing.clientId
-                  );
                   return {
                     ...existing,
                     id: rt.id,
                     title: existing.title || rt.title,
-                    audioUrl: rt.audioUrl ?? existing.audioUrl,
-                    audioFile:
-                      wasPending && !audioLanded ? existing.audioFile : null,
-                    audioProcessing: tMeta.audioProcessing ?? false,
-                    audioProcessingError: tMeta.audioProcessingError ?? null,
                     licenseFile: null,
                     licenseUrl: tMeta.licenseUrl ?? existing.licenseUrl,
                     originalTrackLink:
@@ -607,118 +523,19 @@ export function ReleaseBuilder({
               )
             : prev.tracks.map((t) => ({
                 ...t,
-                audioFile: t.audioFile ? null : t.audioFile,
                 licenseFile: t.licenseFile ? null : t.licenseFile,
               }));
 
-        const artworkLanded = Boolean(release.artworkUrl);
-        return {
-          ...prev,
-          releaseId: release.id,
-          artworkUrl: release.artworkUrl ?? prev.artworkUrl,
-          artworkFile:
-            hadArtworkFile && !artworkLanded ? prev.artworkFile : null,
-          tracks: nextTracks,
-        };
+        return { ...prev, releaseId: release.id, tracks: nextTracks };
       });
 
-      if (!labelgridOk) {
-        setSaveStatus("sync-error");
-        setSyncErrorMessage(
-          labelgridError ??
-            "Audio processing failed for one or more tracks — check the Tracks step."
-        );
-      } else {
-        setSaveStatus("saved");
-        setSyncErrorMessage(null);
-      }
-      return { ok: true, labelgridOk, error: labelgridError };
+      setSaveStatus("saved");
+      return { ok: true };
     } catch {
       setSaveStatus("error");
-      return { ok: false, labelgridOk: false, error: "Network error" };
+      return { ok: false, error: "Network error" };
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Audio processing polling (PUT stereo → 202 upload_attempt)
-
-  const processingTrackIds = state.tracks
-    .filter((t) => t.audioProcessing && t.id)
-    .map((t) => t.id!);
-  const processingKey = processingTrackIds.join(",");
-
-  useEffect(() => {
-    if (!state.releaseId || !processingKey) return;
-    let cancelled = false;
-
-    const poll = async () => {
-      for (const trackId of processingKey.split(",")) {
-        try {
-          const res = await fetch(
-            `/api/releases/${state.releaseId}/tracks/${trackId}/audio-status`,
-            { method: "POST" }
-          );
-          const data = await res.json();
-          if (cancelled || !res.ok) continue;
-          if (data.status === "processing") continue;
-          setState((prev) => ({
-            ...prev,
-            tracks: prev.tracks.map((t) =>
-              t.id === trackId
-                ? {
-                    ...t,
-                    audioProcessing: false,
-                    audioProcessingError:
-                      data.status === "failed"
-                        ? data.error || "Audio processing failed"
-                        : null,
-                    audioUrl: data.audioUrl ?? t.audioUrl,
-                  }
-                : t
-            ),
-          }));
-        } catch {
-          // Network hiccup — next poll tick retries.
-        }
-      }
-    };
-
-    const interval = window.setInterval(poll, 5000);
-    void poll();
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [state.releaseId, processingKey]);
-
-  // Review must not trust the local cache — fetch what LabelGrid actually
-  // has whenever the user lands on this step.
-  useEffect(() => {
-    if (state.step !== STEP_REVIEW || !state.releaseId) return;
-    let cancelled = false;
-    const releaseId = state.releaseId;
-    fetch(`/api/releases/${releaseId}/labelgrid-snapshot`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (cancelled) return;
-        if (!res.ok) {
-          setLiveSnapshotError(data.error ?? "Could not verify LabelGrid.");
-          setLiveSnapshot(null);
-          return;
-        }
-        setLiveSnapshot(data.snapshot);
-        setLiveSnapshotError(null);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLiveSnapshot(null);
-          setLiveSnapshotError("Network error while checking LabelGrid.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [state.step, state.releaseId]);
 
   // -------------------------------------------------------------------------
   // Navigation
@@ -733,38 +550,19 @@ export function ReleaseBuilder({
     }
 
     const leavingDistribution = state.step === STEP_DISTRIBUTION;
-    const leavingCredits = state.step === STEP_CREDITS;
 
     setContinuing(true);
     try {
-      if (leavingDistribution) {
-        const result = state.releaseId
-          ? await saveDraft(stateRef.current, {
-              syncToLabelGrid: true,
-              forceArtwork: true,
-            })
-          : await createDraft(stateRef.current);
-        if (!result.labelgridOk) {
-          setError(
-            result.error ??
-              "Could not create the release on LabelGrid. Please try again."
-          );
-          return;
-        }
-      } else if (leavingCredits) {
-        const result = await saveDraft(stateRef.current, {
-          syncToLabelGrid: true,
-          forceArtwork: true,
-        });
-        if (!result.labelgridOk) {
-          setError(
-            result.error ??
-              "Could not sync your tracks to LabelGrid. Please try again."
-          );
-          return;
-        }
+      // Every step transition saves metadata locally — never LabelGrid.
+      const result = state.releaseId
+        ? await saveDraft(stateRef.current)
+        : await createDraft(stateRef.current);
+      if (!result.ok) {
+        setError(
+          result.error ?? "Could not save your progress. Please try again."
+        );
+        return;
       }
-      // Other transitions are pure client-side step changes.
 
       setState((prev) => {
         const nextStep = Math.min(prev.step + 1, WIZARD_STEPS.length - 1);
@@ -790,13 +588,20 @@ export function ReleaseBuilder({
     setError("");
     // Nothing exists anywhere until Distribution completes — no row to save.
     if (state.releaseId) {
-      await saveDraft(stateRef.current, { syncToLabelGrid: false });
+      await saveDraft(stateRef.current);
     }
     router.push("/dashboard/releases");
   }
 
-  async function submitForReview() {
-    if (submitting) return;
+  /**
+   * Step 5's Submit button — purely a client-side validation gate. All
+   * data through Step 4 is already saved locally (every Continue click
+   * saves it); there's nothing left to persist here. Once validated, this
+   * hands off to <SubmissionProgress>, which drives the entire LabelGrid
+   * sync (create release → artwork → tracks → audio → processing →
+   * credits → finalize).
+   */
+  function beginSubmission() {
     setError("");
     const msg = validateStep(state, STEP_REVIEW, roleCategories);
     if (msg) {
@@ -811,49 +616,15 @@ export function ReleaseBuilder({
         return;
       }
     }
-    if (state.tracks.some((t) => t.audioProcessing)) {
-      setError(
-        "Your audio is still processing on our distributor. This usually takes a moment — please try again shortly."
-      );
-      patch({ step: STEP_TRACKS });
+    if (!state.releaseId) {
+      setError("Draft missing — try Save & Exit, then reopen.");
       return;
     }
-
-    setSubmitting(true);
-    try {
-      // Final defensive sync so LabelGrid reflects the latest state.
-      const saved = await saveDraft(stateRef.current, {
-        forceArtwork: true,
-        syncToLabelGrid: true,
-      });
-      if (!saved.labelgridOk) {
-        setError(
-          saved.error ?? "Could not sync to LabelGrid before submitting."
-        );
-        setSubmitting(false);
-        return;
-      }
-      const id = stateRef.current.releaseId;
-      if (!id) {
-        setError("Draft missing — try Save & Exit, then reopen.");
-        setSubmitting(false);
-        return;
-      }
-      const res = await fetch(`/api/releases/${id}/submit-for-review`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Submit failed");
-        setSubmitting(false);
-        return;
-      }
-      router.push(`/dashboard/releases/${id}`);
-      router.refresh();
-    } catch {
-      setError("Network error. Try again.");
-      setSubmitting(false);
+    if (state.tracks.some((t) => !t.id)) {
+      setError("Your tracks are still saving — please wait a moment and try again.");
+      return;
     }
+    setSubmissionStarted(true);
   }
 
   // -------------------------------------------------------------------------
@@ -864,9 +635,6 @@ export function ReleaseBuilder({
     : { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const };
   const stepMeta = WIZARD_STEPS[state.step];
   const artist = artists.find((a) => a.id === state.artistId);
-  const hasPendingAudioUpload = state.tracks.some((t) => t.audioFile);
-  const showAudioUploadProgress =
-    continuing && state.step === STEP_CREDITS && hasPendingAudioUpload;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
@@ -903,49 +671,20 @@ export function ReleaseBuilder({
                 <Check size={12} weight="bold" aria-hidden />
                 Saved
               </span>
-            ) : saveStatus === "sync-error" ? (
-              <span
-                className="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
-                title={syncErrorMessage ?? undefined}
-              >
-                <WarningCircle size={12} weight="fill" aria-hidden />
-                Saved — distributor sync pending
-              </span>
             ) : saveStatus === "error" ? (
               <span className="text-destructive">Save failed</span>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void saveAndExit()}
-              className="cursor-pointer font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              Save & Exit
-            </button>
+            {!submissionStarted ? (
+              <button
+                type="button"
+                onClick={() => void saveAndExit()}
+                className="cursor-pointer font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                Save & Exit
+              </button>
+            ) : null}
           </div>
         </div>
-
-        {showAudioUploadProgress ? (
-          <div className="space-y-1.5" role="status" aria-live="polite">
-            <p className="text-xs font-medium text-muted-foreground">
-              Uploading audio to your distributor…
-            </p>
-            <div className="relative h-1.5 w-full overflow-hidden bg-muted">
-              {reduceMotion ? (
-                <div className="absolute inset-y-0 left-0 w-2/5 bg-primary" />
-              ) : (
-                <motion.div
-                  className="absolute inset-y-0 w-2/5 bg-primary"
-                  animate={{ left: ["-40%", "100%"] }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        ) : null}
 
         {error ? (
           <div
@@ -1020,54 +759,66 @@ export function ReleaseBuilder({
                 patch={patch}
                 artistName={artist?.name ?? ""}
                 outlets={outlets}
-                liveSnapshot={liveSnapshot}
-                liveSnapshotError={liveSnapshotError}
                 onJump={(step) => patch({ step })}
               />
             ) : null}
           </motion.div>
         </AnimatePresence>
 
-        <div
-          className={cn(
-            "sticky bottom-0 z-10 -mx-1 border border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0"
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 px-4"
-              disabled={state.step === STEP_RELEASE || submitting || continuing}
-              onClick={() => patch({ step: Math.max(0, state.step - 1) })}
-            >
-              <ArrowLeft size={16} weight="bold" aria-hidden />
-              Back
-            </Button>
-            {state.step < WIZARD_STEPS.length - 1 ? (
-              <Button
-                type="button"
-                className="h-11 px-5"
-                loading={continuing}
-                onClick={() => void ensureDraftThenContinue()}
-              >
-                Continue
-                {!continuing ? (
-                  <ArrowRight size={16} weight="bold" aria-hidden />
-                ) : null}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                className="h-11 px-5"
-                loading={submitting}
-                onClick={() => void submitForReview()}
-              >
-                {submitting ? "Submitting…" : "Submit for Review"}
-              </Button>
+        {submissionStarted && state.releaseId ? (
+          <SubmissionProgress
+            releaseId={state.releaseId}
+            title={state.title}
+            artworkFile={state.artworkFile}
+            tracks={state.tracks.map((t) => ({
+              id: t.id ?? null,
+              clientId: t.clientId,
+              title: t.title,
+              audioFile: t.audioFile,
+            }))}
+            onCancel={() => setSubmissionStarted(false)}
+          />
+        ) : (
+          <div
+            className={cn(
+              "sticky bottom-0 z-10 -mx-1 border border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0"
             )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 px-4"
+                disabled={state.step === STEP_RELEASE || continuing}
+                onClick={() => patch({ step: Math.max(0, state.step - 1) })}
+              >
+                <ArrowLeft size={16} weight="bold" aria-hidden />
+                Back
+              </Button>
+              {state.step < WIZARD_STEPS.length - 1 ? (
+                <Button
+                  type="button"
+                  className="h-11 px-5"
+                  loading={continuing}
+                  onClick={() => void ensureDraftThenContinue()}
+                >
+                  Continue
+                  {!continuing ? (
+                    <ArrowRight size={16} weight="bold" aria-hidden />
+                  ) : null}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  className="h-11 px-5"
+                  onClick={beginSubmission}
+                >
+                  Submit Release
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

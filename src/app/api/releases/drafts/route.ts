@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { syncReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import {
   ARTWORK_AI_USAGE,
@@ -11,7 +9,6 @@ import {
   makeCatalogCandidate,
   type ReleaseMetadata,
 } from "@/lib/releases/constants";
-import { validateArtwork } from "@/lib/uploads/store";
 
 const schema = z.object({
   artistId: z.string().min(1),
@@ -51,11 +48,12 @@ async function allocateCatalogNumber(): Promise<string> {
 }
 
 /**
- * Checkpoint A (leaving Distribution): create the local mapping row AND the
- * LabelGrid release in one shot — Steps 1+2 data combined into the first
- * POST /releases. The local row stores ownership/mapping + cached display
- * fields only; LabelGrid is the catalog source of truth. Does not consume
- * Free quota and does not submit anything for review.
+ * Steps 1-4 are local data entry only — this route creates just the local
+ * RDISTRO mapping row (ownership + cached display fields). It never touches
+ * LabelGrid: no release is created there until the user reaches Step 5 and
+ * clicks Submit (see /api/releases/[id]/submit/*). Artwork stays an
+ * in-memory File in the wizard's browser state until then — this route
+ * doesn't accept or store it.
  */
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -77,12 +75,6 @@ export async function POST(request: Request) {
     if (!artist) {
       return NextResponse.json({ error: "Artist not found" }, { status: 404 });
     }
-
-    const artworkFile = form.get("artwork");
-    const artwork =
-      artworkFile instanceof File && artworkFile.size > 0
-        ? await validateArtwork(artworkFile)
-        : null;
 
     const catalogNumber = await allocateCatalogNumber();
     const title = fields.title?.trim() || "Untitled release";
@@ -141,28 +133,7 @@ export async function POST(request: Request) {
       actorUserId: user.id,
     });
 
-    let labelgrid: { synced: boolean; releaseId?: number; error?: string } = {
-      synced: false,
-    };
-    if (isLabelGridLive()) {
-      const result = await syncReleaseToLabelGrid({
-        release,
-        artwork,
-        audios: [],
-      });
-      labelgrid = result.ok
-        ? { synced: true, releaseId: result.releaseId }
-        : { synced: false, error: result.error };
-    }
-
-    const fresh = labelgrid.synced
-      ? await prisma.release.findUnique({
-          where: { id: release.id },
-          include: { artist: true, tracks: true },
-        })
-      : release;
-
-    return NextResponse.json({ release: fresh, labelgrid }, { status: 201 });
+    return NextResponse.json({ release }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

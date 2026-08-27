@@ -4,11 +4,6 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { canUserEditRelease, isFinalRejection } from "@/lib/releases/status";
-import { isLabelGridLive } from "@/lib/labelgrid/config";
-import {
-  syncReleaseToLabelGrid,
-  type TrackAudioInput,
-} from "@/lib/labelgrid/sync-submit";
 import {
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
@@ -17,13 +12,7 @@ import {
   type ReleaseMetadata,
   type TrackMetadata,
 } from "@/lib/releases/constants";
-import {
-  saveGenericUpload,
-  validateArtwork,
-  validateAudio,
-  type StoredUpload,
-  type ValidatedFile,
-} from "@/lib/uploads/store";
+import { saveGenericUpload, type StoredUpload } from "@/lib/uploads/store";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -107,17 +96,16 @@ const schema = z.object({
   writerSplits: z.array(writerSplitSchema).optional(),
   publisherSplits: z.array(publisherSplitSchema).optional(),
   selfPublished: z.boolean().optional(),
-  /**
-   * Wizard checkpoint: force a LabelGrid metadata sync (release/distribution
-   * after the Distribution step, tracks/credits after the Credits step)
-   * even when this particular save carries no new file.
-   */
-  syncToLabelGrid: z.boolean().optional(),
 });
 
 /**
- * Autosave / update a draft release (and its tracks).
- * Does not change submittedAt or submit to LabelGrid review.
+ * Steps 1-4 local save — metadata only, never touches LabelGrid. Artwork
+ * and track audio stay in-memory File objects in the wizard's browser
+ * state; this route doesn't accept them at all (see /api/releases/[id]/
+ * submit/* for the Step-5 flow that actually creates/updates the LabelGrid
+ * release, tracks, and uploads artwork/audio). License documents are the
+ * one exception — they've always used RDISTRO's own local storage, not
+ * LabelGrid's, so that part is unchanged.
  */
 export async function PATCH(request: Request, { params }: Params) {
   const user = await getSessionUser();
@@ -156,12 +144,6 @@ export async function PATCH(request: Request, { params }: Params) {
         return NextResponse.json({ error: "Artist not found" }, { status: 404 });
       }
     }
-
-    const artworkFile = form.get("artwork");
-    const artwork: ValidatedFile | null =
-      artworkFile instanceof File && artworkFile.size > 0
-        ? await validateArtwork(artworkFile)
-        : null;
 
     const prevMeta = parseJsonObject<ReleaseMetadata & Record<string, unknown>>(
       existing.metadataJson
@@ -260,18 +242,11 @@ export async function PATCH(request: Request, { params }: Params) {
     });
 
     // Replace tracks when provided
-    const audioInputs: TrackAudioInput[] = [];
     if (fields.tracks) {
       const keepIds: string[] = [];
       let index = 0;
       for (const t of fields.tracks) {
         index += 1;
-        const audioKey = `audio_${t.clientId ?? t.id ?? index}`;
-        const audioFile = form.get(audioKey);
-        const audio: ValidatedFile | null =
-          audioFile instanceof File && audioFile.size > 0
-            ? await validateAudio(audioFile)
-            : null;
 
         const contributors =
           t.contributors ??
@@ -324,8 +299,17 @@ export async function PATCH(request: Request, { params }: Params) {
           // New file → needs a fresh LabelGrid license upload.
           tMeta.licenseSyncedAt = null;
         }
+        // Credits changed in this save → Stage 7 (Credits & Rights) must
+        // re-verify against LabelGrid rather than trusting a stale flag.
+        if (
+          t.contributors !== undefined ||
+          fields.contributors !== undefined ||
+          fields.writerSplits !== undefined ||
+          fields.publisherSplits !== undefined
+        ) {
+          tMeta.creditsSyncedAt = null;
+        }
 
-        let trackId: string;
         if (t.id) {
           const owned = existing.tracks.find((x) => x.id === t.id);
           if (!owned) continue;
@@ -349,7 +333,6 @@ export async function PATCH(request: Request, { params }: Params) {
             });
           }
           keepIds.push(t.id);
-          trackId = t.id;
         } else {
           const created = await prisma.track.create({
             data: {
@@ -368,10 +351,7 @@ export async function PATCH(request: Request, { params }: Params) {
             },
           });
           keepIds.push(created.id);
-          trackId = created.id;
         }
-
-        if (audio) audioInputs.push({ localTrackId: trackId, upload: audio });
       }
 
       await prisma.track.deleteMany({
@@ -395,6 +375,7 @@ export async function PATCH(request: Request, { params }: Params) {
         existing.tracks[0].metadataJson
       );
       tMeta.contributors = fields.contributors;
+      tMeta.creditsSyncedAt = null;
       await prisma.track.update({
         where: { id: trackId },
         data: { metadataJson: JSON.stringify(tMeta) },
@@ -416,7 +397,7 @@ export async function PATCH(request: Request, { params }: Params) {
       actorUserId: user.id,
     });
 
-    let fresh = await prisma.release.findUnique({
+    const fresh = await prisma.release.findUnique({
       where: { id },
       include: {
         artist: true,
@@ -424,35 +405,7 @@ export async function PATCH(request: Request, { params }: Params) {
       },
     });
 
-    let labelgrid:
-      | { uploaded: boolean; error?: string; processingTrackIds?: string[] }
-      | undefined;
-    // Hit LabelGrid when this request carries a new file, or when the
-    // wizard explicitly asked for a checkpoint sync (leaving Distribution
-    // or Credits) — metadata-only keystrokes otherwise skip the round trip;
-    // the final metadata sync also happens at submit-for-review/approve.
-    if (
-      fresh &&
-      isLabelGridLive() &&
-      (artwork || audioInputs.length > 0 || fields.syncToLabelGrid)
-    ) {
-      const pushResult = await syncReleaseToLabelGrid({
-        release: fresh,
-        artwork,
-        audios: audioInputs,
-      });
-      labelgrid = pushResult.ok
-        ? { uploaded: true, processingTrackIds: pushResult.processingTrackIds }
-        : { uploaded: false, error: pushResult.error };
-      // Re-fetch so the response reflects the labelgridId + LabelGrid-hosted
-      // artwork/audio URLs + per-track processing state written above.
-      fresh = await prisma.release.findUnique({
-        where: { id },
-        include: { artist: true, tracks: { orderBy: { trackNumber: "asc" } } },
-      });
-    }
-
-    return NextResponse.json({ release: fresh, labelgrid });
+    return NextResponse.json({ release: fresh });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
