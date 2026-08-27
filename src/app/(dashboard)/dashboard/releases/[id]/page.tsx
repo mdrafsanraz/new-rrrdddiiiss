@@ -21,11 +21,9 @@ import {
 } from "@/lib/labelgrid/live-release";
 import { getReleaseDeliveryStatus } from "@/lib/labelgrid";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
-import { syncReleaseQualityReport } from "@/lib/labelgrid/quality-report";
 import { reviewStatusLabel, reviewStatusTone } from "@/lib/labelgrid/state-labels";
 import {
   canUserEditRelease,
-  canUserReplaceMedia,
   canUserResubmitRelease,
   canUserSubmitRelease,
   getUserFacingReleaseStatus,
@@ -33,7 +31,6 @@ import {
   isFinalRejection,
   normalizeReleaseStatus,
 } from "@/lib/releases/status";
-import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 import { ReleaseActions } from "@/components/dashboard/release-view/release-actions";
 import { Badge } from "@/components/dashboard/release-view/badge";
 import {
@@ -139,7 +136,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const canSubmit = canUserSubmitRelease(release);
   const canResubmit = canUserResubmitRelease(release);
   const canEdit = canUserEditRelease(release);
-  const canReplaceMedia = canUserReplaceMedia(release);
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
     id: d.id,
@@ -222,15 +218,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
       territoryNames = territoriesResult.value;
   }
 
-  const qcSync = release.labelgridId
-    ? await syncReleaseQualityReport(release.id).catch(() => ({
-        ok: false as const,
-        error: "Could not load Preflight QC.",
-      }))
-    : null;
-  const qcReport = qcSync?.ok ? (qcSync.report ?? null) : null;
-  const qcError = qcSync && !qcSync.ok ? qcSync.error ?? null : null;
-
   const { canDelete, canTakedown, takedownDisabledReason } =
     computeReleaseLifecycleActions({
       everSubmitted,
@@ -263,26 +250,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
     : neverSynced
       ? release.releaseDate
       : null;
-
-  // Media-replace nudge: prefer LabelGrid's actual file presence per track
-  // (matched by labelgridId) over the local cache.
-  const liveAudioPresentByLgTrackId = new Map(
-    (live?.tracks ?? []).map((lt) => [String(lt.id), Boolean(lt.audio?.url)])
-  );
-  const artworkOnDisk = live ? Boolean(live.coverUrl) : Boolean(release.artworkUrl);
-  const trackMedia = tracks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    trackNumber: t.trackNumber,
-    hasAudioOnDisk:
-      t.labelgridId && liveAudioPresentByLgTrackId.has(t.labelgridId)
-        ? liveAudioPresentByLgTrackId.get(t.labelgridId)!
-        : Boolean(t.audioUrl),
-  }));
-  const needsArtwork = !artworkOnDisk;
-  const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
-  const showMediaReplace =
-    canReplaceMedia && (needsArtwork || needsAudio || Boolean(release.syncError));
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -446,16 +413,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
         </section>
       ) : null}
 
-      {showMediaReplace ? (
-        <ReplaceReleaseMediaForm
-          releaseId={release.id}
-          tracks={trackMedia}
-          artworkOnDisk={artworkOnDisk}
-          needsArtwork={needsArtwork}
-          needsAudio={needsAudio}
-        />
-      ) : null}
-
       {/* PAGE CONTENT */}
       {neverSynced ? (
         <section className="border border-border bg-card px-4 py-8 text-center">
@@ -478,8 +435,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
           trackDurationsByLgId={trackDurationsByLgId}
           delivery={delivery}
           deliveryError={deliveryError}
-          qc={qcReport}
-          qcError={qcError}
           documents={documents}
           activities={activities}
         />

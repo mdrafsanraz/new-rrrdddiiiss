@@ -2,15 +2,12 @@
 
 import { useState } from "react";
 import type { LiveRelease, LiveTrack } from "@/lib/labelgrid/live-release";
-import type { QcReportSnapshot } from "@/lib/labelgrid/quality-report";
 import {
   deliveryStateLabel,
   deliveryStateTone,
   operationLabel,
   outletStateLabel,
   outletStateTone,
-  qcSeverityLabel,
-  qcSeverityTone,
 } from "@/lib/labelgrid/state-labels";
 import { Badge } from "./badge";
 
@@ -119,8 +116,6 @@ export function ReleaseTabs({
   trackDurationsByLgId,
   delivery,
   deliveryError,
-  qc,
-  qcError,
   documents,
   activities,
 }: {
@@ -130,8 +125,6 @@ export function ReleaseTabs({
   trackDurationsByLgId: Record<number, number | null>;
   delivery: DeliveryStatusData | null;
   deliveryError: string | null;
-  qc: QcReportSnapshot | null;
-  qcError: string | null;
   documents: ReleaseDocument[];
   activities: ReleaseActivityRow[];
 }) {
@@ -185,8 +178,6 @@ export function ReleaseTabs({
             delivery={delivery}
             deliveryError={deliveryError}
             outletNames={outletNames}
-            qc={qc}
-            qcError={qcError}
           />
         ) : null}
         {tab === "Activity" ? <ActivityTab activities={activities} /> : null}
@@ -509,27 +500,19 @@ function DistributionTab({
 }
 
 // ---------------------------------------------------------------------------
-// Delivery (+ Preflight QC)
+// Delivery
 
 function DeliveryTab({
   delivery,
   deliveryError,
   outletNames,
-  qc,
-  qcError,
 }: {
   delivery: DeliveryStatusData | null;
   deliveryError: string | null;
   outletNames: Record<string, string>;
-  qc: QcReportSnapshot | null;
-  qcError: string | null;
 }) {
   return (
     <div className="space-y-4">
-      <Section title="Preflight QC" subtitle="LabelGrid quality-report">
-        <QcSummary qc={qc} qcError={qcError} />
-      </Section>
-
       <Section title="Delivery" subtitle="LabelGrid delivery-status">
         {deliveryError ? (
           <p className="text-sm text-destructive">{deliveryError}</p>
@@ -599,75 +582,6 @@ function DeliveryTab({
           </>
         )}
       </Section>
-    </div>
-  );
-}
-
-function QcSummary({
-  qc,
-  qcError,
-}: {
-  qc: QcReportSnapshot | null;
-  qcError: string | null;
-}) {
-  if (qcError) {
-    return <p className="text-sm text-destructive">{qcError}</p>;
-  }
-  if (!qc || !qc.enabled) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Preflight QC is not enabled on this LabelGrid account.
-      </p>
-    );
-  }
-  if (qc.checksInProgress) {
-    return (
-      <div className="flex items-center gap-2">
-        <Badge tone="info">Checks in progress</Badge>
-        <span className="text-sm text-muted-foreground">
-          Findings will appear once automated checks finish.
-        </span>
-      </div>
-    );
-  }
-  if (qc.issues.length === 0) {
-    return <Badge tone="success">Passed — no issues found</Badge>;
-  }
-  const blocking = qc.issues.filter((i) => i.isBlocking);
-  const warnings = qc.issues.filter((i) => !i.isBlocking);
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Badge tone={blocking.length ? "danger" : "warning"}>
-          {blocking.length
-            ? `${blocking.length} blocking issue${blocking.length === 1 ? "" : "s"}`
-            : `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`}
-        </Badge>
-        {qc.stale ? <Badge tone="warning">Stale — re-run needed</Badge> : null}
-      </div>
-      <ul className="space-y-2">
-        {qc.issues.map((issue) => (
-          <li key={issue.id} className="border border-border px-3 py-2.5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <p className="text-sm font-medium">{issue.title ?? issue.code}</p>
-              <Badge tone={qcSeverityTone(issue.severity, issue.isBlocking)}>
-                {qcSeverityLabel(issue.severity)}
-              </Badge>
-            </div>
-            {issue.message ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {issue.message}
-              </p>
-            ) : null}
-            {issue.affectedTracks.length ? (
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Affected: {issue.affectedTracks.map((t) => t.title).join(", ")}
-              </p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
