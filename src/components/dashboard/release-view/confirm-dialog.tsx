@@ -18,10 +18,10 @@ export function ConfirmDialogShell({
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Portal>
-        <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-black/50" />
+        <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] transition-opacity duration-200 ease-[var(--ease-rdistro)] data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
         <AlertDialog.Popup
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border border-border bg-card p-5 shadow-lg outline-none",
+            "fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border border-border bg-card p-5 shadow-lg outline-none transition-[opacity,transform] duration-200 ease-[var(--ease-rdistro)] data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
             widthClassName
           )}
         >
