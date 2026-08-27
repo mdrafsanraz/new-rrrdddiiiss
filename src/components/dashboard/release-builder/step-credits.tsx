@@ -33,6 +33,7 @@ import {
   type WizardState,
 } from "@/lib/releases/wizard-types";
 import {
+  DropdownPanel,
   EntityPicker,
   Panel,
   YesNo,
@@ -259,8 +260,10 @@ function AddRoleDropdown({
       >
         + Add role
       </button>
-      {open ? (
-        <div className="absolute z-20 mt-1 w-64 border border-border bg-card shadow-md">
+      <DropdownPanel
+        show={open}
+        className="absolute z-20 mt-1 w-64 border border-border bg-card shadow-md"
+      >
           <input
             type="text"
             autoFocus
@@ -307,8 +310,7 @@ function AddRoleDropdown({
               ))
             )}
           </div>
-        </div>
-      ) : null}
+      </DropdownPanel>
     </div>
   );
 }

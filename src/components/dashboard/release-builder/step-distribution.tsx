@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import type { WizardState } from "@/lib/releases/wizard-types";
 import {
   CatalogStatus,
+  ExpandPanel,
   Panel,
   type CatalogState,
   type Outlet,
@@ -70,7 +71,7 @@ export function StepDistribution({
               className={cn("transition-transform duration-200 ease-[var(--ease-rdistro)]", manualStores && "rotate-180")}
             />
           </button>
-          {manualStores ? (
+          <ExpandPanel show={manualStores}>
             <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
               <CatalogStatus
                 catalog={outlets}
@@ -103,7 +104,7 @@ export function StepDistribution({
                 );
               })}
             </div>
-          ) : null}
+          </ExpandPanel>
         </div>
       </Panel>
 
@@ -146,7 +147,7 @@ export function StepDistribution({
               )}
             />
           </button>
-          {manualTerritories ? (
+          <ExpandPanel show={manualTerritories}>
             <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
               <CatalogStatus
                 catalog={territories}
@@ -177,7 +178,7 @@ export function StepDistribution({
                 );
               })}
             </div>
-          ) : null}
+          </ExpandPanel>
         </div>
       </Panel>
     </div>

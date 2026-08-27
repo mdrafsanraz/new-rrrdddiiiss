@@ -3,11 +3,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * Presentational tone-driven badge matching the shape already established
- * by `StatusBadge` (square, 11px semibold, tinted background) — for
- * non-release-status usages (plan tier, generic labels). Does not replace
- * StatusBadge/AdminStatusBadge, which keep their own status→tone mapping
- * logic; this is the shared shell those already match visually.
+ * The one shared visual system for status/tone badges across the user
+ * dashboard (square, 11px semibold, tinted background, dark-mode aware).
+ * `StatusBadge` (release status) and the release-view `Badge` (LabelGrid
+ * review status) both render through this — they keep their own
+ * status→tone mapping logic, only the visual shell is shared. The tone
+ * set intentionally matches `Tone`/`TONE_CLASSES` in
+ * `@/lib/labelgrid/state-labels` so both systems stay byte-identical.
+ * (Admin's separate `AdminStatusBadge` is out of scope — different surface.)
  */
 const badgeVariants = cva(
   "inline-flex shrink-0 items-center gap-1 px-2 py-0.5 text-[11px] font-semibold",
@@ -15,13 +18,10 @@ const badgeVariants = cva(
     variants: {
       tone: {
         neutral: "bg-muted text-muted-foreground",
-        primary: "bg-primary/10 text-primary",
-        warning:
-          "bg-amber-500/15 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200",
-        danger:
-          "bg-red-500/10 text-red-800 dark:bg-red-500/15 dark:text-red-300",
-        success:
-          "bg-emerald-600/10 text-emerald-800 dark:bg-emerald-600/15 dark:text-emerald-300",
+        info: "bg-primary/10 text-primary",
+        success: "bg-emerald-600/10 text-emerald-800 dark:text-emerald-400",
+        warning: "bg-amber-500/15 text-amber-900 dark:text-amber-400",
+        danger: "bg-red-500/10 text-red-800 dark:text-red-400",
       },
     },
     defaultVariants: {

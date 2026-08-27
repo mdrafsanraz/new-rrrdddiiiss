@@ -1,24 +1,7 @@
-import { cn } from "@/lib/utils";
-import { TONE_CLASSES, type Tone } from "@/lib/labelgrid/state-labels";
-
-export function Badge({
-  tone = "neutral",
-  children,
-  className,
-}: {
-  tone?: Tone;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center px-2 py-0.5 text-[11px] font-semibold",
-        TONE_CLASSES[tone],
-        className
-      )}
-    >
-      {children}
-    </span>
-  );
-}
+/**
+ * Re-exports the shared Badge primitive — `Tone` here
+ * (`@/lib/labelgrid/state-labels`) is the same 5-value set as
+ * `ui/badge.tsx`'s `tone` variant, so this file exists only to keep the
+ * existing `import { Badge } from "./badge"` call sites unchanged.
+ */
+export { Badge } from "@/components/ui/badge";

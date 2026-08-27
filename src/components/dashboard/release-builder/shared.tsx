@@ -164,6 +164,60 @@ export function Panel({
   return <Card className={cn("p-5 sm:p-6", className)}>{children}</Card>;
 }
 
+/** Animated show/hide for an in-flow block (e.g. a collapsible section). */
+export function ExpandPanel({
+  show,
+  children,
+}: {
+  show: boolean;
+  children: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <AnimatePresence initial={false}>
+      {show ? (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden"
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+/** Animated fade/scale for a floating, absolutely-positioned dropdown panel. */
+export function DropdownPanel({
+  show,
+  className,
+  children,
+}: {
+  show: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <AnimatePresence>
+      {show ? (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: -4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          className={className}
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
 export function ChipGroup({
   options,
   value,
@@ -707,9 +761,11 @@ export function EntityPicker({
           setOpen(true);
         }}
       />
-      {open ? (
-        <div className="absolute z-20 mt-1 w-full border border-border bg-card shadow-md">
-          {creating ? (
+      <DropdownPanel
+        show={open}
+        className="absolute z-20 mt-1 w-full border border-border bg-card shadow-md"
+      >
+        {creating ? (
             <div className="space-y-2 p-3">
               {spec.mode === "person" ? (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -801,9 +857,8 @@ export function EntityPicker({
                 </li>
               ) : null}
             </ul>
-          )}
-        </div>
-      ) : null}
+        )}
+      </DropdownPanel>
     </div>
   );
 }
