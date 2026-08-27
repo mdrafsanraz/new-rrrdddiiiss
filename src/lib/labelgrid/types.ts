@@ -19,13 +19,24 @@ export type ReleaseTitleLocalizationData = {
   phonetic?: string | null;
 };
 
+export type ReleaseArtistRow = {
+  artist?: { id?: number; artist_name?: string } | null;
+  artistic_role?: string | null;
+};
+
+export type DspConfigRow = { distro_outlet_id: string; enabled: boolean };
+export type ReleaseDateExclusionRow = {
+  countries?: string[];
+  exclude?: boolean;
+};
+
 export type ReleaseData = {
   id: number;
   public_id: string;
   /** Runtime shape nests the artist under `.artist` (confirmed via the live
    * labelgrid-snapshot endpoint) — not the flat shape the field name alone
    * suggests. */
-  artists?: { artist?: { id?: number; artist_name?: string } | null }[] | null;
+  artists?: ReleaseArtistRow[] | null;
   titles?: ReleaseTitleLocalizationData[];
   mix_versions?: ReleaseTitleLocalizationData[];
   title?: string | null;
@@ -40,11 +51,14 @@ export type ReleaseData = {
   content_type?: string | null;
   primary_genre?: { id?: number; name?: string } | null;
   preferred_localization?: string | null;
+  artwork_ai_usage?: string | null;
   explicit?: string | null;
   cline_year?: number | null;
   cline_name?: string | null;
   pline_year?: number | null;
   pline_name?: string | null;
+  dsp_configs?: DspConfigRow[] | null;
+  release_dates?: ReleaseDateExclusionRow[] | null;
   tracks?: TrackData[] | null;
 };
 
@@ -85,6 +99,13 @@ export type TrackPublisherRow = {
   publisher?: { id?: number; name?: string | null } | null;
 };
 
+export type TrackArtistRow = {
+  artist_id: number;
+  artist?: { id?: number; artist_name?: string } | null;
+  artistic_role: string;
+  position?: number | null;
+};
+
 export type TrackData = {
   id: number;
   public_id?: string;
@@ -94,6 +115,8 @@ export type TrackData = {
   title?: string | null;
   mix_version?: string | null;
   mix_versions?: { iso_code?: string; text?: string }[];
+  artists?: TrackArtistRow[] | null;
+  default_display_artist?: string | null;
   isrc?: string | null;
   iswc?: string | null;
   explicit?: string | null;

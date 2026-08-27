@@ -11,7 +11,13 @@
 
 import { prisma } from "@/lib/db";
 import { LabelGridApiError } from "@/lib/labelgrid/client";
-import { getRelease, getTrack, getTrackFile } from "@/lib/labelgrid";
+import {
+  getRelease,
+  getTrack,
+  getTrackFile,
+  listDistroOutlets,
+  listTerritories,
+} from "@/lib/labelgrid";
 import { listTracksForRelease, unwrapLabelGridData } from "@/lib/labelgrid/catalog";
 import type {
   FileData,
@@ -37,6 +43,7 @@ export type LiveTrack = {
   id: number;
   trackNumber: number | null;
   title: string;
+  artist: string | null;
   mixVersion: string | null;
   isrc: string | null;
   iswc: string | null;
@@ -47,16 +54,21 @@ export type LiveTrack = {
   audio: LiveAudioFile | null;
 };
 
+export type LiveReleaseArtist = { id: number | null; name: string; role: string | null };
+
 export type LiveRelease = {
   id: number;
   title: string;
   artist: string | null;
+  artists: LiveReleaseArtist[];
+  mixVersion: string | null;
   primaryGenre: string | null;
   contentType: string | null;
   releaseDate: string | null;
   barcodeNumber: string | null;
   catalogNumber: string | null;
   preferredLocalization: string | null;
+  artworkAiUsage: string | null;
   explicit: string | null;
   coverUrl: string | null;
   reviewStatus: string | null;
@@ -64,6 +76,11 @@ export type LiveRelease = {
   clineName: string | null;
   plineYear: number | null;
   plineName: string | null;
+  /** Raw dsp_configs — resolve distro_outlet_id → name against GET /distro-outlets. */
+  dspConfigs: { outletId: string; enabled: boolean }[];
+  /** Worldwide unless release_dates carries an exclusion list. */
+  worldwide: boolean;
+  excludedTerritoryCodes: string[];
   tracks: LiveTrack[];
 };
 
@@ -85,14 +102,22 @@ function displayTitle(row: {
   return row.title?.trim() || row.titles?.[0]?.text?.trim() || "Untitled";
 }
 
-function joinArtists(
+function buildArtistRows(
   artists: ReleaseData["artists"]
-): string | null {
-  if (!Array.isArray(artists)) return null;
-  const names = artists
-    .map((a) => a.artist?.artist_name?.trim())
-    .filter((n): n is string => Boolean(n));
-  return names.length > 0 ? names.join(", ") : null;
+): LiveReleaseArtist[] {
+  if (!Array.isArray(artists)) return [];
+  return artists
+    .filter((a) => a.artist?.artist_name?.trim())
+    .map((a) => ({
+      id: a.artist?.id ?? null,
+      name: a.artist!.artist_name!.trim(),
+      role: a.artistic_role ?? null,
+    }));
+}
+
+function joinArtists(artists: ReleaseData["artists"]): string | null {
+  const rows = buildArtistRows(artists);
+  return rows.length > 0 ? rows.map((r) => r.name).join(", ") : null;
 }
 
 function rolesFromDict(roles: Record<string, string> | null | undefined): string[] {
@@ -201,10 +226,18 @@ async function buildLiveTrack(
     fetchTrackAudio(t.id),
   ]);
 
+  const trackArtistNames = Array.isArray(t.artists)
+    ? t.artists
+        .map((a) => a.artist?.artist_name?.trim())
+        .filter((n): n is string => Boolean(n))
+        .join(", ")
+    : "";
+
   return {
     id: t.id,
     trackNumber: t.track_num ?? null,
     title: displayTitle(t),
+    artist: trackArtistNames || t.default_display_artist?.trim() || null,
     mixVersion: t.mix_version?.trim() || t.mix_versions?.[0]?.text?.trim() || null,
     isrc: t.isrc ?? null,
     iswc: t.iswc ?? null,
@@ -238,16 +271,25 @@ export async function fetchLiveRelease(
     sortedTrackIds.map((id) => buildLiveTrack(userId, id))
   );
 
+  const excludedTerritoryCodes = Array.isArray(release.release_dates)
+    ? release.release_dates
+        .filter((r) => r.exclude)
+        .flatMap((r) => r.countries ?? [])
+    : [];
+
   return {
     id: release.id,
     title: displayTitle(release),
     artist: joinArtists(release.artists),
+    artists: buildArtistRows(release.artists),
+    mixVersion: release.mix_version?.trim() || release.mix_versions?.[0]?.text?.trim() || null,
     primaryGenre: release.primary_genre?.name ?? null,
     contentType: release.content_type ?? null,
     releaseDate: release.release_date ?? null,
     barcodeNumber: release.barcode_number ?? null,
     catalogNumber: release.cat ?? null,
     preferredLocalization: release.preferred_localization ?? null,
+    artworkAiUsage: release.artwork_ai_usage ?? null,
     explicit: release.explicit ?? null,
     coverUrl: release.front_cover?.url ?? null,
     reviewStatus: release.review_status ?? null,
@@ -255,6 +297,14 @@ export async function fetchLiveRelease(
     clineName: release.cline_name ?? null,
     plineYear: release.pline_year ?? null,
     plineName: release.pline_name ?? null,
+    dspConfigs: Array.isArray(release.dsp_configs)
+      ? release.dsp_configs.map((c) => ({
+          outletId: c.distro_outlet_id,
+          enabled: c.enabled,
+        }))
+      : [],
+    worldwide: excludedTerritoryCodes.length === 0,
+    excludedTerritoryCodes,
     tracks,
   };
 }
@@ -278,6 +328,38 @@ export async function fetchLiveReleaseSummary(
     reviewStatus: release.review_status ?? null,
     trackCount: trackRows.length,
   };
+}
+
+/** distro_outlet_id → display name, straight from GET /distro-outlets — never hardcoded. */
+export async function loadOutletNames(): Promise<Record<string, string>> {
+  try {
+    const raw = await listDistroOutlets();
+    const list = Array.isArray(raw)
+      ? raw
+      : ((raw as { data?: unknown[] })?.data ?? []);
+    const map: Record<string, string> = {};
+    for (const o of list as Array<Record<string, unknown>>) {
+      const key = String(o.key ?? "");
+      if (key) map[key] = String(o.name ?? o.key ?? key);
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/** alpha-2 code → territory name, straight from GET /territories — never hardcoded. */
+export async function loadTerritoryNames(): Promise<Record<string, string>> {
+  try {
+    const rows = await listTerritories();
+    const map: Record<string, string> = {};
+    for (const t of rows) {
+      if (t.code2) map[t.code2.toUpperCase()] = t.name;
+    }
+    return map;
+  } catch {
+    return {};
+  }
 }
 
 export class LiveFetchTimeoutError extends Error {
