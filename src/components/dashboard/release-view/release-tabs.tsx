@@ -10,6 +10,7 @@ import {
   outletStateTone,
 } from "@/lib/labelgrid/state-labels";
 import { Badge } from "./badge";
+import { Card, CardBody, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type DeliveryOutletRow = {
   outlet: string;
@@ -63,17 +64,19 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-border bg-card">
+    <Card>
       {title ? (
-        <div className="border-b border-border px-4 py-3">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          {subtitle ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
-          ) : null}
-        </div>
+        <CardHeader className="p-4 sm:p-4">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            {subtitle ? (
+              <CardDescription className="text-xs">{subtitle}</CardDescription>
+            ) : null}
+          </div>
+        </CardHeader>
       ) : null}
-      <div className="px-4 py-4">{children}</div>
-    </div>
+      <CardBody className="p-4 sm:p-4">{children}</CardBody>
+    </Card>
   );
 }
 
@@ -144,7 +147,7 @@ export function ReleaseTabs({
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={
-              "shrink-0 cursor-pointer border-b-2 px-3 py-2.5 text-sm font-medium transition-colors " +
+              "shrink-0 cursor-pointer border-b-2 px-3 py-2.5 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)] " +
               (tab === t
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground")

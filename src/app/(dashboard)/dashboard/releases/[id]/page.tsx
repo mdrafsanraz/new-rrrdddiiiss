@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowLeft,
+  ArrowUUpLeft,
+  Disc,
+  Prohibit,
+  WarningCircle,
+} from "@phosphor-icons/react/dist/ssr";
+import { Callout } from "@/components/ui/callout";
+import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
@@ -267,7 +275,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
           {displayArtworkUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={displayArtworkUrl} alt="" className="size-full object-cover" />
-          ) : null}
+          ) : (
+            <div className="flex size-full items-center justify-center text-muted-foreground">
+              <Disc size={22} weight="regular" aria-hidden />
+            </div>
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -292,7 +304,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
             {getUserFacingStatusDescription(release.status)}
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-2">
             {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
             {canResubmit ? <ResubmitReleaseButton releaseId={release.id} /> : null}
             {!finalReject ? (
@@ -321,37 +333,30 @@ export default async function ReleaseDetailPage({ params }: Props) {
       </div>
 
       {showSentBackNotice ? (
-        <section className="border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-          <p className="font-semibold">Sent back to draft</p>
-          <p className="mt-1 whitespace-pre-wrap">{release.reviewNotes}</p>
+        <Callout tone="info" icon={<ArrowUUpLeft size={18} weight="bold" aria-hidden />} title="Sent back to draft">
+          <p className="whitespace-pre-wrap">{release.reviewNotes}</p>
           <p className="mt-2 opacity-80">
             Use <strong>Edit Release</strong> to re-upload artwork and audio,
             then resubmit for review.
           </p>
-        </section>
+        </Callout>
       ) : null}
 
       {needsChanges ? (
-        <section className="border border-amber-500/40 bg-amber-50 p-4 text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-200">
-          <div className="flex items-start gap-3">
-            <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Changes Required</p>
-              <p className="mt-1 text-sm opacity-85">
-                This is not a final rejection. Fix the items below, upload any
-                requested documents, then resubmit.
-              </p>
-              {release.reviewNotes ? (
-                <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3 text-sm dark:border-amber-500/20">
-                  {release.reviewNotes}
-                </p>
-              ) : null}
-            </div>
-          </div>
+        <Callout tone="warning" icon={<WarningCircle size={20} weight="fill" aria-hidden />} title="Changes Required">
+          <p className="opacity-85">
+            This is not a final rejection. Fix the items below, upload any
+            requested documents, then resubmit.
+          </p>
+          {release.reviewNotes ? (
+            <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3 dark:border-amber-500/20">
+              {release.reviewNotes}
+            </p>
+          ) : null}
 
           <div className="mt-4 space-y-2.5">
             {openIssues.length === 0 ? (
-              <p className="text-sm">Review notes are above. Update your release materials, then resubmit.</p>
+              <p>Review notes are above. Update your release materials, then resubmit.</p>
             ) : (
               openIssues.map((issue) => (
                 <article key={issue.id} className="border border-amber-200/80 bg-white/70 p-3.5 dark:border-amber-500/20 dark:bg-black/10">
@@ -364,7 +369,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
                     ) : null}
                   </div>
                   <h3 className="mt-1 text-sm font-semibold">{issue.title || "Issue"}</h3>
-                  <p className="mt-1 text-sm leading-relaxed opacity-90">{issue.message}</p>
+                  <p className="mt-1 leading-relaxed opacity-90">{issue.message}</p>
                   {issue.requiresDocument || issue.requiresFeedback ? (
                     <UploadReleaseDocumentForm
                       releaseId={release.id}
@@ -382,13 +387,12 @@ export default async function ReleaseDetailPage({ params }: Props) {
               <ResubmitReleaseButton releaseId={release.id} />
             </div>
           ) : null}
-        </section>
+        </Callout>
       ) : null}
 
       {finalReject ? (
-        <section className="border border-red-200 bg-red-50 p-4 text-sm text-red-950 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200">
-          <p className="font-semibold">Rejected</p>
-          <p className="mt-1">
+        <Callout tone="danger" icon={<Prohibit size={18} weight="bold" aria-hidden />} title="Rejected">
+          <p>
             This release was rejected and cannot be edited or resubmitted.
             Contact support if you believe this decision needs review.
           </p>
@@ -403,30 +407,28 @@ export default async function ReleaseDetailPage({ params }: Props) {
           >
             Contact support
           </Link>
-        </section>
+        </Callout>
       ) : null}
 
       {release.syncError && facing === "action_required" ? (
-        <section className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-200">
-          <p className="font-semibold">Action required</p>
-          <p className="mt-1">{release.syncError}</p>
-        </section>
+        <Callout tone="warning" icon={<WarningCircle size={18} weight="fill" aria-hidden />} title="Action required">
+          <p>{release.syncError}</p>
+        </Callout>
       ) : null}
 
       {/* PAGE CONTENT */}
       {neverSynced ? (
-        <section className="border border-border bg-card px-4 py-8 text-center">
-          <p className="text-sm font-medium">Not synced to LabelGrid yet</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            Continue the release builder to sync this release to LabelGrid —
-            catalog details will appear here once it has.
-          </p>
-        </section>
+        <div className="border border-border bg-card">
+          <EmptyState
+            icon={<Disc size={22} weight="regular" aria-hidden />}
+            title="Not synced to LabelGrid yet"
+            description="Continue the release builder to sync this release to LabelGrid — catalog details will appear here once it has."
+          />
+        </div>
       ) : liveError ? (
-        <section className="border border-amber-300 bg-amber-50 px-4 py-6 text-center text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-200">
-          <p className="font-medium">{liveError}</p>
-          <p className="mt-1 opacity-80">Refresh the page to try again.</p>
-        </section>
+        <Callout tone="warning" icon={<WarningCircle size={18} weight="fill" aria-hidden />} title={liveError}>
+          <p className="opacity-80">Refresh the page to try again.</p>
+        </Callout>
       ) : live ? (
         <ReleaseTabs
           live={live}

@@ -75,8 +75,8 @@ export function ReleasesFilter({
               }}
               className={
                 active
-                  ? "shrink-0 cursor-pointer bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                  : "shrink-0 cursor-pointer border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  ? "shrink-0 cursor-pointer bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors duration-200 ease-[var(--ease-rdistro)]"
+                  : "shrink-0 cursor-pointer border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 ease-[var(--ease-rdistro)] hover:border-primary/40 hover:text-foreground"
               }
             >
               {f.label}

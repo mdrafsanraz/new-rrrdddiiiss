@@ -8,6 +8,7 @@ import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { ReleasesFilter } from "@/components/dashboard/releases-filter";
+import { EmptyState } from "@/components/ui/empty-state";
 import { statusesForUserFacingFilter } from "@/lib/releases/status";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
@@ -123,24 +124,19 @@ export default async function ReleasesPage({ searchParams }: Props) {
 
       <section className="border border-border bg-card">
         {releases.length === 0 ? (
-          <div className="px-5 py-14 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center border border-border bg-muted text-muted-foreground">
-              <Disc size={22} weight="regular" aria-hidden />
-            </div>
-            <p className="mt-4 font-semibold">No releases match</p>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              Create a release to start the RDISTRO review workflow.
-            </p>
-            <Link
-              href="/dashboard/releases/new"
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "mt-5 h-9 px-4"
-              )}
-            >
-              Create release
-            </Link>
-          </div>
+          <EmptyState
+            icon={<Disc size={22} weight="regular" aria-hidden />}
+            title="No releases match"
+            description="Create a release to start the RDISTRO review workflow."
+            action={
+              <Link
+                href="/dashboard/releases/new"
+                className={cn(buttonVariants({ variant: "outline" }), "h-9 px-4")}
+              >
+                Create release
+              </Link>
+            }
+          />
         ) : (
           <ul className="divide-y divide-border">
             {releases.map((r) => {
@@ -155,7 +151,7 @@ export default async function ReleasesPage({ searchParams }: Props) {
                 <li key={r.id}>
                   <Link
                     href={`/dashboard/releases/${r.id}`}
-                    className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+                    className="group flex items-center gap-4 px-5 py-4 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/50"
                   >
                     <div className="size-14 shrink-0 overflow-hidden border border-border bg-muted">
                       {artworkUrl ? (
@@ -173,7 +169,9 @@ export default async function ReleasesPage({ searchParams }: Props) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-semibold">{title}</p>
+                        <p className="truncate font-semibold transition-colors group-hover:text-primary">
+                          {title}
+                        </p>
                         <StatusBadge status={r.status} />
                       </div>
                       <p className="mt-1 truncate text-sm text-muted-foreground">

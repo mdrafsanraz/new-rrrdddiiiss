@@ -30,10 +30,10 @@ export function UsageMeter({
         </span>
       </div>
       {limit !== null ? (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="mt-2 h-1.5 overflow-hidden bg-muted">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full transition-all duration-500 ease-[var(--ease-rdistro)]",
               capped ? "bg-amber-600" : "bg-primary"
             )}
             style={{ width: `${Math.max(pct, used > 0 ? 6 : 0)}%` }}
