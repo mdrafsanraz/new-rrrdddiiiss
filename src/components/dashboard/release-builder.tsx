@@ -671,8 +671,19 @@ function SummaryRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/**
+ * Wizard order: Release, Distribution, Tracks, Credits, Review — release
+ * (and its distribution config) is posted to LabelGrid first, then tracks
+ * upload against that release id.
+ */
+const STEP_RELEASE = 0;
+const STEP_DISTRIBUTION = 1;
+const STEP_TRACKS = 2;
+const STEP_CREDITS = 3;
+const STEP_REVIEW = 4;
+
 function validateStep(state: WizardState, step: number): string | null {
-  if (step === 0) {
+  if (step === STEP_RELEASE) {
     if (!state.artworkFile && !state.artworkUrl) {
       return "Please add cover artwork.";
     }
@@ -682,7 +693,16 @@ function validateStep(state: WizardState, step: number): string | null {
     if (!state.releaseDate) return "Please choose a release date.";
     return null;
   }
-  if (step === 1) {
+  if (step === STEP_DISTRIBUTION) {
+    if (!state.allStores && state.selectedOutletIds.length === 0) {
+      return "Select all stores, or choose at least one store.";
+    }
+    if (!state.worldwide && state.territoryCodes.length === 0) {
+      return "Choose worldwide, or select at least one territory.";
+    }
+    return null;
+  }
+  if (step === STEP_TRACKS) {
     if (!state.tracks.length) return "Please add at least one track.";
     for (let i = 0; i < state.tracks.length; i++) {
       const t = state.tracks[i];
@@ -698,7 +718,7 @@ function validateStep(state: WizardState, step: number): string | null {
     }
     return null;
   }
-  if (step === 2) {
+  if (step === STEP_CREDITS) {
     const ok = state.contributors.some(
       (c) => c.firstName.trim() && c.lastName.trim() && c.roles.length > 0
     );
@@ -711,16 +731,7 @@ function validateStep(state: WizardState, step: number): string | null {
     }
     return null;
   }
-  if (step === 3) {
-    if (!state.allStores && state.selectedOutletIds.length === 0) {
-      return "Select all stores, or choose at least one store.";
-    }
-    if (!state.worldwide && state.territoryCodes.length === 0) {
-      return "Choose worldwide, or select at least one territory.";
-    }
-    return null;
-  }
-  if (step === 4) {
+  if (step === STEP_REVIEW) {
     if (!state.rightsConfirmed) {
       return "Please confirm you have the rights to distribute this release.";
     }
@@ -1163,7 +1174,7 @@ export function ReleaseBuilder({
 
     setContinuing(true);
     try {
-      if (state.step === 0 && !state.releaseId) {
+      if (state.step === STEP_RELEASE && !state.releaseId) {
         const id = await createDraft(stateRef.current);
         if (!id) return;
       } else if (state.releaseId) {
@@ -1182,7 +1193,7 @@ export function ReleaseBuilder({
         }
         return { ...prev, step: nextStep };
       });
-      if (state.step === 0) {
+      if (state.step === STEP_DISTRIBUTION) {
         setEditingTrackId((prev) => prev ?? state.tracks[0]?.clientId ?? null);
       }
     } finally {
@@ -1205,12 +1216,12 @@ export function ReleaseBuilder({
   async function submitForReview() {
     if (submitting) return;
     setError("");
-    const msg = validateStep(state, 4);
+    const msg = validateStep(state, STEP_REVIEW);
     if (msg) {
       setError(msg);
       return;
     }
-    for (let s = 0; s <= 3; s++) {
+    for (let s = 0; s < WIZARD_STEPS.length - 1; s++) {
       const early = validateStep(state, s);
       if (early) {
         setError(early);
@@ -1222,7 +1233,7 @@ export function ReleaseBuilder({
       setError(
         "Your audio is still processing on our distributor. This usually takes a moment — please try again shortly."
       );
-      patch({ step: 1 });
+      patch({ step: STEP_TRACKS });
       return;
     }
 
@@ -1336,14 +1347,14 @@ export function ReleaseBuilder({
               {stepMeta.title}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {state.step === 0
+              {state.step === STEP_RELEASE
                 ? "Add the basic information listeners will see on music services."
-                : state.step === 1
-                  ? "Upload masters and fill in track details."
-                  : state.step === 2
-                    ? "Songwriters, copyright, and rights questions."
-                    : state.step === 3
-                      ? "Pick stores and territories for this release."
+                : state.step === STEP_DISTRIBUTION
+                  ? "Pick stores and territories for this release."
+                  : state.step === STEP_TRACKS
+                    ? "Upload masters and fill in track details."
+                    : state.step === STEP_CREDITS
+                      ? "Songwriters, copyright, and rights questions."
                       : "Confirm everything looks right before sending to review."}
             </p>
           </div>
@@ -1412,7 +1423,7 @@ export function ReleaseBuilder({
             transition={transition}
             className="space-y-5"
           >
-            {state.step === 0 ? (
+            {state.step === STEP_RELEASE ? (
               <>
                 <Panel>
                   <MediaDropzone
@@ -1660,7 +1671,7 @@ export function ReleaseBuilder({
               </>
             ) : null}
 
-            {state.step === 1 ? (
+            {state.step === STEP_TRACKS ? (
               <Panel className="space-y-4">
                 <div className="space-y-2">
                   {state.tracks.map((t, i) => (
@@ -1941,7 +1952,7 @@ export function ReleaseBuilder({
               </Panel>
             ) : null}
 
-            {state.step === 2 ? (
+            {state.step === STEP_CREDITS ? (
               <div className="space-y-5">
                 <Panel className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
@@ -2108,7 +2119,7 @@ export function ReleaseBuilder({
               </div>
             ) : null}
 
-            {state.step === 3 ? (
+            {state.step === STEP_DISTRIBUTION ? (
               <div className="space-y-5">
                 <Panel className="space-y-4">
                   <label className="flex cursor-pointer items-start gap-3">
@@ -2279,7 +2290,7 @@ export function ReleaseBuilder({
               </div>
             ) : null}
 
-            {state.step === 4 ? (
+            {state.step === STEP_REVIEW ? (
               <div className="space-y-5">
                 <Panel>
                   <div className="flex items-start gap-4">
@@ -2422,7 +2433,7 @@ export function ReleaseBuilder({
               type="button"
               variant="outline"
               className="h-11 px-4"
-              disabled={state.step === 0 || submitting || continuing}
+              disabled={state.step === STEP_RELEASE || submitting || continuing}
               onClick={() => patch({ step: Math.max(0, state.step - 1) })}
             >
               <ArrowLeft size={16} weight="bold" aria-hidden />

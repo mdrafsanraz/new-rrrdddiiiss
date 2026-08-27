@@ -51,9 +51,14 @@ export type WizardState = {
   preferredLocalization: string;
   artworkAiUsage: "none" | "some" | "material" | "all";
   explicit: "off" | "on" | "edited";
-  // Step 2
+  // Step 2 — Distribution
+  allStores: boolean;
+  selectedOutletIds: number[];
+  worldwide: boolean;
+  territoryCodes: string[];
+  // Step 3 — Tracks
   tracks: WizardTrack[];
-  // Step 3
+  // Step 4 — Credits
   contributors: ContributorDraft[];
   clineYear: string;
   clineName: string;
@@ -61,12 +66,7 @@ export type WizardState = {
   plineName: string;
   hasSamples: boolean;
   isRemix: boolean;
-  // Step 4
-  allStores: boolean;
-  selectedOutletIds: number[];
-  worldwide: boolean;
-  territoryCodes: string[];
-  // Step 5
+  // Step 5 — Review
   rightsConfirmed: boolean;
 };
 
@@ -108,8 +108,8 @@ export function newContributor(): ContributorDraft {
 
 export const WIZARD_STEPS = [
   { id: "release", label: "Release", title: "Tell us about your release" },
+  { id: "distribution", label: "Distribution", title: "Choose where your music goes" },
   { id: "tracks", label: "Tracks", title: "Add your music" },
   { id: "credits", label: "Credits", title: "Credits & rights" },
-  { id: "distribution", label: "Distribution", title: "Choose where your music goes" },
   { id: "review", label: "Review", title: "Review your release" },
 ] as const;
