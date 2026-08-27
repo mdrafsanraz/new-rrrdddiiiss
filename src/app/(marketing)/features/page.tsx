@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { FeatureArt } from "@/components/site/illustrations";
 import { Reveal } from "@/components/site/reveal";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { features } from "@/lib/site";
 import { cn } from "@/lib/utils";
 

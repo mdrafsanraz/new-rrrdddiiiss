@@ -11,7 +11,7 @@ import { HeroIllustration } from "@/components/site/illustrations";
 import { PricingCards } from "@/components/site/pricing-cards";
 import { Reveal } from "@/components/site/reveal";
 import { StoreTicker } from "@/components/site/store-ticker";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
 

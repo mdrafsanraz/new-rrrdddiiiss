@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import AnimatedBrandLogo from "@/components/site/logo";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { navLinks } from "@/lib/site";
 import { cn } from "@/lib/utils";
 

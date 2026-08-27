@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { formatLimit, planLabel } from "@/lib/plans";
 import { prisma } from "@/lib/db";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { cn } from "@/lib/utils";

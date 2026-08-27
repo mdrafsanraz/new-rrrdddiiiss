@@ -7,7 +7,7 @@ import { useState } from "react";
 import AnimatedBrandLogo from "@/components/site/logo";
 import { dashboardNav } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 
 export function DashboardShell({
   children,

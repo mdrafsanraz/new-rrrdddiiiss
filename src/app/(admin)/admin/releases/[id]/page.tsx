@@ -7,7 +7,7 @@ import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
 import { AdminStatusBadge, QcBadge } from "@/components/admin/status-badges";
 import { ReleaseQcPanel } from "@/components/admin/release-qc-panel";
 import { ReleaseDeliveryPanel } from "@/components/admin/release-delivery-panel";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { planLabel } from "@/lib/plans";
 import { formatShortDate, formatDistanceToNow } from "@/lib/admin/format";

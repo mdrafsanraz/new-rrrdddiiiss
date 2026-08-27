@@ -9,7 +9,7 @@ import {
   supportCategoryLabel,
   supportStatusLabel,
 } from "@/lib/support";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
 type Props = { params: Promise<{ id: string }> };

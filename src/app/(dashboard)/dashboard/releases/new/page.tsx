@@ -5,7 +5,7 @@ import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
 import { formatLimit } from "@/lib/plans";
 import { ReleaseBuilder } from "@/components/dashboard/release-builder";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "New release" };

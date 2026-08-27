@@ -5,7 +5,7 @@ import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { ReleasesFilter } from "@/components/dashboard/releases-filter";
 import { statusesForUserFacingFilter } from "@/lib/releases/status";

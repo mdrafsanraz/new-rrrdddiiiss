@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Check } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "@/components/site/reveal";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { plans } from "@/lib/site";
 import { cn } from "@/lib/utils";
 

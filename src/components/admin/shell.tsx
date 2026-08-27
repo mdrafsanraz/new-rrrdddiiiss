@@ -15,7 +15,7 @@ import { hasPermission, type AdminPermission } from "@/lib/auth/permissions";
 import { NAV_PERMISSION } from "@/lib/auth/permissions";
 import type { UserRole } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { AdminCommandSearch } from "@/components/admin/command-search";
 
 export function AdminShell({

@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/dashboard/status-badge";
 import { SubmitReleaseButton } from "@/components/dashboard/submit-release-button";
 import { ResubmitReleaseButton } from "@/components/dashboard/resubmit-release-button";
 import { UploadReleaseDocumentForm } from "@/components/dashboard/upload-release-document-form";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { isLabelGridLive } from "@/lib/labelgrid/config";

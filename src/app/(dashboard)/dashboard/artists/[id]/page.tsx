@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { EditArtistForm } from "@/components/dashboard/edit-artist-form";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
 type Props = { params: Promise<{ id: string }> };
