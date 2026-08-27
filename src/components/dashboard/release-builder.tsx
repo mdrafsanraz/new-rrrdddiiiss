@@ -815,6 +815,11 @@ export function ReleaseBuilder({
   );
   const skipAutosave = useRef(!initialWizard);
   const createInFlight = useRef<Promise<string | null> | null>(null);
+  const saveInFlight = useRef<Promise<boolean> | null>(null);
+  const queuedSaveOpts = useRef<{
+    forceArtwork?: boolean;
+    syncToLabelGrid?: boolean;
+  } | null>(null);
 
   const [state, setState] = useState<WizardState>(
     () => initialWizard ?? initialState(artists, defaultArtistId)
@@ -958,7 +963,41 @@ export function ReleaseBuilder({
     return run;
   }
 
+  /**
+   * Serializes saveDraft calls. Without this, the debounced autosave and an
+   * explicit save (e.g. clicking Continue right after dropping an audio
+   * file) can overlap: both read the same pending File from state, both
+   * PATCH it to LabelGrid, and whichever response resolves last wins —
+   * which can be the stale one, silently reverting a file that had already
+   * landed. A call that arrives while one is in flight is queued to run
+   * once more (with the latest state) instead of firing concurrently.
+   */
   async function saveDraft(
+    current: WizardState,
+    opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
+  ): Promise<boolean> {
+    if (saveInFlight.current) {
+      queuedSaveOpts.current = {
+        forceArtwork: queuedSaveOpts.current?.forceArtwork || opts?.forceArtwork,
+        syncToLabelGrid:
+          queuedSaveOpts.current?.syncToLabelGrid || opts?.syncToLabelGrid,
+      };
+      return saveInFlight.current;
+    }
+
+    const run = performSaveDraft(current, opts).finally(() => {
+      saveInFlight.current = null;
+      if (queuedSaveOpts.current) {
+        const nextOpts = queuedSaveOpts.current;
+        queuedSaveOpts.current = null;
+        void saveDraft(stateRef.current, nextOpts);
+      }
+    });
+    saveInFlight.current = run;
+    return run;
+  }
+
+  async function performSaveDraft(
     current: WizardState,
     opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
   ): Promise<boolean> {
