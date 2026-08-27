@@ -457,14 +457,21 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
   writers: TrackSyncContext["writers"];
   publishers: TrackSyncContext["publishers"];
 }> {
+  // Writer-split roles are their OWN vocabulary, distinct from the
+  // contributor-roles catalog: the sandbox 422s contributor-role values
+  // here ("The selected writer role is not valid"), and LabelGrid's UI
+  // offers exactly Music and Lyrics. Same index-keyed values shape.
+  const WRITER_SPLIT_ROLES = new Set(["music", "lyrics"]);
   const writers: TrackSyncContext["writers"] = [];
   for (const w of rMeta.writerSplits ?? []) {
     if (!w.writerId || !w.roles?.length) continue;
-    const resolved = await Promise.all(
-      w.roles.map((label) => resolveContributorRole(label))
-    );
-    const rows = resolved.filter((r): r is ContributorRoleRow => Boolean(r));
-    const roles = rolesDictFromRows(rows);
+    const roles: Record<string, string> = {};
+    let i = 0;
+    for (const label of w.roles) {
+      if (WRITER_SPLIT_ROLES.has(label.trim().toLowerCase())) {
+        roles[String(i++)] = label.trim();
+      }
+    }
     if (Object.keys(roles).length === 0) continue;
     writers.push({
       writer_id: w.writerId,

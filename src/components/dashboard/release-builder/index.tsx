@@ -111,7 +111,22 @@ function initialState(
   };
 }
 
-function validateStep(state: WizardState, step: number): string | null {
+/**
+ * LabelGrid requires every track's contributors to cover these role
+ * categories (its 422 lists whichever are still missing: "Each track needs
+ * at least one contributor assigned to the role of …").
+ */
+const REQUIRED_ROLE_CATEGORIES = [
+  "Performer",
+  "Composition & Lyrics",
+  "Production & Engineering",
+] as const;
+
+function validateStep(
+  state: WizardState,
+  step: number,
+  roleCategories?: Map<string, string>
+): string | null {
   if (step === STEP_RELEASE) {
     if (!state.artworkFile && !state.artworkUrl) {
       return "Please add cover artwork.";
@@ -165,6 +180,24 @@ function validateStep(state: WizardState, step: number): string | null {
     for (const c of state.contributors) {
       if (c.writerId && c.roles.length === 0) {
         return `Pick at least one role for ${c.firstName} ${c.lastName}.`;
+      }
+    }
+    // Category coverage: LabelGrid rejects tracks whose contributors don't
+    // span all required categories. Only checkable once the live catalog
+    // (role → category) has loaded; the server still enforces it.
+    if (roleCategories && roleCategories.size > 0) {
+      const covered = new Set<string>();
+      for (const c of state.contributors) {
+        for (const role of c.roles) {
+          const category = roleCategories.get(role.trim().toLowerCase());
+          if (category) covered.add(category.trim().toLowerCase());
+        }
+      }
+      const missing = REQUIRED_ROLE_CATEGORIES.filter(
+        (cat) => !covered.has(cat.toLowerCase())
+      );
+      if (missing.length > 0) {
+        return `Contributors must cover ${missing.join(", ")} — add the matching role(s). The same contributor can hold multiple roles.`;
       }
     }
     if (state.writerSplits.length > 0) {
@@ -351,6 +384,11 @@ export function ReleaseBuilder({
   const contributorRoles = useCatalog<ContributorRole>(
     "/api/labelgrid/contributor-roles",
     (d) => (Array.isArray(d.roles) ? (d.roles as ContributorRole[]) : null)
+  );
+  const roleCategories = new Map(
+    contributorRoles.items
+      .filter((r) => r.category)
+      .map((r) => [r.display_value.trim().toLowerCase(), r.category as string])
   );
 
   useEffect(() => {
@@ -681,7 +719,7 @@ export function ReleaseBuilder({
   async function ensureDraftThenContinue() {
     if (continuing) return;
     setError("");
-    const msg = validateStep(state, state.step);
+    const msg = validateStep(state, state.step, roleCategories);
     if (msg) {
       setError(msg);
       return;
@@ -753,13 +791,13 @@ export function ReleaseBuilder({
   async function submitForReview() {
     if (submitting) return;
     setError("");
-    const msg = validateStep(state, STEP_REVIEW);
+    const msg = validateStep(state, STEP_REVIEW, roleCategories);
     if (msg) {
       setError(msg);
       return;
     }
     for (let s = 0; s < WIZARD_STEPS.length - 1; s++) {
-      const early = validateStep(state, s);
+      const early = validateStep(state, s, roleCategories);
       if (early) {
         setError(early);
         patch({ step: s });

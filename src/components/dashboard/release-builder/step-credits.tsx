@@ -36,6 +36,33 @@ export function splitTotal(rows: Array<{ share: number }>): number {
   return rows.reduce((sum, r) => sum + (Number.isFinite(r.share) ? r.share : 0), 0);
 }
 
+/**
+ * Contributor roles offered in the picker. The live catalog is large;
+ * these four cover LabelGrid's required categories (Artist → Performer,
+ * Composer/Songwriter → Composition & Lyrics, Producer → Production &
+ * Engineering). Only labels that exist in the live catalog are shown —
+ * if none of these match it, the full catalog is offered instead.
+ */
+const CONTRIBUTOR_ROLE_PICKS = ["Composer", "Songwriter", "Producer", "Artist"];
+
+export function pickContributorRoles(
+  catalog: CatalogState<ContributorRole>
+): CatalogState<ContributorRole> {
+  const preferred = catalog.items.filter((r) =>
+    CONTRIBUTOR_ROLE_PICKS.some(
+      (p) => p.toLowerCase() === r.display_value.trim().toLowerCase()
+    )
+  );
+  return preferred.length > 0 ? { ...catalog, items: preferred } : catalog;
+}
+
+/**
+ * Publishing-split (track `writers`) roles are their OWN vocabulary — the
+ * sandbox rejects contributor-role values here ("The selected writer role
+ * is not valid"), and LabelGrid's UI offers exactly Music and Lyrics.
+ */
+const WRITER_SPLIT_ROLES = ["Music", "Lyrics"] as const;
+
 function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   const total = splitTotal(rows);
   const ok = Math.abs(total - 100) < 0.001;
@@ -51,6 +78,31 @@ function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   );
 }
 
+function RoleChip({
+  role,
+  on,
+  onToggle,
+}: {
+  role: string;
+  on: boolean;
+  onToggle: (role: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(role)}
+      className={cn(
+        "cursor-pointer border px-3 py-1.5 text-xs font-medium",
+        on
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border hover:border-primary/50"
+      )}
+    >
+      {role}
+    </button>
+  );
+}
+
 function RoleChips({
   roles,
   selected,
@@ -61,27 +113,16 @@ function RoleChips({
   onToggle: (role: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">
       <CatalogStatus catalog={roles} emptyLabel="No roles available." />
-      {roles.items.map((r) => {
-        const role = r.display_value;
-        const on = selected.includes(role);
-        return (
-          <button
-            key={role}
-            type="button"
-            onClick={() => onToggle(role)}
-            className={cn(
-              "cursor-pointer border px-3 py-1.5 text-xs font-medium",
-              on
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border hover:border-primary/50"
-            )}
-          >
-            {role}
-          </button>
-        );
-      })}
+      {roles.items.map((r) => (
+        <RoleChip
+          key={r.display_value}
+          role={r.display_value}
+          on={selected.includes(r.display_value)}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
   );
 }
@@ -97,6 +138,8 @@ export function StepCredits({
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
   contributorRoles: CatalogState<ContributorRole>;
 }) {
+  const contributorRolePicks = pickContributorRoles(contributorRoles);
+
   return (
     <div className="space-y-5">
       {/* Contributors */}
@@ -105,7 +148,9 @@ export function StepCredits({
           <div>
             <p className="text-sm font-semibold">Contributors</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Who performed, produced, or wrote this — at least one required.
+              Cover at least Performer, Composition &amp; Lyrics, and
+              Production &amp; Engineering across your contributors — the same
+              person can hold several roles.
             </p>
           </div>
           <Button
@@ -164,7 +209,7 @@ export function StepCredits({
             <div className="grid gap-2">
               <p className="text-sm font-medium">Roles</p>
               <RoleChips
-                roles={contributorRoles}
+                roles={contributorRolePicks}
                 selected={c.roles}
                 onToggle={(role) =>
                   setState((prev) => ({
@@ -311,22 +356,27 @@ export function StepCredits({
 
             <div className="grid gap-2">
               <p className="text-sm font-medium">Roles</p>
-              <RoleChips
-                roles={contributorRoles}
-                selected={w.roles}
-                onToggle={(role) =>
-                  setState((prev) => ({
-                    ...prev,
-                    writerSplits: prev.writerSplits.map((x) => {
-                      if (x.id !== w.id) return x;
-                      const roles = x.roles.includes(role)
-                        ? x.roles.filter((r) => r !== role)
-                        : [...x.roles, role];
-                      return { ...x, roles };
-                    }),
-                  }))
-                }
-              />
+              <div className="flex flex-wrap gap-2">
+                {WRITER_SPLIT_ROLES.map((role) => (
+                  <RoleChip
+                    key={role}
+                    role={role}
+                    on={w.roles.includes(role)}
+                    onToggle={() =>
+                      setState((prev) => ({
+                        ...prev,
+                        writerSplits: prev.writerSplits.map((x) => {
+                          if (x.id !== w.id) return x;
+                          const roles = x.roles.includes(role)
+                            ? x.roles.filter((r) => r !== role)
+                            : [...x.roles, role];
+                          return { ...x, roles };
+                        }),
+                      }))
+                    }
+                  />
+                ))}
+              </div>
             </div>
 
             <button
