@@ -69,9 +69,11 @@ export function wizardStateFromRelease(
       ? parseJsonObject<TrackMetadata>(release.tracks[0].metadataJson)
           .contributors!.map((c) => ({
             id: crypto.randomUUID(),
+            writerId: c.writerId ?? null,
             firstName: c.firstName,
             lastName: c.lastName,
             roles: c.roles,
+            aiContribution: c.aiContribution ?? ("none" as const),
           }))
       : [newContributor()];
 

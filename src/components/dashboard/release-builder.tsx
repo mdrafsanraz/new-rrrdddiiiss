@@ -37,6 +37,7 @@ import {
   LOCALES,
   parseJsonObject,
   PRIMARY_GENRES,
+  type ContributorDraft,
   type TrackMetadata,
 } from "@/lib/releases/constants";
 import {
@@ -697,6 +698,207 @@ function TrackLicenseUpload({
   );
 }
 
+type WriterOption = { id: number; first_name: string; last_name: string };
+
+/**
+ * LabelGrid-style writer control: search the user's writers (managed on
+ * LabelGrid, mapped per user on RDISTRO) with an inline "Create new" flow.
+ * Selecting hands back the real LabelGrid writer id — the server then never
+ * has to guess-match by name.
+ */
+function WriterPicker({
+  selected,
+  onSelect,
+  onClear,
+}: {
+  selected: { writerId?: number | null; firstName: string; lastName: string };
+  onSelect: (w: WriterOption) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<WriterOption[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [newFirst, setNewFirst] = useState("");
+  const [newLast, setNewLast] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      fetch(`/api/labelgrid/writers?q=${encodeURIComponent(query.trim())}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled && Array.isArray(data.writers)) {
+            setOptions(data.writers);
+          }
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [open, query]);
+
+  async function createNew() {
+    if (!newFirst.trim() || !newLast.trim() || saving) return;
+    setSaving(true);
+    setPickerError(null);
+    try {
+      const res = await fetch("/api/labelgrid/writers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: newFirst.trim(),
+          lastName: newLast.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPickerError(data.error ?? "Could not create writer.");
+        return;
+      }
+      onSelect(data.writer);
+      setOpen(false);
+      setCreating(false);
+      setNewFirst("");
+      setNewLast("");
+      setQuery("");
+    } catch {
+      setPickerError("Network error while creating writer.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasSelection =
+    Boolean(selected.writerId) ||
+    Boolean(selected.firstName.trim() || selected.lastName.trim());
+
+  if (hasSelection) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-2 border border-border bg-muted px-3 py-2 text-sm font-medium">
+          {`${selected.firstName} ${selected.lastName}`.trim() || "Writer"}
+          {selected.writerId ? null : (
+            <span className="text-xs text-muted-foreground">(not synced)</span>
+          )}
+          <button
+            type="button"
+            aria-label="Change writer"
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+            onClick={onClear}
+          >
+            <X size={14} weight="bold" />
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={query}
+        placeholder="Search writers"
+        className="h-10 w-full border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+      />
+      {open ? (
+        <div className="absolute z-20 mt-1 w-full border border-border bg-card shadow-md">
+          {creating ? (
+            <div className="space-y-2 p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  type="text"
+                  value={newFirst}
+                  placeholder="First name"
+                  className="h-9 border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+                  onChange={(e) => setNewFirst(e.target.value)}
+                />
+                <input
+                  type="text"
+                  value={newLast}
+                  placeholder="Last name"
+                  className="h-9 border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+                  onChange={(e) => setNewLast(e.target.value)}
+                />
+              </div>
+              {pickerError ? (
+                <p className="text-xs text-destructive">{pickerError}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="h-8 px-3"
+                  loading={saving}
+                  onClick={() => void createNew()}
+                >
+                  Add writer
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 px-3"
+                  onClick={() => setCreating(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <ul className="max-h-56 overflow-y-auto py-1 text-sm">
+              <li>
+                <button
+                  type="button"
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left font-medium text-primary hover:bg-muted"
+                  onClick={() => {
+                    setCreating(true);
+                    const parts = query.trim().split(/\s+/);
+                    setNewFirst(parts[0] ?? "");
+                    setNewLast(parts.slice(1).join(" "));
+                  }}
+                >
+                  <Plus size={14} weight="bold" aria-hidden />
+                  Create new
+                </button>
+              </li>
+              {options.map((w) => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer px-3 py-2 text-left hover:bg-muted"
+                    onClick={() => {
+                      onSelect(w);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    {w.first_name} {w.last_name}
+                  </button>
+                </li>
+              ))}
+              {options.length === 0 ? (
+                <li className="px-3 py-2 text-muted-foreground">
+                  No writers found.
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SummaryRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid gap-1 border-b border-border py-3 last:border-0 sm:grid-cols-[140px_1fr] sm:gap-4">
@@ -761,9 +963,11 @@ function validateStep(state: WizardState, step: number): string | null {
   }
   if (step === STEP_CREDITS) {
     const ok = state.contributors.some(
-      (c) => c.firstName.trim() && c.lastName.trim() && c.roles.length > 0
+      (c) =>
+        (c.writerId || (c.firstName.trim() && c.lastName.trim())) &&
+        c.roles.length > 0
     );
-    if (!ok) return "Add at least one songwriter with a name and role.";
+    if (!ok) return "Add at least one writer with at least one role.";
     if (!state.clineName.trim() || !state.plineName.trim()) {
       return "Please fill in © and ℗ credit names.";
     }
@@ -783,11 +987,17 @@ function validateStep(state: WizardState, step: number): string | null {
 
 function buildPayload(state: WizardState) {
   const validContributors = state.contributors
-    .filter((c) => c.firstName.trim() && c.lastName.trim() && c.roles.length)
+    .filter(
+      (c) =>
+        (c.writerId || (c.firstName.trim() && c.lastName.trim())) &&
+        c.roles.length
+    )
     .map((c) => ({
+      writerId: c.writerId ?? null,
       firstName: c.firstName.trim(),
       lastName: c.lastName.trim(),
       roles: c.roles,
+      aiContribution: c.aiContribution ?? "none",
     }));
 
   const tracks = state.tracks.map((t, i) => ({
@@ -2190,32 +2400,36 @@ export function ReleaseBuilder({
                       key={c.id}
                       className="space-y-4 border border-border p-4"
                     >
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                          id={`fn-${c.id}`}
-                          label="First name"
-                          value={c.firstName}
-                          onChange={(e) =>
+                      <div className="grid gap-2">
+                        <p className="text-sm font-medium">Writer</p>
+                        <WriterPicker
+                          selected={c}
+                          onSelect={(w) =>
                             setState((prev) => ({
                               ...prev,
                               contributors: prev.contributors.map((x) =>
                                 x.id === c.id
-                                  ? { ...x, firstName: e.target.value }
+                                  ? {
+                                      ...x,
+                                      writerId: w.id,
+                                      firstName: w.first_name,
+                                      lastName: w.last_name,
+                                    }
                                   : x
                               ),
                             }))
                           }
-                        />
-                        <Field
-                          id={`ln-${c.id}`}
-                          label="Last name"
-                          value={c.lastName}
-                          onChange={(e) =>
+                          onClear={() =>
                             setState((prev) => ({
                               ...prev,
                               contributors: prev.contributors.map((x) =>
                                 x.id === c.id
-                                  ? { ...x, lastName: e.target.value }
+                                  ? {
+                                      ...x,
+                                      writerId: null,
+                                      firstName: "",
+                                      lastName: "",
+                                    }
                                   : x
                               ),
                             }))
@@ -2273,6 +2487,30 @@ export function ReleaseBuilder({
                           )}
                         </div>
                       </div>
+                      <Field
+                        id={`ai-${c.id}`}
+                        label="AI contribution"
+                        as="select"
+                        value={c.aiContribution ?? "none"}
+                        onChange={(e) =>
+                          setState((prev) => ({
+                            ...prev,
+                            contributors: prev.contributors.map((x) =>
+                              x.id === c.id
+                                ? {
+                                    ...x,
+                                    aiContribution: e.target
+                                      .value as ContributorDraft["aiContribution"],
+                                  }
+                                : x
+                            ),
+                          }))
+                        }
+                      >
+                        <option value="none">No AI</option>
+                        <option value="partly">Partly AI</option>
+                        <option value="all">Fully AI</option>
+                      </Field>
                       {state.contributors.length > 1 ? (
                         <button
                           type="button"

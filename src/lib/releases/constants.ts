@@ -110,9 +110,14 @@ export const PRIMARY_GENRES = [
 
 export type ContributorDraft = {
   id: string;
+  /** LabelGrid writer id when picked from the live catalog (GET /writers). */
+  writerId?: number | null;
   firstName: string;
   lastName: string;
+  /** Role display_values from the live GET /contributor-roles catalog. */
   roles: string[];
+  /** LabelGrid AiContributionEnum: none | partly | all. */
+  aiContribution?: "none" | "partly" | "all";
 };
 
 export type ReleaseMetadata = {
@@ -158,9 +163,11 @@ export type TrackMetadata = {
   featuredArtistNames?: string[];
   /** Multiple writer/contributor credits for LabelGrid. */
   contributors?: Array<{
+    writerId?: number | null;
     firstName: string;
     lastName: string;
     roles: string[];
+    aiContribution?: "none" | "partly" | "all";
   }>;
   /** Cover/sample clearance document (POST /tracks/{id}/licenses). */
   licenseType?: "cover" | "sample" | null;

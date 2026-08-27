@@ -27,6 +27,15 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
+const contributorSchema = z.object({
+  /** LabelGrid writer id from the picker (managed on LabelGrid; mapped here). */
+  writerId: z.number().int().positive().nullable().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  roles: z.array(z.string()).min(1),
+  aiContribution: z.enum(["none", "partly", "all"]).optional(),
+});
+
 const trackSchema = z.object({
   id: z.string().optional(),
   clientId: z.string().optional(),
@@ -52,15 +61,7 @@ const trackSchema = z.object({
   lyrics: z.string().max(20000).optional().or(z.literal("")),
   /** Cover/sample clearance doc type; file arrives as license_{clientId|id}. */
   licenseType: z.enum(["cover", "sample"]).nullable().optional(),
-  contributors: z
-    .array(
-      z.object({
-        firstName: z.string().min(1),
-        lastName: z.string().min(1),
-        roles: z.array(z.string()).min(1),
-      })
-    )
-    .optional(),
+  contributors: z.array(contributorSchema).optional(),
 });
 
 const schema = z.object({
@@ -85,15 +86,7 @@ const schema = z.object({
   worldwide: z.boolean().optional(),
   territoryCodes: z.array(z.string()).optional(),
   tracks: z.array(trackSchema).optional(),
-  contributors: z
-    .array(
-      z.object({
-        firstName: z.string().min(1),
-        lastName: z.string().min(1),
-        roles: z.array(z.string()).min(1),
-      })
-    )
-    .optional(),
+  contributors: z.array(contributorSchema).optional(),
   /**
    * Wizard checkpoint: force a LabelGrid metadata sync (release/distribution
    * after the Distribution step, tracks/credits after the Credits step)

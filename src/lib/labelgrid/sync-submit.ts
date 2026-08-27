@@ -221,18 +221,8 @@ async function loadContributorRoles(): Promise<ContributorRoleRow[]> {
 }
 
 /**
- * Resolve a UI role label (a display_value from the live catalog) to its
- * full catalog row — needed because the roles dictionary LabelGrid accepts
- * is keyed by the role's CATEGORY with the role name as the string value:
- *
- *   roles: { "Composition & Lyrics": "Composer" }
- *
- * Deduced from the sandbox's own 422 pair: sending {Composer: true} fails
- * "the contributor role field must be a string" (value must be a string),
- * and {Composer: "true"} fails "the selected contributor role is invalid"
- * on the KEY, with the requirement naming the three valid key families:
- * "Performer, Composition & Lyrics, Production & Engineering" — which are
- * exactly the `category` values GET /contributor-roles returns.
+ * Resolve a UI role label to its live catalog row (exact display_value
+ * match, case-insensitive) so only real roles are ever sent.
  */
 async function resolveContributorRole(
   label: string
@@ -246,18 +236,32 @@ async function resolveContributorRole(
   );
 }
 
-/** Build the {category: display_value} roles dict from resolved catalog rows. */
+/**
+ * Build the roles dictionary LabelGrid accepts: the VALUES are the role
+ * display_values, keys are just indices —
+ *
+ *   roles: { "0": "Artist", "1": "Producer" }
+ *
+ * Laravel's own 422s pin this down: the error path `roles.Composer` names
+ * the key of the element whose VALUE was being validated — first "the
+ * contributor role field must be a string" rejected the boolean value
+ * `true`, then with value "true" the `in:`-style rule rejected "true" as
+ * "the selected contributor role is invalid". So values carry the role
+ * names (validated against the catalog); keys are not meaningful.
+ * LabelGrid's own UI confirms the vocabulary is role names like "Artist",
+ * "Producer", "Songwriter" — not categories.
+ */
 function rolesDictFromRows(
   rows: ContributorRoleRow[]
 ): Record<string, string> {
   const dict: Record<string, string> = {};
+  const seen = new Set<string>();
+  let i = 0;
   for (const row of rows) {
-    const category = (row.category ?? "").trim();
-    if (!category) continue;
-    // One string value per category key — first selected role in a
-    // category wins; a second role in the same category needs its own
-    // contributor entry, which the UI doesn't model yet.
-    if (!(category in dict)) dict[category] = row.display_value;
+    const value = row.display_value.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    dict[String(i++)] = value;
   }
   return dict;
 }
@@ -438,7 +442,9 @@ async function buildTrackContributors(
 > {
   const contribList =
     tMeta.contributors?.filter(
-      (c) => c.firstName?.trim() && c.lastName?.trim() && c.roles?.length
+      (c) =>
+        (c.writerId || (c.firstName?.trim() && c.lastName?.trim())) &&
+        c.roles?.length
     ) ?? [];
 
   const lgContributors: Array<{
@@ -449,9 +455,9 @@ async function buildTrackContributors(
 
   for (const c of contribList) {
     // Roles arrive as the exact display_value strings the Credits step
-    // fetched live — resolve each to its catalog row (display_value +
-    // category). A label that no longer matches the catalog (stale client
-    // state) is dropped rather than sent as an invalid entry.
+    // fetched live — resolve each to its catalog row. A label that no
+    // longer matches the catalog (stale client state) is dropped rather
+    // than sent as an invalid entry.
     const resolved = await Promise.all(
       c.roles.map((label) => resolveContributorRole(label))
     );
@@ -459,15 +465,20 @@ async function buildTrackContributors(
     const roles = rolesDictFromRows(rows);
     if (Object.keys(roles).length === 0) continue;
 
-    const writerId = await ensureWriter({
-      first_name: c.firstName.trim(),
-      last_name: c.lastName.trim(),
-      email: artist.email ?? undefined,
-    });
+    // The writer picker gives us LabelGrid's real writer id directly;
+    // ensureWriter's create-or-match is only the fallback for legacy
+    // drafts saved before the picker existed.
+    const writerId =
+      c.writerId ??
+      (await ensureWriter({
+        first_name: c.firstName.trim(),
+        last_name: c.lastName.trim(),
+        email: artist.email ?? undefined,
+      }));
     lgContributors.push({
       writer_id: writerId,
       roles,
-      ai_contribution: "none",
+      ai_contribution: c.aiContribution ?? "none",
     });
   }
 

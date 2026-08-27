@@ -205,6 +205,7 @@ model User {
   impersonationsAsTarget ImpersonationSession[] @relation("ImpersonationTarget")
   internalNotesAuthored InternalNote[]   @relation("InternalNoteAuthor")
   takedownsRequested TakedownRequest[]   @relation("TakedownRequester")
+  writerMappings   WriterMapping[]
 }
 
 /** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
@@ -242,6 +243,27 @@ model Artist {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   releases Release[]
 
+  @@index([userId])
+}
+
+/**
+ * Ownership mapping for LabelGrid writers (songwriters/composers).
+ * The writer entity itself lives on LabelGrid (shared RDISTRO account);
+ * this row only records which RDISTRO user created it, so one tenant's
+ * writer list never appears in another tenant's picker. Names are cached
+ * for search/display only — LabelGrid stays the source of truth.
+ */
+model WriterMapping {
+  id          String   @id @default(cuid())
+  userId      String
+  labelgridId Int
+  firstName   String
+  lastName    String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, labelgridId])
   @@index([userId])
 }
 
