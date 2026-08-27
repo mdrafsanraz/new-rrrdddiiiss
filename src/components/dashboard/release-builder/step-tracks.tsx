@@ -69,7 +69,7 @@ function TrackAudioDropzone({
     <MediaDropzone
       id={`audio-${track.clientId}`}
       label="Audio"
-      accept="audio/wav,audio/flac,audio/mpeg,audio/x-wav,.wav,.flac,.mp3"
+      accept="audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,.wav,.flac"
       kind="audio"
       file={track.audioFile}
       audioUrl={track.audioUrl}

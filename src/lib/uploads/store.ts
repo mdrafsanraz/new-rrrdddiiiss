@@ -33,13 +33,14 @@ const ARTWORK_TYPES = new Set([
   "image/webp",
 ]);
 
+// LabelGrid's Track Files endpoint only accepts WAV (16/24/32-bit) or FLAC
+// (16-bit) — MP3 is rejected there, so it must not pass local validation
+// either (a client-side pass just guarantees a confusing failure later).
 const AUDIO_TYPES = new Set([
   "audio/wav",
   "audio/x-wav",
   "audio/wave",
   "audio/flac",
-  "audio/mpeg",
-  "audio/mp3",
   "audio/x-flac",
 ]);
 
@@ -93,7 +94,7 @@ async function validateFile(
     throw new Error(
       kind === "artwork"
         ? "Artwork must be JPEG, PNG, or WebP"
-        : "Audio must be WAV, FLAC, or MP3"
+        : "Audio must be WAV (16/24/32-bit) or FLAC (16-bit)"
     );
   }
   if (file.size <= 0 || file.size > maxBytes) {

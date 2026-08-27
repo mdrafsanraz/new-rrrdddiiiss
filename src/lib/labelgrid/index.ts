@@ -368,6 +368,25 @@ async function fetchStereoUrl(trackId: number | string): Promise<string | null> 
 }
 
 /**
+ * LabelGrid's upload-url filename must match
+ * `^[a-zA-Z0-9\s\-_.()]+\.[a-zA-Z0-9]+$` (<=255 chars) — real-world track
+ * filenames routinely carry brackets, apostrophes, `&`, `#`, colons, etc.
+ * that the API rejects outright. Sanitize rather than pass the raw name
+ * through, since a rejection here silently drops the audio while the rest
+ * of the release still syncs fine.
+ */
+function sanitizeUploadFilename(original: string): string {
+  const trimmed = original.trim();
+  const dot = trimmed.lastIndexOf(".");
+  const rawExt = dot > 0 ? trimmed.slice(dot + 1) : "";
+  const ext = (rawExt.replace(/[^a-zA-Z0-9]/g, "") || "wav").slice(0, 10);
+  const rawBase = dot > 0 ? trimmed.slice(0, dot) : trimmed;
+  const base = rawBase.replace(/[^a-zA-Z0-9\s\-_.()]/g, "_").trim() || "audio";
+  const maxBaseLen = 254 - ext.length;
+  return `${base.slice(0, maxBaseLen)}.${ext}`;
+}
+
+/**
  * Full stereo upload flow per document.json:
  * presigned upload-url → S3 PUT → PUT files/stereo {s3_key}.
  * A 202 queued attempt is polled briefly; if still processing after the
@@ -379,7 +398,11 @@ export async function uploadTrackStereoAudio(
   file: { buffer: Buffer; filename: string; mimeType: string },
   opts: { pollBudgetMs?: number } = {}
 ): Promise<StereoUploadResult> {
-  const raw = await getTrackFileUploadUrl(trackId, "stereo", file.filename);
+  const raw = await getTrackFileUploadUrl(
+    trackId,
+    "stereo",
+    sanitizeUploadFilename(file.filename)
+  );
   const payload =
     raw && typeof raw === "object" && "data" in raw
       ? (raw as { data: { upload_url: string; key: string } }).data

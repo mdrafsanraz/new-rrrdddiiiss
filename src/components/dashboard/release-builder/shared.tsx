@@ -434,7 +434,7 @@ export function MediaDropzone({
               <p className="mt-1 text-xs text-muted-foreground">
                 {kind === "image"
                   ? `JPEG, PNG, or WebP · exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px`
-                  : "WAV, FLAC, or MP3"}
+                  : "WAV (16/24/32-bit) or FLAC (16-bit)"}
               </p>
             </div>
           </button>
