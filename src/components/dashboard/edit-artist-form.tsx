@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/site/field";
 
 type ArtistFields = {
@@ -24,7 +25,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
 
   return (
     <form
-      className="grid gap-4 rounded-xl border border-border bg-card p-5 md:grid-cols-2"
+      className="grid gap-4 border border-border bg-card p-5 md:grid-cols-2"
       onSubmit={async (event) => {
         event.preventDefault();
         if (locked) return;
@@ -47,11 +48,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
     >
       <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Artist details</h2>
-        {locked ? (
-          <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-            Locked after release submit
-          </span>
-        ) : null}
+        {locked ? <Badge tone="warning">Locked after release submit</Badge> : null}
       </div>
       {locked ? (
         <p className="text-sm text-muted-foreground md:col-span-2">
@@ -100,7 +97,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
         />
       </div>
       {error ? (
-        <p className="text-sm font-medium text-red-700 md:col-span-2" role="alert">
+        <p className="text-sm font-medium text-destructive md:col-span-2" role="alert">
           {error}
         </p>
       ) : null}
@@ -109,7 +106,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           <Button
             type="submit"
             className="h-10 px-5"
-            disabled={status === "loading"}
+            loading={status === "loading"}
           >
             {status === "loading" ? "Saving…" : "Save changes"}
           </Button>

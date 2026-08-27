@@ -52,6 +52,7 @@ export function UpgradeButtons({
         <Button
           className="h-10 px-5"
           disabled={!stripeReady || loading !== null}
+          loading={loading === "starter"}
           onClick={() => void checkout("starter")}
         >
           {loading === "starter" ? "Redirecting…" : "Upgrade to Starter"}
@@ -61,6 +62,7 @@ export function UpgradeButtons({
         <Button
           className="h-10 px-5"
           disabled={!stripeReady || loading !== null}
+          loading={loading === "pro"}
           onClick={() => void checkout("pro")}
         >
           {loading === "pro" ? "Redirecting…" : "Upgrade to Pro"}
@@ -71,13 +73,14 @@ export function UpgradeButtons({
           variant="outline"
           className="h-10 px-5"
           disabled={!stripeReady || loading !== null}
+          loading={loading === "portal"}
           onClick={() => void portal()}
         >
           {loading === "portal" ? "Opening…" : "Customer portal"}
         </Button>
       ) : null}
       {error ? (
-        <p className="w-full text-sm font-medium text-red-700" role="alert">
+        <p className="w-full text-sm font-medium text-destructive" role="alert">
           {error}
         </p>
       ) : null}

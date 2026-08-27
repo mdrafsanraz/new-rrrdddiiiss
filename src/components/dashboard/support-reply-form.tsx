@@ -22,7 +22,7 @@ export function SupportReplyForm({
 
   if (closed && !admin) {
     return (
-      <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+      <p className="border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
         This ticket is closed. Open a new one if you still need help.
       </p>
     );
@@ -34,7 +34,7 @@ export function SupportReplyForm({
 
   return (
     <form
-      className="space-y-4 rounded-xl border border-border bg-card p-5"
+      className="space-y-4 border border-border bg-card p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         setError("");
@@ -90,11 +90,11 @@ export function SupportReplyForm({
         </Field>
       ) : null}
       {error ? (
-        <p className="text-sm font-medium text-red-700" role="alert">
+        <p className="text-sm font-medium text-destructive" role="alert">
           {error}
         </p>
       ) : null}
-      <Button type="submit" className="h-10 px-5" disabled={status === "loading"}>
+      <Button type="submit" className="h-10 px-5" loading={status === "loading"}>
         {status === "loading" ? "Sending…" : "Send reply"}
       </Button>
     </form>

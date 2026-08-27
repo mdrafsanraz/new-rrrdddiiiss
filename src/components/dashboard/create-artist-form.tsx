@@ -13,7 +13,7 @@ export function CreateArtistForm() {
 
   return (
     <form
-      className="rounded-xl border border-border bg-card p-5"
+      className="border border-border bg-card p-5"
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
@@ -48,13 +48,13 @@ export function CreateArtistForm() {
         <Button
           type="submit"
           className="h-11 shrink-0 px-5"
-          disabled={status === "loading"}
+          loading={status === "loading"}
         >
           {status === "loading" ? "Saving…" : "Add artist"}
         </Button>
       </div>
       {error ? (
-        <p className="mt-3 text-sm font-medium text-red-700" role="alert">
+        <p className="mt-3 text-sm font-medium text-destructive" role="alert">
           {error}
         </p>
       ) : null}

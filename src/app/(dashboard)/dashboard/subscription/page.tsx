@@ -6,6 +6,8 @@ import { plans } from "@/lib/site";
 import { isStripeConfigured } from "@/lib/stripe";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { UpgradeButtons } from "@/components/dashboard/upgrade-buttons";
+import { Callout } from "@/components/ui/callout";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Subscription" };
 
@@ -27,7 +29,7 @@ export default async function SubscriptionPage() {
         </p>
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="border border-border bg-card p-5">
         <p className="text-sm text-muted-foreground">Current plan</p>
         <p className="mt-1 text-3xl font-bold tracking-tight">
           {planLabel(user.planId)}
@@ -53,7 +55,10 @@ export default async function SubscriptionPage() {
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className="rounded-xl border border-border bg-card p-5"
+            className={cn(
+              "border bg-card p-5",
+              plan.id === user.planId ? "border-primary/50" : "border-border"
+            )}
           >
             <p className="font-bold">{plan.name}</p>
             <p className="mt-1 text-2xl font-extrabold tracking-tight">
@@ -83,14 +88,14 @@ export default async function SubscriptionPage() {
       />
 
       {!stripeReady ? (
-        <p className="text-sm text-amber-800">
+        <Callout tone="warning">
           Stripe test keys are not set. Add{" "}
           <code className="rounded bg-muted px-1">STRIPE_SECRET_KEY</code> and
           price IDs to <code className="rounded bg-muted px-1">.env</code> (see{" "}
           <code className="rounded bg-muted px-1">.env.example</code>). Artist
           limits of {formatLimit(usage.artistsLimit)} still apply on your local
           plan.
-        </p>
+        </Callout>
       ) : null}
 
       <p className="text-sm text-muted-foreground">

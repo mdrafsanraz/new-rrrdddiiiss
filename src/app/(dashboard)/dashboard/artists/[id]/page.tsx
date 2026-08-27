@@ -56,7 +56,7 @@ export default async function ArtistDetailPage({ params }: Props) {
         }}
       />
 
-      <section className="rounded-xl border border-border bg-card">
+      <section className="border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Releases</h2>
           <Link

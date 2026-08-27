@@ -2,8 +2,11 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { CreateArtistForm } from "@/components/dashboard/create-artist-form";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata = { title: "Artists" };
 
@@ -29,7 +32,7 @@ export default async function ArtistsPage() {
         </div>
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="border border-border bg-card p-5">
         <UsageMeter
           label="Artist slots"
           used={usage.artistsUsed}
@@ -51,14 +54,13 @@ export default async function ArtistsPage() {
 
       {usage.canCreateArtist ? <CreateArtistForm /> : null}
 
-      <section className="rounded-xl border border-border bg-card">
+      <section className="border border-border bg-card">
         {artists.length === 0 ? (
-          <div className="px-5 py-12 text-center">
-            <p className="font-semibold">No artists yet</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Add an artist to attach releases.
-            </p>
-          </div>
+          <EmptyState
+            icon={<UsersThree size={22} weight="regular" aria-hidden />}
+            title="No artists yet"
+            description="Add an artist to attach releases."
+          />
         ) : (
           <ul className="divide-y divide-border">
             {artists.map((artist) => (
@@ -71,9 +73,9 @@ export default async function ArtistsPage() {
                     <p className="truncate font-semibold">
                       {artist.name}
                       {artist.locked ? (
-                        <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                        <Badge tone="warning" className="ml-2 align-middle">
                           Locked
-                        </span>
+                        </Badge>
                       ) : null}
                     </p>
                     <p className="text-sm text-muted-foreground">

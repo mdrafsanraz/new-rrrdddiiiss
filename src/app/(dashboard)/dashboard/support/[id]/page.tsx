@@ -47,7 +47,7 @@ export default async function SupportTicketPage({ params }: Props) {
           <li
             key={m.id}
             className={cn(
-              "rounded-xl border px-4 py-3 text-sm",
+              "border px-4 py-3 text-sm",
               m.isStaff
                 ? "border-primary/30 bg-primary/5"
                 : "border-border bg-card"

@@ -16,7 +16,7 @@ export function NewSupportTicketForm() {
 
   return (
     <form
-      className="space-y-4 rounded-xl border border-border bg-card p-5"
+      className="space-y-4 border border-border bg-card p-5"
       onSubmit={async (e) => {
         e.preventDefault();
         setError("");
@@ -74,11 +74,11 @@ export function NewSupportTicketForm() {
         helper="Describe the issue. Our team replies in this thread."
       />
       {error ? (
-        <p className="text-sm font-medium text-red-700" role="alert">
+        <p className="text-sm font-medium text-destructive" role="alert">
           {error}
         </p>
       ) : null}
-      <Button type="submit" className="h-10 px-5" disabled={status === "loading"}>
+      <Button type="submit" className="h-10 px-5" loading={status === "loading"}>
         {status === "loading" ? "Sending…" : "Open ticket"}
       </Button>
     </form>
