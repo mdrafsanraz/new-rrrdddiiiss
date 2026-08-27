@@ -257,8 +257,9 @@ export function releaseToWizardSnapshot(
   };
 }
 
-export function contributorRolesObject(roles: string[]): Record<string, boolean> {
-  return Object.fromEntries(roles.map((r) => [r, true]));
+export function contributorRolesObject(roles: string[]): Record<string, string> {
+  // LabelGrid validates each roles.* entry as a string (422 on boolean).
+  return Object.fromEntries(roles.map((r) => [r, "true"]));
 }
 
 export type { ContributorDraft };

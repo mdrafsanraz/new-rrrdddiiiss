@@ -871,6 +871,8 @@ export function ReleaseBuilder({
   const [territoriesOpen, setTerritoriesOpen] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [outletsError, setOutletsError] = useState<string | null>(null);
+  const [outletsLoaded, setOutletsLoaded] = useState(false);
   const [audioAiUsed, setAudioAiUsed] = useState(false);
   const [liveSnapshot, setLiveSnapshot] = useState<LiveReleaseSnapshot | null>(
     null
@@ -911,10 +913,10 @@ export function ReleaseBuilder({
   useEffect(() => {
     let cancelled = false;
     fetch("/api/labelgrid/outlets")
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (r) => ({ ok: r.ok, data: await r.json() }))
+      .then(({ ok, data }) => {
         if (cancelled) return;
-        if (Array.isArray(data.outlets)) {
+        if (ok && Array.isArray(data.outlets)) {
           setOutlets(
             data.outlets.map((o: Outlet) => ({
               id: o.id,
@@ -922,9 +924,16 @@ export function ReleaseBuilder({
               key: o.key,
             }))
           );
+        } else {
+          setOutletsError(data.error ?? "Could not load stores.");
         }
+        setOutletsLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setOutletsError("Network error while loading stores.");
+        setOutletsLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -2319,9 +2328,17 @@ export function ReleaseBuilder({
                     </button>
                     {storesManual || !state.allStores ? (
                       <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
-                        {outlets.length === 0 ? (
+                        {!outletsLoaded ? (
                           <p className="text-sm text-muted-foreground">
                             Loading stores…
+                          </p>
+                        ) : outletsError ? (
+                          <p className="text-sm text-destructive">
+                            {outletsError}
+                          </p>
+                        ) : outlets.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No stores available right now.
                           </p>
                         ) : (
                           outlets.map((o) => {

@@ -308,7 +308,7 @@ async function buildTrackContributors(
   tMeta: TrackMetadata,
   artist: Artist
 ): Promise<
-  Array<{ writer_id: number; roles: Record<string, boolean>; ai_contribution: string }>
+  Array<{ writer_id: number; roles: Record<string, string>; ai_contribution: string }>
 > {
   const contribList =
     tMeta.contributors?.filter(
@@ -329,7 +329,7 @@ async function buildTrackContributors(
 
   const lgContributors: Array<{
     writer_id: number;
-    roles: Record<string, boolean>;
+    roles: Record<string, string>;
     ai_contribution: string;
   }> = [];
 
@@ -341,7 +341,10 @@ async function buildTrackContributors(
     });
     lgContributors.push({
       writer_id: writerId,
-      roles: Object.fromEntries(c.roles.map((r) => [r, true])),
+      // LabelGrid validates each roles.* entry as a string (422: "The
+      // contributor role field must be a string") — a boolean presence
+      // flag is rejected even though it's semantically what this is.
+      roles: Object.fromEntries(c.roles.map((r) => [r, "true"])),
       ai_contribution: "none",
     });
   }
