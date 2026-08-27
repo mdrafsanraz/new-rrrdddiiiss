@@ -1,17 +1,45 @@
 import Link from "next/link";
-import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowRight,
+  Broadcast,
+  Disc,
+  HourglassMedium,
+  WarningCircle,
+} from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { formatLimit, planLabel } from "@/lib/plans";
 import { prisma } from "@/lib/db";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import {
+  ReleasesTrendChart,
+  type ReleaseTrendPoint,
+} from "@/components/dashboard/releases-trend-chart";
 import { cn } from "@/lib/utils";
 import { releaseTitleLabel } from "@/lib/releases/display";
 import { statusesForUserFacingFilter } from "@/lib/releases/status";
 
 export const metadata = { title: "Dashboard" };
+
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}`;
+}
+
+/** Last 6 months (oldest first), used to bucket the activity trend chart. */
+function buildTrendMonths(): { key: string; date: Date }[] {
+  const months: { key: string; date: Date }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    d.setMonth(d.getMonth() - i);
+    months.push({ key: monthKey(d), date: d });
+  }
+  return months;
+}
 
 export default async function DashboardHomePage() {
   const user = await requireUser();
@@ -22,6 +50,9 @@ export default async function DashboardHomePage() {
   const liveStatuses = statusesForUserFacingFilter("live")!;
   const draftStatuses = statusesForUserFacingFilter("draft")!;
 
+  const trendMonths = buildTrendMonths();
+  const trendSince = trendMonths[0].date;
+
   const [
     recent,
     upcoming,
@@ -30,6 +61,7 @@ export default async function DashboardHomePage() {
     changesCount,
     liveCount,
     recentActivity,
+    trendRows,
   ] = await Promise.all([
     prisma.release.findMany({
       where: { userId: user.id },
@@ -65,7 +97,30 @@ export default async function DashboardHomePage() {
       take: 8,
       include: { release: { select: { id: true, title: true } } },
     }),
+    prisma.release.findMany({
+      where: {
+        userId: user.id,
+        OR: [{ createdAt: { gte: trendSince } }, { submittedAt: { gte: trendSince } }],
+      },
+      select: { createdAt: true, submittedAt: true },
+    }),
   ]);
+
+  const createdByMonth = new Map(trendMonths.map((m) => [m.key, 0]));
+  const submittedByMonth = new Map(trendMonths.map((m) => [m.key, 0]));
+  for (const r of trendRows) {
+    const ck = monthKey(r.createdAt);
+    if (createdByMonth.has(ck)) createdByMonth.set(ck, (createdByMonth.get(ck) ?? 0) + 1);
+    if (r.submittedAt) {
+      const sk = monthKey(r.submittedAt);
+      if (submittedByMonth.has(sk)) submittedByMonth.set(sk, (submittedByMonth.get(sk) ?? 0) + 1);
+    }
+  }
+  const trendData: ReleaseTrendPoint[] = trendMonths.map((m) => ({
+    date: m.date,
+    created: createdByMonth.get(m.key) ?? 0,
+    submitted: submittedByMonth.get(m.key) ?? 0,
+  }));
 
   return (
     <div className="space-y-8">
@@ -94,36 +149,58 @@ export default async function DashboardHomePage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
+          icon={<Disc size={18} weight="bold" aria-hidden />}
           label="Releases"
           value={String(usage.totalReleases)}
           href="/dashboard/releases"
+          delay={0}
         />
         <Kpi
+          icon={<HourglassMedium size={18} weight="bold" aria-hidden />}
           label="In Review"
           value={String(inReviewCount)}
           href="/dashboard/releases?status=in_review"
+          delay={60}
         />
         <Kpi
+          icon={<WarningCircle size={18} weight="bold" aria-hidden />}
           label="Changes Required"
           value={String(changesCount)}
           href="/dashboard/releases?status=changes_required"
           alert={changesCount > 0}
+          delay={120}
         />
         <Kpi
+          icon={<Broadcast size={18} weight="bold" aria-hidden />}
           label="Live"
           value={String(liveCount)}
           href="/dashboard/releases?status=live"
+          delay={180}
         />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label="Drafts" value={String(draftCount)} />
-        <MiniStat label="Artists" value={String(usage.artistsUsed)} />
-        <MiniStat label="Tracks" value={String(usage.totalTracks)} />
+        <MiniStat label="Drafts" value={String(draftCount)} delay={0} />
+        <MiniStat label="Artists" value={String(usage.artistsUsed)} delay={60} />
+        <MiniStat label="Tracks" value={String(usage.totalTracks)} delay={120} />
       </div>
 
+      <Card className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500">
+        <CardHeader>
+          <div>
+            <CardTitle>Catalog activity</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Releases created vs. submitted for review, last 6 months.
+            </p>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <ReleasesTrendChart data={trendData} />
+        </CardBody>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="border border-border bg-card p-5">
+        <Card className="p-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500">
           <h2 className="text-sm font-semibold">Plan usage</h2>
           <div className="mt-4 space-y-4">
             <UsageMeter
@@ -150,9 +227,12 @@ export default async function DashboardHomePage() {
               Upgrade plan
             </Link>
           ) : null}
-        </section>
+        </Card>
 
-        <section className="border border-border bg-card p-5">
+        <Card
+          className="p-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500"
+          style={{ animationDelay: "60ms" }}
+        >
           <h2 className="text-sm font-semibold">Subscription</h2>
           <p className="mt-3 text-2xl font-semibold tracking-tight">
             {planLabel(user.planId)}
@@ -169,11 +249,11 @@ export default async function DashboardHomePage() {
           >
             Manage subscription
           </Link>
-        </section>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="border border-border bg-card">
+        <Card>
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h2 className="text-sm font-semibold">Recent releases</h2>
             <Link
@@ -196,7 +276,7 @@ export default async function DashboardHomePage() {
                 <li key={r.id}>
                   <Link
                     href={`/dashboard/releases/${r.id}`}
-                    className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-muted/50"
+                    className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/50"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">
@@ -212,9 +292,9 @@ export default async function DashboardHomePage() {
               ))}
             </ul>
           )}
-        </section>
+        </Card>
 
-        <section className="border border-border bg-card">
+        <Card>
           <div className="border-b border-border px-5 py-4">
             <h2 className="text-sm font-semibold">Recent activity</h2>
           </div>
@@ -228,7 +308,7 @@ export default async function DashboardHomePage() {
                 <li key={a.id}>
                   <Link
                     href={`/dashboard/releases/${a.release.id}`}
-                    className="block px-5 py-3.5 transition-colors hover:bg-muted/50"
+                    className="block px-5 py-3.5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/50"
                   >
                     <p className="text-sm font-medium">{a.title}</p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -239,11 +319,11 @@ export default async function DashboardHomePage() {
               ))}
             </ul>
           )}
-        </section>
+        </Card>
       </div>
 
       {upcoming.length > 0 ? (
-        <section className="border border-border bg-card p-5">
+        <Card className="p-5">
           <h2 className="text-sm font-semibold">Upcoming</h2>
           <ul className="mt-3 space-y-2">
             {upcoming.map((r) => (
@@ -260,42 +340,70 @@ export default async function DashboardHomePage() {
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       ) : null}
     </div>
   );
 }
 
 function Kpi({
+  icon,
   label,
   value,
   href,
   alert,
+  delay = 0,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
   href: string;
   alert?: boolean;
+  delay?: number;
 }) {
   return (
     <Link
       href={href}
+      style={{ animationDelay: `${delay}ms` }}
       className={cn(
-        "border border-border bg-card p-5 transition-colors hover:bg-muted/40",
+        "group flex items-start justify-between gap-3 border border-border bg-card p-5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/40 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500",
         alert && "border-amber-400/60"
       )}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      </div>
+      <span
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center border transition-colors",
+          alert
+            ? "border-amber-400/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            : "border-border bg-muted text-muted-foreground group-hover:text-primary"
+        )}
+      >
+        {icon}
+      </span>
     </Link>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({
+  label,
+  value,
+  delay = 0,
+}: {
+  label: string;
+  value: string;
+  delay?: number;
+}) {
   return (
-    <div className="border border-border bg-card px-4 py-3">
+    <div
+      style={{ animationDelay: `${delay}ms` }}
+      className="border border-border bg-card px-4 py-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 duration-500"
+    >
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
     </div>
