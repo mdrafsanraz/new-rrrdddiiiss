@@ -93,6 +93,12 @@ const schema = z.object({
       })
     )
     .optional(),
+  /**
+   * Wizard checkpoint: force a LabelGrid metadata sync (release/distribution
+   * after the Distribution step, tracks/credits after the Credits step)
+   * even when this particular save carries no new file.
+   */
+  syncToLabelGrid: z.boolean().optional(),
 });
 
 /**
@@ -365,10 +371,15 @@ export async function PATCH(request: Request, { params }: Params) {
     let labelgrid:
       | { uploaded: boolean; error?: string; processingTrackIds?: string[] }
       | undefined;
-    // Only hit LabelGrid when this request actually carries a new file —
-    // metadata-only keystrokes don't need a round trip on every autosave
-    // tick; full metadata syncs happen at submit-for-review/approve time.
-    if (fresh && isLabelGridLive() && (artwork || audioInputs.length > 0)) {
+    // Hit LabelGrid when this request carries a new file, or when the
+    // wizard explicitly asked for a checkpoint sync (leaving Distribution
+    // or Credits) — metadata-only keystrokes otherwise skip the round trip;
+    // the final metadata sync also happens at submit-for-review/approve.
+    if (
+      fresh &&
+      isLabelGridLive() &&
+      (artwork || audioInputs.length > 0 || fields.syncToLabelGrid)
+    ) {
       const pushResult = await syncReleaseToLabelGrid({
         release: fresh,
         artwork,

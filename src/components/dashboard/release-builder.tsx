@@ -709,11 +709,15 @@ function validateStep(state: WizardState, step: number): string | null {
       if (!t.title.trim()) {
         return `Please enter a title for track ${i + 1}.`;
       }
-      if (!t.audioFile && !t.audioUrl) {
-        return `Please upload audio for “${t.title.trim() || `track ${i + 1}`}”.`;
-      }
+      // Check the failure reason first: after a failed upload attempt the
+      // pending file is cleared (see saveDraft's audioLanded logic), so
+      // audioFile/audioUrl are both empty even though a real attempt was
+      // made — "please upload" would misleadingly imply nothing happened.
       if (t.audioProcessingError) {
         return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}” — please re-upload it.`;
+      }
+      if (!t.audioFile && !t.audioUrl) {
+        return `Please upload audio for “${t.title.trim() || `track ${i + 1}`}”.`;
       }
     }
     return null;
@@ -956,7 +960,7 @@ export function ReleaseBuilder({
 
   async function saveDraft(
     current: WizardState,
-    opts?: { forceArtwork?: boolean }
+    opts?: { forceArtwork?: boolean; syncToLabelGrid?: boolean }
   ): Promise<boolean> {
     let id = current.releaseId;
     if (!id) {
@@ -976,7 +980,13 @@ export function ReleaseBuilder({
     );
     try {
       const fd = new FormData();
-      fd.set("payload", JSON.stringify(buildPayload(current)));
+      fd.set(
+        "payload",
+        JSON.stringify({
+          ...buildPayload(current),
+          syncToLabelGrid: opts?.syncToLabelGrid ?? false,
+        })
+      );
       if (current.artworkFile) fd.set("artwork", current.artworkFile);
       for (const t of current.tracks) {
         if (t.audioFile) fd.set(`audio_${t.clientId}`, t.audioFile);
@@ -1178,7 +1188,14 @@ export function ReleaseBuilder({
         const id = await createDraft(stateRef.current);
         if (!id) return;
       } else if (state.releaseId) {
-        await saveDraft(stateRef.current);
+        // Deliberate LabelGrid sync checkpoints: full release + distribution
+        // config once Distribution is complete, full track (incl. credits)
+        // once Credits is complete — both create-or-update, never duplicate
+        // (ensureLabelGridReleaseMetadata / ensureLabelGridTrack key off the
+        // stored labelgridId either way).
+        const syncToLabelGrid =
+          state.step === STEP_DISTRIBUTION || state.step === STEP_CREDITS;
+        await saveDraft(stateRef.current, { syncToLabelGrid });
       }
 
       setState((prev) => {

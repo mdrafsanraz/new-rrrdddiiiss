@@ -14,6 +14,7 @@ import {
   listTerritories,
   submitReleaseForReview,
   updateRelease,
+  updateTrack,
   uploadReleasePhoto,
   uploadTrackLicense,
   uploadTrackStereoAudio,
@@ -349,7 +350,9 @@ async function buildTrackContributors(
 
 async function buildTrackBody(
   track: Track,
-  ctx: TrackSyncContext
+  ctx: TrackSyncContext,
+  /** release_id is create-only — TrackUpdateData has no such field. */
+  opts: { forUpdate?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
   const trackPrimaryGenreId = await resolveGenreId(
@@ -358,7 +361,7 @@ async function buildTrackBody(
   const contributors = await buildTrackContributors(track, tMeta, ctx.artist);
 
   const body: Record<string, unknown> = {
-    release_id: ctx.lgReleaseId,
+    ...(opts.forUpdate ? {} : { release_id: ctx.lgReleaseId }),
     disc: 1,
     track_num: track.trackNumber || 1,
     composition_type: tMeta.compositionType || "original_composition",
@@ -403,13 +406,20 @@ async function buildTrackBody(
   return body;
 }
 
-/** Create the LG track if the local row has no labelgridId yet; persist the id. */
+/**
+ * Create the LG track if the local row has no labelgridId yet, otherwise
+ * PATCH the existing one with current metadata (composition, credits,
+ * explicit, etc.) — never creates a second track for an already-synced row.
+ */
 async function ensureLabelGridTrack(
   track: Track,
   ctx: TrackSyncContext
 ): Promise<number> {
   if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
-    return Number(track.labelgridId);
+    const lgTrackId = Number(track.labelgridId);
+    const body = await buildTrackBody(track, ctx, { forUpdate: true });
+    await updateTrack(lgTrackId, body);
+    return lgTrackId;
   }
   const body = await buildTrackBody(track, ctx);
   const created = await createTrack(body);
