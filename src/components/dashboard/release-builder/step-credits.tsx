@@ -9,9 +9,14 @@
  *   total 100) with a self-published option (publishers omitted — the field
  *   is optional in TrackCreateData, so "no publisher" is simply absence)
  * - ℗/© year + owner → pline/cline fields
- * Writers, publishers, and roles all come from live LabelGrid catalogs.
+ *
+ * Every role chip shown here — for contributors AND for writer/publishing
+ * splits — comes straight from the live GET /contributor-roles response,
+ * grouped by LabelGrid's own `category` field. Nothing is hardcoded: no
+ * role name is ever offered unless this catalog actually returned it.
  */
 
+import { useEffect, useMemo } from "react";
 import { Plus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
@@ -24,7 +29,6 @@ import {
   type WizardState,
 } from "@/lib/releases/wizard-types";
 import {
-  CatalogStatus,
   EntityPicker,
   Panel,
   YesNo,
@@ -36,42 +40,128 @@ export function splitTotal(rows: Array<{ share: number }>): number {
   return rows.reduce((sum, r) => sum + (Number.isFinite(r.share) ? r.share : 0), 0);
 }
 
-/**
- * Contributor roles offered in the picker. The live catalog is large;
- * these four cover LabelGrid's required categories (Artist → Performer,
- * Composer/Songwriter → Composition & Lyrics, Producer → Production &
- * Engineering). Only labels that exist in the live catalog are shown —
- * if none of these match it, the full catalog is offered instead.
- */
-const CONTRIBUTOR_ROLE_PICKS = ["Composer", "Songwriter", "Producer", "Artist"];
+type RoleGroup = { category: string; roles: ContributorRole[] };
 
-export function pickContributorRoles(
-  catalog: CatalogState<ContributorRole>
-): CatalogState<ContributorRole> {
-  const preferred = catalog.items.filter((r) =>
-    CONTRIBUTOR_ROLE_PICKS.some(
-      (p) => p.toLowerCase() === r.display_value.trim().toLowerCase()
-    )
-  );
-  return preferred.length > 0 ? { ...catalog, items: preferred } : catalog;
+/** Group live catalog rows by LabelGrid's own `category`, sorted by `position`. */
+function groupRolesByCategory(items: ContributorRole[]): RoleGroup[] {
+  const map = new Map<string, ContributorRole[]>();
+  for (const r of items) {
+    const key = r.category?.trim() || "Uncategorized";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(r);
+  }
+  for (const roles of map.values()) {
+    roles.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+  return [...map.entries()]
+    .map(([category, roles]) => ({ category, roles }))
+    .sort((a, b) => a.category.localeCompare(b.category));
 }
 
 /**
- * Publishing-split (track `writers`) roles come from the SAME live
- * GET /contributor-roles catalog, restricted to the "Composition & Lyrics"
- * category. Evidence from the sandbox's own 422s: Composer and Songwriter
- * (C&L category) passed writer-role validation while Producer (Production
- * & Engineering) and Artist (Performer) were rejected, and raw non-catalog
- * strings ("Music"/"Lyrics") were rejected outright. Nothing hardcoded —
- * if the category filter matches nothing, the full catalog is offered.
+ * The ONLY category-level rule this step encodes, and it isn't a guess: the
+ * sandbox's own 422s pinned it down — roles from "Composition & Lyrics"
+ * (Composer, Songwriter, …) pass writer-split validation, roles from
+ * "Performer" or "Production & Engineering" (Artist, Producer, …) don't.
+ * Every role NAME still comes from the live catalog; this only decides
+ * which category group is offered to writer splits vs. contributors.
  */
+const WRITER_ELIGIBLE_CATEGORY = "composition & lyrics";
+
 export function pickWriterSplitRoles(
   catalog: CatalogState<ContributorRole>
-): CatalogState<ContributorRole> {
-  const composition = catalog.items.filter(
-    (r) => (r.category ?? "").trim().toLowerCase() === "composition & lyrics"
+): ContributorRole[] {
+  return catalog.items.filter(
+    (r) => (r.category ?? "").trim().toLowerCase() === WRITER_ELIGIBLE_CATEGORY
   );
-  return composition.length > 0 ? { ...catalog, items: composition } : catalog;
+}
+
+function logRoleSelection(scope: "contributor" | "writer-split", role: ContributorRole) {
+  console.log("[credits/role-selected]", {
+    scope,
+    display_value: role.display_value,
+    category: role.category,
+  });
+}
+
+function RoleChip({
+  role,
+  on,
+  title,
+  onToggle,
+}: {
+  role: string;
+  on: boolean;
+  title?: string | null;
+  onToggle: (role: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title ?? undefined}
+      onClick={() => onToggle(role)}
+      className={cn(
+        "cursor-pointer border px-3 py-1.5 text-xs font-medium",
+        on
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border hover:border-primary/50"
+      )}
+    >
+      {role}
+    </button>
+  );
+}
+
+/** Role picker grouped under the category headings LabelGrid itself returns. */
+function RoleGroupPicker({
+  catalog,
+  groups,
+  selected,
+  scope,
+  emptyLabel,
+  onToggle,
+}: {
+  catalog: CatalogState<unknown>;
+  groups: RoleGroup[];
+  selected: string[];
+  scope: "contributor" | "writer-split";
+  emptyLabel: string;
+  onToggle: (role: ContributorRole) => void;
+}) {
+  if (!catalog.loaded) {
+    return <p className="text-sm text-muted-foreground">Loading roles…</p>;
+  }
+  if (catalog.error) {
+    return <p className="text-sm text-destructive">{catalog.error}</p>;
+  }
+  if (groups.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+  return (
+    <div className="max-h-40 space-y-3 overflow-y-auto pr-1">
+      {groups.map((g) => (
+        <div key={g.category}>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {g.category}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {g.roles.map((r) => (
+              <RoleChip
+                key={r.display_value}
+                role={r.display_value}
+                title={r.description}
+                on={selected.includes(r.display_value)}
+                onToggle={() => {
+                  logRoleSelection(scope, r);
+                  onToggle(r);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
@@ -89,55 +179,6 @@ function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   );
 }
 
-function RoleChip({
-  role,
-  on,
-  onToggle,
-}: {
-  role: string;
-  on: boolean;
-  onToggle: (role: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onToggle(role)}
-      className={cn(
-        "cursor-pointer border px-3 py-1.5 text-xs font-medium",
-        on
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border hover:border-primary/50"
-      )}
-    >
-      {role}
-    </button>
-  );
-}
-
-function RoleChips({
-  roles,
-  selected,
-  onToggle,
-}: {
-  roles: CatalogState<ContributorRole>;
-  selected: string[];
-  onToggle: (role: string) => void;
-}) {
-  return (
-    <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">
-      <CatalogStatus catalog={roles} emptyLabel="No roles available." />
-      {roles.items.map((r) => (
-        <RoleChip
-          key={r.display_value}
-          role={r.display_value}
-          on={selected.includes(r.display_value)}
-          onToggle={onToggle}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function StepCredits({
   state,
   patch,
@@ -149,16 +190,71 @@ export function StepCredits({
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
   contributorRoles: CatalogState<ContributorRole>;
 }) {
-  const contributorRolePicks = pickContributorRoles(contributorRoles);
-  const writerSplitRoles = pickWriterSplitRoles(contributorRoles);
+  // Contributors may hold ANY role LabelGrid returns — there's no category
+  // restriction on a single contributor, only a coverage requirement across
+  // all of them (enforced in validateStep). Writer splits are restricted to
+  // the one category the API has actually validated for that payload.
+  const contributorGroups = useMemo(
+    () => groupRolesByCategory(contributorRoles.items),
+    [contributorRoles.items]
+  );
+  const writerEligibleRoles = useMemo(
+    () => pickWriterSplitRoles(contributorRoles),
+    [contributorRoles]
+  );
+  const writerGroups = useMemo(
+    () => groupRolesByCategory(writerEligibleRoles),
+    [writerEligibleRoles]
+  );
+
+  const validContributorRoles = useMemo(
+    () => new Set(contributorRoles.items.map((r) => r.display_value)),
+    [contributorRoles.items]
+  );
+  const validWriterRoles = useMemo(
+    () => new Set(writerEligibleRoles.map((r) => r.display_value)),
+    [writerEligibleRoles]
+  );
+
+  // Once the live catalog (re)loads, drop any previously-selected role that
+  // no longer exists in it — e.g. a role picked before the catalog loaded,
+  // or one that belonged to the wrong panel from an earlier build of this
+  // step. Never send a stale label LabelGrid never actually offered.
+  useEffect(() => {
+    if (!contributorRoles.loaded || contributorRoles.items.length === 0) return;
+    setState((prev) => {
+      let changed = false;
+      const contributors = prev.contributors.map((c) => {
+        const roles = c.roles.filter((r) => validContributorRoles.has(r));
+        if (roles.length === c.roles.length) return c;
+        changed = true;
+        return { ...c, roles };
+      });
+      const writerSplits = prev.writerSplits.map((w) => {
+        const roles = w.roles.filter((r) => validWriterRoles.has(r));
+        if (roles.length === w.roles.length) return w;
+        changed = true;
+        return { ...w, roles };
+      });
+      return changed ? { ...prev, contributors, writerSplits } : prev;
+    });
+  }, [
+    contributorRoles.loaded,
+    contributorRoles.items.length,
+    validContributorRoles,
+    validWriterRoles,
+    setState,
+  ]);
 
   return (
     <div className="space-y-5">
-      {/* Contributors */}
+      {/* CONTRIBUTORS */}
       <Panel className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Contributors</p>
+            <p className="text-sm font-semibold">
+              Contributors <span className="text-destructive">· Required</span>
+            </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Cover at least Performer, Composition &amp; Lyrics, and
               Production &amp; Engineering across your contributors — the same
@@ -177,7 +273,7 @@ export function StepCredits({
             }
           >
             <Plus size={14} weight="bold" aria-hidden />
-            Add
+            Add Contributor
           </Button>
         </div>
 
@@ -220,17 +316,20 @@ export function StepCredits({
 
             <div className="grid gap-2">
               <p className="text-sm font-medium">Roles</p>
-              <RoleChips
-                roles={contributorRolePicks}
+              <RoleGroupPicker
+                catalog={contributorRoles}
+                groups={contributorGroups}
                 selected={c.roles}
+                scope="contributor"
+                emptyLabel="No contributor roles available from LabelGrid."
                 onToggle={(role) =>
                   setState((prev) => ({
                     ...prev,
                     contributors: prev.contributors.map((x) => {
                       if (x.id !== c.id) return x;
-                      const roles = x.roles.includes(role)
-                        ? x.roles.filter((r) => r !== role)
-                        : [...x.roles, role];
+                      const roles = x.roles.includes(role.display_value)
+                        ? x.roles.filter((r) => r !== role.display_value)
+                        : [...x.roles, role.display_value];
                       return { ...x, roles };
                     }),
                   }))
@@ -240,7 +339,7 @@ export function StepCredits({
 
             <Field
               id={`ai-${c.id}`}
-              label="AI contribution"
+              label="AI Contribution"
               as="select"
               value={c.aiContribution ?? "none"}
               onChange={(e) =>
@@ -281,14 +380,18 @@ export function StepCredits({
         ))}
       </Panel>
 
-      {/* Publishing splits (LabelGrid track `writers`) */}
+      {/* WRITERS & COMPOSITION SPLITS */}
       <Panel className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Publishing splits</p>
+            <p className="text-sm font-semibold">
+              Writers &amp; Composition Splits{" "}
+              <span className="text-destructive">· Required</span>
+            </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Writer shares of the composition — optional, but totals must be
-              100% if used.
+              Writer shares of the composition — roles are restricted to
+              LabelGrid&rsquo;s composition/songwriting category. Totals must
+              equal 100%.
             </p>
           </div>
           <Button
@@ -306,7 +409,7 @@ export function StepCredits({
             }
           >
             <Plus size={14} weight="bold" aria-hidden />
-            Add
+            Add Writer
           </Button>
         </div>
 
@@ -367,18 +470,21 @@ export function StepCredits({
             </div>
 
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Roles</p>
-              <RoleChips
-                roles={writerSplitRoles}
+              <p className="text-sm font-medium">Role(s)</p>
+              <RoleGroupPicker
+                catalog={{ ...contributorRoles, items: writerEligibleRoles }}
+                groups={writerGroups}
                 selected={w.roles}
+                scope="writer-split"
+                emptyLabel="No composition/songwriting roles returned by LabelGrid yet."
                 onToggle={(role) =>
                   setState((prev) => ({
                     ...prev,
                     writerSplits: prev.writerSplits.map((x) => {
                       if (x.id !== w.id) return x;
-                      const roles = x.roles.includes(role)
-                        ? x.roles.filter((r) => r !== role)
-                        : [...x.roles, role];
+                      const roles = x.roles.includes(role.display_value)
+                        ? x.roles.filter((r) => r !== role.display_value)
+                        : [...x.roles, role.display_value];
                       return { ...x, roles };
                     }),
                   }))
@@ -406,12 +512,13 @@ export function StepCredits({
         ) : null}
       </Panel>
 
-      {/* Publishers */}
+      {/* PUBLISHER */}
       <Panel className="space-y-4">
         <div>
           <p className="text-sm font-semibold">Publisher</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Who administers the publishing for this release.
+            Required according to your RDISTRO workflow — who administers the
+            publishing for this release.
           </p>
         </div>
 
@@ -446,7 +553,7 @@ export function StepCredits({
                 }
               >
                 <Plus size={14} weight="bold" aria-hidden />
-                Add publisher
+                Add Publisher
               </Button>
             </div>
 
@@ -525,24 +632,12 @@ export function StepCredits({
         ) : null}
       </Panel>
 
-      {/* Copyright */}
+      {/* COPYRIGHT */}
       <Panel className="space-y-5">
-        <p className="text-sm font-semibold">Copyright</p>
+        <p className="text-sm font-semibold">
+          Copyright <span className="text-destructive">· Required</span>
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            id="clineYear"
-            label="© Year"
-            required
-            value={state.clineYear}
-            onChange={(e) => patch({ clineYear: e.target.value })}
-          />
-          <Field
-            id="clineName"
-            label="© Owner"
-            required
-            value={state.clineName}
-            onChange={(e) => patch({ clineName: e.target.value })}
-          />
           <Field
             id="plineYear"
             label="℗ Year"
@@ -556,6 +651,20 @@ export function StepCredits({
             required
             value={state.plineName}
             onChange={(e) => patch({ plineName: e.target.value })}
+          />
+          <Field
+            id="clineYear"
+            label="© Year"
+            required
+            value={state.clineYear}
+            onChange={(e) => patch({ clineYear: e.target.value })}
+          />
+          <Field
+            id="clineName"
+            label="© Owner"
+            required
+            value={state.clineName}
+            onChange={(e) => patch({ clineName: e.target.value })}
           />
         </div>
       </Panel>

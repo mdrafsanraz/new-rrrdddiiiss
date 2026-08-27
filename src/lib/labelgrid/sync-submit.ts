@@ -214,26 +214,50 @@ async function loadContributorRoles(): Promise<ContributorRoleRow[]> {
     return contributorRolesCache;
   }
   const raw = await listContributorRoles();
+  console.log("[labelgrid/contributor-roles] raw GET response (sync)", JSON.stringify(raw));
   contributorRolesCache = unwrapContributorRoleRows(raw).filter(
     (r) => r.display_value
+  );
+  console.log(
+    "[labelgrid/contributor-roles] categories (sync)",
+    JSON.stringify(
+      [...new Set(contributorRolesCache.map((r) => r.category))].map(
+        (category) => ({
+          category,
+          roles: contributorRolesCache!
+            .filter((r) => r.category === category)
+            .map((r) => r.display_value),
+        })
+      )
+    )
   );
   return contributorRolesCache;
 }
 
 /**
  * Resolve a UI role label to its live catalog row (exact display_value
- * match, case-insensitive) so only real roles are ever sent.
+ * match, case-insensitive) so only real roles are ever sent. The payload
+ * value is always `row.display_value` verbatim — the exact string
+ * LabelGrid returned, never a hardcoded or re-typed copy of it.
  */
 async function resolveContributorRole(
   label: string
 ): Promise<ContributorRoleRow | null> {
   const roles = await loadContributorRoles();
-  return (
+  const row =
     roles.find(
       (r) =>
         r.display_value.trim().toLowerCase() === label.trim().toLowerCase()
-    ) ?? null
+    ) ?? null;
+  console.log(
+    "[labelgrid/contributor-roles] selected role",
+    JSON.stringify({
+      requested: label,
+      resolved: row?.display_value ?? null,
+      category: row?.category ?? null,
+    })
   );
+  return row;
 }
 
 /**

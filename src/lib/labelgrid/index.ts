@@ -161,21 +161,17 @@ export function listGenres() {
 }
 
 /**
- * Raw contributor-role catalog row. The documented schema only guarantees
- * display_value/position/description/category, but real responses from
- * Laravel-style catalogs like this commonly carry an additional identifier
- * field the strict OpenAPI export omits — read defensively for one instead
- * of assuming display_value doubles as the API key.
+ * Raw contributor-role catalog row — MinimalContributorRoleData per
+ * document.json. There is no separate id/key/slug field in this schema:
+ * display_value IS the identifier LabelGrid expects back in a `roles`
+ * payload (confirmed empirically — the API validates and echoes role
+ * names like "Composer"/"Producer", not categories or synthetic ids).
  */
 export type ContributorRoleRow = {
   display_value: string;
-  category?: string | null;
-  description?: string | null;
-  position?: number;
-  key?: string;
-  id?: string | number;
-  value?: string;
-  code?: string;
+  category: string | null;
+  description: string | null;
+  position: number | null;
 };
 
 /** GET /contributor-roles — bare array, same shape as /genres. */

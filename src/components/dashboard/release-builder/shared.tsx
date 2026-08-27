@@ -66,7 +66,12 @@ export async function readImageFileDimensions(
 export type Outlet = { id: number; name: string; key: string };
 export type GenreOption = { id: number; name: string };
 export type TerritoryOption = { code: string; name: string };
-export type ContributorRole = { display_value: string; category: string | null };
+export type ContributorRole = {
+  display_value: string;
+  category: string | null;
+  description: string | null;
+  position: number | null;
+};
 export type WriterOption = { id: number; first_name: string; last_name: string };
 export type PublisherOption = { id: number; name: string };
 
