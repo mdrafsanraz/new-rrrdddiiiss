@@ -16,6 +16,12 @@ import { cn } from "@/lib/utils";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
+  fetchLiveRelease,
+  withTimeout,
+  LiveFetchTimeoutError,
+  type LiveRelease,
+} from "@/lib/labelgrid/live-release";
+import {
   canUserEditRelease,
   canUserReplaceMedia,
   canUserResubmitRelease,
@@ -133,13 +139,115 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const documents = release.documents ?? [];
   const activities = release.activities ?? [];
 
-  // Artwork/audio live only on LabelGrid now — a set URL means it's there.
-  const artworkOnDisk = Boolean(release.artworkUrl);
+  // LabelGrid is the source of truth for catalog data (metadata, artwork,
+  // tracks, credits, audio) — the local DB above only supplied ownership
+  // and the labelgridId. Best-effort: never block the page on LabelGrid
+  // latency/errors, and never touch the status sync above this line.
+  let live: LiveRelease | null = null;
+  let liveError: string | null = null;
+  if (isLabelGridLive() && release.labelgridId) {
+    try {
+      live = await withTimeout(
+        fetchLiveRelease(user.id, Number(release.labelgridId)),
+        8000
+      );
+    } catch (error) {
+      liveError =
+        error instanceof LiveFetchTimeoutError
+          ? "LabelGrid did not respond in time — showing the last saved copy."
+          : "Could not load the latest data from LabelGrid — showing the last saved copy.";
+      console.error("[releases/detail] live fetch failed", error);
+    }
+  }
+
+  const displayTitle = live?.title ?? release.title;
+  const displayArtist = live?.artist ?? release.artist?.name ?? "No artist";
+  const displayArtworkUrl = live?.coverUrl ?? release.artworkUrl;
+  const displayContentType = live?.contentType ?? release.contentType;
+  const displayGenre = live?.primaryGenre ?? release.primaryGenre ?? "—";
+  const displayReleaseDate = live?.releaseDate
+    ? new Date(live.releaseDate)
+    : release.releaseDate;
+  const displayUpc = live?.barcodeNumber ?? release.upc;
+  const displayCatalogNumber = live?.catalogNumber ?? release.catalogNumber;
+  const displayExplicit = live?.explicit ?? release.explicit;
+  const displayLocalization =
+    live?.preferredLocalization ?? rMeta.preferredLocalization ?? "—";
+
+  type DisplayCredit = { name: string; roles: string[] };
+  type DisplayWriterSplit = DisplayCredit & { share: number | null };
+  type DisplayPublisherSplit = { name: string; share: number | null };
+  type DisplayTrack = {
+    key: string;
+    trackNumber: number;
+    title: string;
+    isrc: string | null;
+    mixVersion: string | null;
+    contributors: DisplayCredit[];
+    writers: DisplayWriterSplit[];
+    publishers: DisplayPublisherSplit[];
+    audioUrl: string | null;
+    audioStatus: string | null;
+  };
+
+  // Release-level publishing splits apply to every track (mirrors
+  // sync-submit.ts's buildTrackBody) — used only when live track data
+  // (which carries the real per-track writers[]/publishers[]) isn't available.
+  const fallbackWriterSplits: DisplayWriterSplit[] = (rMeta.writerSplits ?? []).map(
+    (w) => ({ name: `${w.firstName} ${w.lastName}`.trim(), roles: w.roles, share: w.share })
+  );
+  const fallbackPublisherSplits: DisplayPublisherSplit[] = (
+    rMeta.publisherSplits ?? []
+  ).map((p) => ({ name: p.name, share: p.share }));
+
+  const displayTracks: DisplayTrack[] = live
+    ? live.tracks.map((lt) => ({
+        key: String(lt.id),
+        trackNumber: lt.trackNumber ?? 0,
+        title: lt.title,
+        isrc: lt.isrc,
+        mixVersion: lt.mixVersion,
+        contributors: lt.contributors.map((c) => ({ name: c.name, roles: c.roles })),
+        writers: lt.writers.map((w) => ({ name: w.name, roles: w.roles, share: w.share })),
+        publishers: lt.publishers.map((p) => ({ name: p.name, share: p.share })),
+        audioUrl: lt.audio?.url ?? null,
+        audioStatus: lt.audio?.status ?? null,
+      }))
+    : tracks.map((t) => {
+        const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+        return {
+          key: t.id,
+          trackNumber: t.trackNumber,
+          title: t.title,
+          isrc: t.isrc,
+          mixVersion: tMeta.mixVersion ?? null,
+          contributors: t.contributors.map((c) => ({ name: c.name, roles: [c.role] })),
+          writers: fallbackWriterSplits,
+          publishers: fallbackPublisherSplits,
+          audioUrl: t.audioUrl,
+          audioStatus: tMeta.audioProcessing
+            ? "processing"
+            : tMeta.audioProcessingError
+              ? "failed"
+              : null,
+        };
+      });
+
+  // Media-replace nudge: prefer LabelGrid's actual file presence per track
+  // (matched by labelgridId) over the local cache, falling back to the
+  // local cache only for tracks that haven't synced to LabelGrid yet.
+  const liveAudioPresentByLgTrackId = new Map(
+    (live?.tracks ?? []).map((lt) => [String(lt.id), Boolean(lt.audio?.url)])
+  );
+  const artworkOnDisk = live ? Boolean(live.coverUrl) : Boolean(release.artworkUrl);
   const trackMedia = tracks.map((t) => ({
     id: t.id,
     title: t.title,
     trackNumber: t.trackNumber,
-    hasAudioOnDisk: Boolean(t.audioUrl),
+    hasAudioOnDisk:
+      t.labelgridId && liveAudioPresentByLgTrackId.has(t.labelgridId)
+        ? liveAudioPresentByLgTrackId.get(t.labelgridId)!
+        : Boolean(t.audioUrl),
   }));
   const needsArtwork = !artworkOnDisk;
   const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
@@ -163,13 +271,13 @@ export default async function ReleaseDetailPage({ params }: Props) {
           </Link>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight text-balance">
-              {release.title}
+              {displayTitle}
             </h1>
             <StatusBadge status={release.status} />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {release.artist?.name ?? "No artist"} · {release.catalogNumber}
-            {release.upc ? ` · UPC ${release.upc}` : ""}
+            {displayArtist} · {displayCatalogNumber}
+            {displayUpc ? ` · UPC ${displayUpc}` : ""}
           </p>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {getUserFacingStatusDescription(release.status)}
@@ -306,13 +414,19 @@ export default async function ReleaseDetailPage({ params }: Props) {
         </section>
       ) : null}
 
+      {liveError ? (
+        <section className="border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950">
+          {liveError}
+        </section>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
         <section className="border border-border bg-card p-4">
           <h2 className="text-sm font-semibold">Artwork</h2>
-          {release.artworkUrl ? (
+          {displayArtworkUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={release.artworkUrl}
+              src={displayArtworkUrl}
               alt=""
               className="mt-3 aspect-square w-full object-cover"
             />
@@ -325,23 +439,20 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <h2 className="text-sm font-semibold">Release info</h2>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Status" value={<StatusBadge status={release.status} />} />
-            <Row label="Type" value={release.contentType} />
-            <Row label="Genre" value={release.primaryGenre ?? "—"} />
+            <Row label="Type" value={displayContentType} />
+            <Row label="Genre" value={displayGenre} />
             <Row
               label="Release date"
               value={
-                release.releaseDate
-                  ? release.releaseDate.toLocaleDateString()
+                displayReleaseDate
+                  ? displayReleaseDate.toLocaleDateString()
                   : "Not set"
               }
             />
-            <Row label="UPC" value={release.upc ?? "—"} />
-            <Row label="Catalog" value={release.catalogNumber} />
-            <Row label="Explicit" value={release.explicit} />
-            <Row
-              label="Localization"
-              value={rMeta.preferredLocalization ?? "—"}
-            />
+            <Row label="UPC" value={displayUpc ?? "—"} />
+            <Row label="Catalog" value={displayCatalogNumber} />
+            <Row label="Explicit" value={displayExplicit} />
+            <Row label="Localization" value={displayLocalization} />
             <Row
               label="First submitted"
               value={
@@ -362,33 +473,53 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <h2 className="text-sm font-semibold">Tracks</h2>
         </div>
         <ul className="divide-y divide-border">
-          {tracks.map((t) => {
-            const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
-            return (
-              <li key={t.id} className="px-5 py-4 text-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">
-                      <span className="mr-3 tabular-nums text-muted-foreground">
-                        {String(t.trackNumber).padStart(2, "0")}
-                      </span>
-                      {t.title}
+          {displayTracks.map((t) => (
+            <li key={t.key} className="px-5 py-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    <span className="mr-3 tabular-nums text-muted-foreground">
+                      {String(t.trackNumber).padStart(2, "0")}
+                    </span>
+                    {t.title}
+                    {t.mixVersion ? ` (${t.mixVersion})` : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t.isrc ? `ISRC ${t.isrc}` : "ISRC pending"}
+                  </p>
+                  {t.contributors.length > 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Contributors:{" "}
+                      {t.contributors
+                        .map((c) => `${c.name} (${c.roles.join(", ")})`)
+                        .join("; ")}
                     </p>
+                  ) : null}
+                  {t.writers.length > 0 ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {t.isrc ? `ISRC ${t.isrc}` : "ISRC pending"}
-                      {tMeta.audioLanguage
-                        ? ` · ${tMeta.audioLanguage}`
-                        : ""}
+                      Writers:{" "}
+                      {t.writers
+                        .map(
+                          (w) =>
+                            `${w.name} (${w.roles.join(", ")})${
+                              w.share != null ? ` ${w.share}%` : ""
+                            }`
+                        )
+                        .join("; ")}
                     </p>
-                    {t.contributors.length > 0 ? (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Credits:{" "}
-                        {t.contributors
-                          .map((c) => `${c.name} (${c.role})`)
-                          .join("; ")}
-                      </p>
-                    ) : null}
-                  </div>
+                  ) : null}
+                  {t.publishers.length > 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Publishers:{" "}
+                      {t.publishers
+                        .map(
+                          (p) => `${p.name}${p.share != null ? ` ${p.share}%` : ""}`
+                        )
+                        .join("; ")}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   {t.audioUrl ? (
                     <audio
                       controls
@@ -396,11 +527,19 @@ export default async function ReleaseDetailPage({ params }: Props) {
                       src={t.audioUrl}
                       className="h-8 max-w-[240px]"
                     />
-                  ) : null}
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {t.audioStatus === "processing"
+                        ? "Audio processing…"
+                        : t.audioStatus === "failed"
+                          ? "Audio upload failed"
+                          : "No audio yet"}
+                    </span>
+                  )}
                 </div>
-              </li>
-            );
-          })}
+              </div>
+            </li>
+          ))}
         </ul>
       </section>
 
