@@ -4,6 +4,7 @@ import {
   Broadcast,
   Disc,
   HourglassMedium,
+  TrendUp,
   WarningCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
@@ -14,6 +15,8 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/dashboard/usage-meter";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import { AnimatedNumber } from "@/components/dashboard/animated-number";
+import { ReleasePipeline } from "@/components/dashboard/release-pipeline";
 import {
   ReleasesTrendChart,
   type ReleaseTrendPoint,
@@ -27,6 +30,25 @@ export const metadata = { title: "Dashboard" };
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}`;
 }
+
+/**
+ * Display-only regrouping of the same ReleaseStatus values the rest of
+ * the app already uses (src/lib/releases/status.ts) — splits the single
+ * "in review" bucket into its two real underlying stages for the
+ * pipeline visualization. Does not change getUserFacingReleaseStatus or
+ * any filter/status logic used elsewhere.
+ */
+const RDISTRO_REVIEW_STATUSES = new Set([
+  "pending_internal_review",
+  "submitted",
+  "in_review",
+  "internal_approved",
+]);
+const LABELGRID_REVIEW_STATUSES = new Set([
+  "submitting_to_labelgrid",
+  "syncing",
+  "labelgrid_in_review",
+]);
 
 /** Last 6 months (oldest first), used to bucket the activity trend chart. */
 function buildTrendMonths(): { key: string; date: Date }[] {
@@ -49,6 +71,10 @@ export default async function DashboardHomePage() {
   const changesStatuses = statusesForUserFacingFilter("changes_required")!;
   const liveStatuses = statusesForUserFacingFilter("live")!;
   const draftStatuses = statusesForUserFacingFilter("draft")!;
+  const deliveringPipelineStatuses = new Set([
+    ...statusesForUserFacingFilter("approved")!,
+    ...statusesForUserFacingFilter("delivering")!,
+  ]);
 
   const trendMonths = buildTrendMonths();
   const trendSince = trendMonths[0].date;
@@ -62,6 +88,7 @@ export default async function DashboardHomePage() {
     liveCount,
     recentActivity,
     trendRows,
+    statusCounts,
   ] = await Promise.all([
     prisma.release.findMany({
       where: { userId: user.id },
@@ -104,7 +131,21 @@ export default async function DashboardHomePage() {
       },
       select: { createdAt: true, submittedAt: true },
     }),
+    prisma.release.groupBy({
+      by: ["status"],
+      where: { userId: user.id },
+      _count: { _all: true },
+    }),
   ]);
+
+  let rdistroReviewCount = 0;
+  let labelgridReviewCount = 0;
+  let deliveringCount = 0;
+  for (const row of statusCounts) {
+    if (RDISTRO_REVIEW_STATUSES.has(row.status)) rdistroReviewCount += row._count._all;
+    if (LABELGRID_REVIEW_STATUSES.has(row.status)) labelgridReviewCount += row._count._all;
+    if (deliveringPipelineStatuses.has(row.status)) deliveringCount += row._count._all;
+  }
 
   const createdByMonth = new Map(trendMonths.map((m) => [m.key, 0]));
   const submittedByMonth = new Map(trendMonths.map((m) => [m.key, 0]));
@@ -147,42 +188,41 @@ export default async function DashboardHomePage() {
         </Link>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          icon={<Disc size={18} weight="bold" aria-hidden />}
-          label="Releases"
-          value={String(usage.totalReleases)}
-          href="/dashboard/releases"
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2">
+        <TotalReleasesBlock
+          total={usage.totalReleases}
+          createdThisMonth={trendData[trendData.length - 1]?.created ?? 0}
           delay={0}
         />
         <Kpi
           icon={<HourglassMedium size={18} weight="bold" aria-hidden />}
           label="In Review"
-          value={String(inReviewCount)}
+          value={inReviewCount}
           href="/dashboard/releases?status=in_review"
-          delay={60}
-        />
-        <Kpi
-          icon={<WarningCircle size={18} weight="bold" aria-hidden />}
-          label="Changes Required"
-          value={String(changesCount)}
-          href="/dashboard/releases?status=changes_required"
-          alert={changesCount > 0}
-          delay={120}
+          delay={90}
         />
         <Kpi
           icon={<Broadcast size={18} weight="bold" aria-hidden />}
           label="Live"
-          value={String(liveCount)}
+          value={liveCount}
           href="/dashboard/releases?status=live"
-          delay={180}
+          delay={150}
         />
+        <ActionRequiredBlock count={changesCount} delay={210} />
       </div>
 
+      <ReleasePipeline
+        draft={draftCount}
+        rdistroReview={rdistroReviewCount}
+        labelgridReview={labelgridReviewCount}
+        delivering={deliveringCount}
+        live={liveCount}
+      />
+
       <div className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label="Drafts" value={String(draftCount)} delay={0} />
-        <MiniStat label="Artists" value={String(usage.artistsUsed)} delay={60} />
-        <MiniStat label="Tracks" value={String(usage.totalTracks)} delay={120} />
+        <MiniStat label="Drafts" value={draftCount} delay={0} />
+        <MiniStat label="Artists" value={usage.artistsUsed} delay={60} />
+        <MiniStat label="Tracks" value={usage.totalTracks} delay={120} />
       </div>
 
       <Card className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500">
@@ -276,9 +316,23 @@ export default async function DashboardHomePage() {
                 <li key={r.id}>
                   <Link
                     href={`/dashboard/releases/${r.id}`}
-                    className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/50"
+                    className="group flex items-center gap-4 px-5 py-3.5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/50"
                   >
-                    <div className="min-w-0">
+                    <div className="size-11 shrink-0 overflow-hidden border border-border bg-muted">
+                      {r.artworkUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.artworkUrl}
+                          alt=""
+                          className="size-full object-cover transition-transform duration-300 ease-[var(--ease-rdistro)] group-hover:scale-[1.06]"
+                        />
+                      ) : (
+                        <div className="flex size-full items-center justify-center text-muted-foreground">
+                          <Disc size={16} weight="regular" aria-hidden />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
                         {releaseTitleLabel(r.title)}
                       </p>
@@ -351,41 +405,117 @@ function Kpi({
   label,
   value,
   href,
-  alert,
   delay = 0,
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: number;
   href: string;
-  alert?: boolean;
   delay?: number;
 }) {
   return (
     <Link
       href={href}
       style={{ animationDelay: `${delay}ms` }}
-      className={cn(
-        "group flex items-start justify-between gap-3 border border-border bg-card p-5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/40 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500",
-        alert && "border-amber-400/60"
-      )}
+      className="group flex items-start justify-between gap-3 border border-border bg-card p-5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/40 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500"
     >
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight">
+          <AnimatedNumber value={value} />
+        </p>
       </div>
-      <span
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center border transition-colors",
-          alert
-            ? "border-amber-400/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-            : "border-border bg-muted text-muted-foreground group-hover:text-primary"
-        )}
-      >
+      <span className="flex size-8 shrink-0 items-center justify-center border border-border bg-muted text-muted-foreground transition-colors group-hover:text-primary">
         {icon}
       </span>
+    </Link>
+  );
+}
+
+/**
+ * The dashboard's visual anchor — deliberately larger than the other
+ * metric blocks (spans 2 cols / 2 rows at xl:) rather than one more
+ * uniform box, per the "different block sizes and visual hierarchy"
+ * design goal. The "+N this month" figure reuses the trend chart's
+ * already-computed current-month "created" bucket — no new query.
+ */
+function TotalReleasesBlock({
+  total,
+  createdThisMonth,
+  delay = 0,
+}: {
+  total: number;
+  createdThisMonth: number;
+  delay?: number;
+}) {
+  return (
+    <Link
+      href="/dashboard/releases"
+      style={{ animationDelay: `${delay}ms` }}
+      className="group flex flex-col justify-between gap-6 border border-border bg-card p-6 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/40 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500 sm:col-span-2 xl:col-span-2 xl:row-span-2"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Total Releases
+        </p>
+        <span className="flex size-9 shrink-0 items-center justify-center border border-border bg-muted text-muted-foreground transition-colors group-hover:text-primary">
+          <Disc size={18} weight="bold" aria-hidden />
+        </span>
+      </div>
+      <div>
+        <p className="text-5xl font-semibold tracking-tight">
+          <AnimatedNumber value={total} />
+        </p>
+        {createdThisMonth > 0 ? (
+          <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <TrendUp size={14} weight="bold" aria-hidden />
+            {createdThisMonth} this month
+          </p>
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * Restrained attention treatment per the brief's explicit ask — a small
+ * pulsing dot, not a full amber border/background box.
+ */
+function ActionRequiredBlock({
+  count,
+  delay = 0,
+}: {
+  count: number;
+  delay?: number;
+}) {
+  const needsAttention = count > 0;
+  return (
+    <Link
+      href="/dashboard/releases?status=changes_required"
+      style={{ animationDelay: `${delay}ms` }}
+      className="group flex items-center justify-between gap-3 border border-border bg-card p-5 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/40 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-500 sm:col-span-2 xl:col-span-2"
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center border border-border bg-muted text-muted-foreground transition-colors group-hover:text-primary">
+          <WarningCircle size={18} weight="bold" aria-hidden />
+        </span>
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Action Required
+            {needsAttention ? (
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full motion-safe:animate-ping bg-amber-500 opacity-75" />
+                <span className="relative inline-flex size-1.5 bg-amber-500" />
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-1 text-xl font-semibold tracking-tight">
+            <AnimatedNumber value={count} />
+          </p>
+        </div>
+      </div>
     </Link>
   );
 }
@@ -396,7 +526,7 @@ function MiniStat({
   delay = 0,
 }: {
   label: string;
-  value: string;
+  value: number;
   delay?: number;
 }) {
   return (
@@ -405,7 +535,9 @@ function MiniStat({
       className="border border-border bg-card px-4 py-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 duration-500"
     >
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">
+        <AnimatedNumber value={value} />
+      </p>
     </div>
   );
 }
