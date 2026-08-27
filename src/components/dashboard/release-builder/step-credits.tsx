@@ -123,7 +123,7 @@ function RoleChip({
       title={title ?? undefined}
       onClick={() => onToggle(role)}
       className={cn(
-        "cursor-pointer border px-3 py-1.5 text-xs font-medium",
+        "cursor-pointer border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ease-[var(--ease-rdistro)]",
         on
           ? "border-primary bg-primary text-primary-foreground"
           : "border-border hover:border-primary/50"
@@ -255,7 +255,7 @@ function AddRoleDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="cursor-pointer border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground"
+        className="cursor-pointer border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-150 ease-[var(--ease-rdistro)] hover:border-primary/50 hover:text-foreground"
       >
         + Add role
       </button>
@@ -555,7 +555,7 @@ export function StepCredits({
             {state.contributors.length > 1 ? (
               <button
                 type="button"
-                className="cursor-pointer text-xs font-medium text-destructive"
+                className="cursor-pointer text-xs font-medium text-destructive transition-opacity hover:opacity-70"
                 onClick={() =>
                   setState((prev) => ({
                     ...prev,
@@ -684,7 +684,7 @@ export function StepCredits({
 
             <button
               type="button"
-              className="cursor-pointer text-xs font-medium text-destructive"
+              className="cursor-pointer text-xs font-medium text-destructive transition-opacity hover:opacity-70"
               onClick={() =>
                 setState((prev) => ({
                   ...prev,
@@ -800,7 +800,7 @@ export function StepCredits({
                 />
                 <button
                   type="button"
-                  className="cursor-pointer pb-2 text-xs font-medium text-destructive"
+                  className="cursor-pointer pb-2 text-xs font-medium text-destructive transition-opacity hover:opacity-70"
                   onClick={() =>
                     setState((prev) => ({
                       ...prev,

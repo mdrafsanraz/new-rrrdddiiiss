@@ -23,7 +23,9 @@ import {
   CircleNotch,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 
 type ItemStatus = "waiting" | "processing" | "completed" | "failed";
@@ -90,16 +92,29 @@ function xhrRequest(
 }
 
 function StatusIcon({ status }: { status: ItemStatus }) {
-  if (status === "completed") {
-    return <Check size={14} weight="bold" className="text-emerald-600 dark:text-emerald-400" aria-hidden />;
-  }
-  if (status === "failed") {
-    return <WarningCircle size={14} weight="fill" className="text-destructive" aria-hidden />;
-  }
-  if (status === "processing") {
-    return <CircleNotch size={14} weight="bold" className="animate-spin text-primary" aria-hidden />;
-  }
-  return <span className="size-2.5 rounded-full border border-border" aria-hidden />;
+  return (
+    <span
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center border text-[0]",
+        status === "completed"
+          ? "border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400"
+          : status === "failed"
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : status === "processing"
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-border bg-muted"
+      )}
+      aria-hidden
+    >
+      {status === "completed" ? (
+        <Check size={12} weight="bold" />
+      ) : status === "failed" ? (
+        <WarningCircle size={12} weight="bold" />
+      ) : status === "processing" ? (
+        <CircleNotch size={12} weight="bold" className="animate-spin" />
+      ) : null}
+    </span>
+  );
 }
 
 function StageRow({
@@ -114,29 +129,39 @@ function StageRow({
   pct?: number | null;
 }) {
   return (
-    <div className="flex items-center gap-3 py-1.5">
-      <StatusIcon status={status} />
-      <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            "text-sm",
-            status === "completed"
-              ? "text-muted-foreground"
-              : status === "failed"
-                ? "font-medium text-destructive"
-                : status === "processing"
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground"
-          )}
-        >
-          {label}
-        </p>
-        {detail ? <p className="text-xs text-destructive">{detail}</p> : null}
+    <div className="flex flex-col gap-1 py-1.5">
+      <div className="flex items-center gap-2.5">
+        <StatusIcon status={status} />
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "text-sm",
+              status === "completed"
+                ? "text-muted-foreground"
+                : status === "failed"
+                  ? "font-medium text-destructive"
+                  : status === "processing"
+                    ? "font-medium text-foreground"
+                    : "text-muted-foreground"
+            )}
+          >
+            {label}
+          </p>
+          {detail ? <p className="text-xs text-destructive">{detail}</p> : null}
+        </div>
+        {typeof pct === "number" && status === "processing" ? (
+          <span className="tabular-nums text-xs font-medium text-muted-foreground">
+            {Math.round(pct)}%
+          </span>
+        ) : null}
       </div>
       {typeof pct === "number" && status === "processing" ? (
-        <span className="tabular-nums text-xs font-medium text-muted-foreground">
-          {Math.round(pct)}%
-        </span>
+        <div className="ml-[30px] h-1 overflow-hidden bg-muted">
+          <div
+            className="h-full bg-primary transition-[width] duration-300 ease-linear"
+            style={{ width: `${Math.max(pct, 4)}%` }}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -156,6 +181,7 @@ export function SubmissionProgress({
   onCancel: () => void;
 }) {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
   const [validateStatus, setValidateStatus] = useState<ItemStatus>("waiting");
   const [validateErrors, setValidateErrors] = useState<string[]>([]);
@@ -568,10 +594,20 @@ export function SubmissionProgress({
 
   if (succeeded) {
     return (
-      <div className="space-y-6 border border-border bg-card p-8 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center border border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400">
+      <motion.div
+        className="space-y-6 border border-border bg-card p-8 text-center"
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <motion.div
+          className="mx-auto flex size-12 items-center justify-center border border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400"
+          initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 380, damping: 24 }}
+        >
           <Check size={22} weight="bold" aria-hidden />
-        </div>
+        </motion.div>
         <div>
           <p className="text-lg font-semibold">Release submitted successfully</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -595,31 +631,31 @@ export function SubmissionProgress({
             Back to My Releases
           </Button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="space-y-4 border border-border bg-card p-6" role="status" aria-live="polite">
-      <div>
+    <div className="border border-border bg-card" role="status" aria-live="polite">
+      <div className="border-b border-border p-6">
         <p className="text-base font-semibold">Submitting your release</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
           Please keep this page open while we prepare “{title || "your release"}”.
         </p>
       </div>
 
-      <div className="divide-y divide-border border border-border">
-        <div className="px-4 py-1">
+      <div className="divide-y divide-border">
+        <div className="px-6 py-3">
           <StageRow
             status={validateStatus}
             label="Preparing release"
             detail={validateErrors[0] ?? null}
           />
         </div>
-        <div className="px-4 py-1">
+        <div className="px-6 py-3">
           <StageRow status={releaseStatus} label="Creating release" detail={releaseError} />
         </div>
-        <div className="px-4 py-1">
+        <div className="px-6 py-3">
           <StageRow
             status={artworkStatus}
             label="Uploading artwork"
@@ -627,10 +663,10 @@ export function SubmissionProgress({
             pct={artworkPct}
           />
         </div>
-        <div className="px-4 py-2">
+        <div className="px-6 py-3">
           <StageRow status={trackStageStatus("createStatus")} label="Creating tracks" />
           {tracksState.length > 1 || trackStageStatus("createStatus") !== "waiting" ? (
-            <div className="mt-1 ml-6 space-y-1">
+            <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
               {tracksState.map((t) => (
                 <StageRow
                   key={t.id}
@@ -642,9 +678,9 @@ export function SubmissionProgress({
             </div>
           ) : null}
         </div>
-        <div className="px-4 py-2">
+        <div className="px-6 py-3">
           <StageRow status={trackStageStatus("audioStatus")} label="Uploading audio" />
-          <div className="mt-1 ml-6 space-y-1">
+          <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
             {tracksState.map((t) => (
               <StageRow
                 key={t.id}
@@ -656,9 +692,9 @@ export function SubmissionProgress({
             ))}
           </div>
         </div>
-        <div className="px-4 py-2">
+        <div className="px-6 py-3">
           <StageRow status={trackStageStatus("processStatus")} label="Processing audio" />
-          <div className="mt-1 ml-6 space-y-1">
+          <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
             {tracksState.map((t) => (
               <StageRow
                 key={t.id}
@@ -669,42 +705,44 @@ export function SubmissionProgress({
             ))}
           </div>
         </div>
-        <div className="px-4 py-1">
-          <StageRow status={trackStageStatus("creditsStatus")} label="Adding credits & rights" />
+        <div className="px-6 py-3">
+          <StageRow status={trackStageStatus("creditsStatus")} label="Credits & rights" />
         </div>
-        <div className="px-4 py-1">
+        <div className="px-6 py-3">
           <StageRow status={finalizeStatus} label="Finalizing" detail={finalizeError} />
         </div>
       </div>
 
       {pendingFile ? (
-        <div className="border border-amber-500/40 bg-amber-500/10 p-4">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-400">
-            {pendingFile.kind === "artwork"
-              ? "We need your artwork again — it was not kept in memory (likely after a page refresh)."
-              : `We need the audio for "${pendingFile.title}" again — it was not kept in memory (likely after a page refresh).`}
-          </p>
-          <input
-            type="file"
-            accept={pendingFile.kind === "artwork" ? "image/jpeg,image/png,image/webp" : "audio/wav,audio/flac,.wav,.flac"}
-            className="mt-2 block text-sm"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              if (!file) return;
-              if (pendingFile.kind === "artwork") {
-                artworkFileRef.current = file;
-              } else {
-                patchTrack(pendingFile.trackId, { audioFile: file });
-              }
-              setPendingFile(null);
-              void runSubmission();
-            }}
-          />
+        <div className="p-6 pt-0">
+          <Callout tone="warning" icon={<WarningCircle size={18} weight="fill" aria-hidden />}>
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              {pendingFile.kind === "artwork"
+                ? "We need your artwork again — it was not kept in memory (likely after a page refresh)."
+                : `We need the audio for "${pendingFile.title}" again — it was not kept in memory (likely after a page refresh).`}
+            </p>
+            <input
+              type="file"
+              accept={pendingFile.kind === "artwork" ? "image/jpeg,image/png,image/webp" : "audio/wav,audio/flac,.wav,.flac"}
+              className="mt-2.5 block text-sm"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                if (!file) return;
+                if (pendingFile.kind === "artwork") {
+                  artworkFileRef.current = file;
+                } else {
+                  patchTrack(pendingFile.trackId, { audioFile: file });
+                }
+                setPendingFile(null);
+                void runSubmission();
+              }}
+            />
+          </Callout>
         </div>
       ) : null}
 
       {anyFailed && !pendingFile ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-6">
           <p className="text-sm text-destructive">
             Something did not go through — already-completed steps will not be redone.
           </p>

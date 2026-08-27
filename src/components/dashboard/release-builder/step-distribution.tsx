@@ -3,8 +3,8 @@
 /**
  * Step 2 — Distribution. Stores come from live GET /distro-outlets (outlet
  * `key` slugs are what's sent as distro_outlet_id) and territories from
- * live GET /territories — nothing hardcoded. Completing this step triggers
- * the FIRST LabelGrid release push (Steps 1+2 combined).
+ * live GET /territories — nothing hardcoded. This step only collects local
+ * data; nothing is pushed to LabelGrid until Step 5's Submit Release.
  */
 
 import { CaretDown } from "@phosphor-icons/react";
@@ -62,12 +62,12 @@ export function StepDistribution({
           <button
             type="button"
             onClick={() => patch({ allStores: !manualStores ? false : true })}
-            className="flex w-full cursor-pointer items-center justify-between text-sm font-medium"
+            className="flex w-full cursor-pointer items-center justify-between text-sm font-medium transition-colors hover:text-primary"
           >
             Select stores manually
             <CaretDown
               size={16}
-              className={cn("transition-transform", manualStores && "rotate-180")}
+              className={cn("transition-transform duration-200 ease-[var(--ease-rdistro)]", manualStores && "rotate-180")}
             />
           </button>
           {manualStores ? (
@@ -81,7 +81,7 @@ export function StepDistribution({
                 return (
                   <label
                     key={o.key}
-                    className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 text-sm"
+                    className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 text-sm transition-colors duration-150 hover:border-primary/40 hover:bg-muted/50"
                   >
                     <input
                       type="checkbox"
@@ -135,13 +135,13 @@ export function StepDistribution({
             onClick={() =>
               patch({ worldwide: !manualTerritories ? false : true })
             }
-            className="flex w-full cursor-pointer items-center justify-between text-sm font-medium"
+            className="flex w-full cursor-pointer items-center justify-between text-sm font-medium transition-colors hover:text-primary"
           >
             Select territories manually
             <CaretDown
               size={16}
               className={cn(
-                "transition-transform",
+                "transition-transform duration-200 ease-[var(--ease-rdistro)]",
                 manualTerritories && "rotate-180"
               )}
             />
@@ -157,7 +157,7 @@ export function StepDistribution({
                 return (
                   <label
                     key={t.code}
-                    className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 text-sm"
+                    className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 text-sm transition-colors duration-150 hover:border-primary/40 hover:bg-muted/50"
                   >
                     <input
                       type="checkbox"

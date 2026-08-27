@@ -200,10 +200,25 @@ export function StepTracks({
   return (
     <Panel className="space-y-4">
       <div className="space-y-2">
-        {state.tracks.map((t, i) => (
-          <div key={t.clientId} className="border border-border">
+        {state.tracks.map((t, i) => {
+          const isEditing = editingTrackId === t.clientId;
+          return (
+          <div
+            key={t.clientId}
+            className={cn(
+              "border transition-colors duration-200 ease-[var(--ease-rdistro)]",
+              isEditing ? "border-primary/40" : "border-border"
+            )}
+          >
             <div className="flex items-center gap-3 px-4 py-3">
-              <span className="flex size-8 shrink-0 items-center justify-center border border-border bg-muted text-xs font-semibold">
+              <span
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center border text-xs font-semibold transition-colors",
+                  isEditing
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-muted"
+                )}
+              >
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
@@ -478,7 +493,8 @@ export function StepTracks({
               </div>
             ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {state.contentType !== "Single" ? (

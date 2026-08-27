@@ -25,6 +25,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { WIZARD_STEPS } from "@/lib/releases/wizard-types";
 
@@ -160,11 +161,7 @@ export function Panel({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={cn("border border-border bg-card p-5 sm:p-6", className)}>
-      {children}
-    </div>
-  );
+  return <Card className={cn("p-5 sm:p-6", className)}>{children}</Card>;
 }
 
 export function ChipGroup({
@@ -187,7 +184,7 @@ export function ChipGroup({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "cursor-pointer border px-3 py-2 text-sm font-medium transition-colors",
+            "cursor-pointer border px-3 py-2 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)]",
             value === o.value
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-background text-foreground hover:border-primary/50"
@@ -219,7 +216,7 @@ export function YesNo({
             type="button"
             onClick={() => onChange(v)}
             className={cn(
-              "cursor-pointer border px-4 py-2 text-sm font-medium transition-colors",
+              "cursor-pointer border px-4 py-2 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)]",
               value === v
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-background hover:border-primary/50"
@@ -330,7 +327,7 @@ export function MediaDropzone({
         }}
         onDrop={onDrop}
         className={cn(
-          "relative overflow-hidden border border-dashed transition-colors duration-200",
+          "relative overflow-hidden border border-dashed transition-colors duration-200 ease-[var(--ease-rdistro)]",
           dragging
             ? "border-primary bg-primary/5"
             : "border-border bg-muted/40 hover:border-primary/50 hover:bg-muted/70",
@@ -493,9 +490,9 @@ export function StepRail({
             <NumberFlow value={Math.round(progress)} suffix="%" />
           </span>
         </div>
-        <div className="mt-4 h-1 overflow-hidden rounded-full bg-muted">
+        <div className="mt-4 h-1 overflow-hidden bg-muted">
           <motion.div
-            className="h-full rounded-full bg-primary"
+            className="h-full bg-primary"
             initial={false}
             animate={{ width: `${progress}%` }}
             transition={spring}
