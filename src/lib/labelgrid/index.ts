@@ -160,6 +160,31 @@ export function listGenres() {
   return labelgridFetch<GenreData[] | { data: GenreData[] }>("/genres");
 }
 
+/**
+ * Raw contributor-role catalog row. The documented schema only guarantees
+ * display_value/position/description/category, but real responses from
+ * Laravel-style catalogs like this commonly carry an additional identifier
+ * field the strict OpenAPI export omits — read defensively for one instead
+ * of assuming display_value doubles as the API key.
+ */
+export type ContributorRoleRow = {
+  display_value: string;
+  category?: string | null;
+  description?: string | null;
+  position?: number;
+  key?: string;
+  id?: string | number;
+  value?: string;
+  code?: string;
+};
+
+/** GET /contributor-roles — bare array, same shape as /genres. */
+export function listContributorRoles() {
+  return labelgridFetch<
+    ContributorRoleRow[] | { data: ContributorRoleRow[] }
+  >("/contributor-roles");
+}
+
 export function createWriter(body: {
   first_name: string;
   last_name: string;

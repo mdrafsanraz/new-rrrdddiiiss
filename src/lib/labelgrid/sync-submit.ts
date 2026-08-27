@@ -9,6 +9,8 @@ import {
   createArtist,
   createRelease,
   createTrack,
+  listContributorRoles,
+  listDistroOutlets,
   listGenres,
   listLabels,
   listTerritories,
@@ -19,6 +21,7 @@ import {
   uploadTrackLicense,
   uploadTrackStereoAudio,
   validateRelease,
+  type ContributorRoleRow,
 } from "@/lib/labelgrid";
 import {
   describeLabelGridMediaGaps,
@@ -194,6 +197,79 @@ async function requireGenreId(genreName: string | null): Promise<number> {
   );
 }
 
+let contributorRolesCache: ContributorRoleRow[] | null = null;
+
+/** Normalize LabelGrid /contributor-roles response — bare array like /genres. */
+function unwrapContributorRoleRows(raw: unknown): ContributorRoleRow[] {
+  if (Array.isArray(raw)) return raw as ContributorRoleRow[];
+  if (raw && typeof raw === "object") {
+    const obj = raw as { data?: unknown };
+    if (Array.isArray(obj.data)) return obj.data as ContributorRoleRow[];
+  }
+  return [];
+}
+
+async function loadContributorRoles(): Promise<ContributorRoleRow[]> {
+  if (contributorRolesCache && contributorRolesCache.length > 0) {
+    return contributorRolesCache;
+  }
+  const raw = await listContributorRoles();
+  contributorRolesCache = unwrapContributorRoleRows(raw).filter(
+    (r) => r.display_value
+  );
+  return contributorRolesCache;
+}
+
+function roleIdentifier(row: ContributorRoleRow): string {
+  return String(row.key ?? row.id ?? row.value ?? row.code ?? row.display_value);
+}
+
+/**
+ * A UI role label only reaches here as one of the exact display_value
+ * strings the Credits step fetched live — resolve it to whatever LabelGrid
+ * actually uses as the roles.* key for that entry. Never invent a role
+ * (LabelGrid 422s: "The selected contributor role is invalid" for an
+ * unrecognized key).
+ */
+async function resolveContributorRoleKey(
+  label: string
+): Promise<string | null> {
+  const roles = await loadContributorRoles();
+  const match = roles.find(
+    (r) => r.display_value.trim().toLowerCase() === label.trim().toLowerCase()
+  );
+  return match ? roleIdentifier(match) : null;
+}
+
+/**
+ * Fallback contributor (used when a track has no explicit credits entered)
+ * must satisfy LabelGrid's "at least one contributor in Performer /
+ * Composition & Lyrics / Production & Engineering" rule. Picks one real
+ * role per available required category so the single fallback writer
+ * qualifies regardless of which category LabelGrid actually checks.
+ */
+async function requiredCategoryRoleKeys(): Promise<string[]> {
+  const roles = await loadContributorRoles();
+  const requiredCategories = [
+    "performer",
+    "composition & lyrics",
+    "production & engineering",
+  ];
+  const keys: string[] = [];
+  for (const category of requiredCategories) {
+    const found = roles.find(
+      (r) => (r.category ?? "").trim().toLowerCase() === category
+    );
+    if (found) keys.push(roleIdentifier(found));
+  }
+  // Categories may not match exactly (naming can drift) — fall back to the
+  // first available role rather than sending an empty contributor.
+  if (keys.length === 0 && roles.length > 0) {
+    keys.push(roleIdentifier(roles[0]));
+  }
+  return keys;
+}
+
 function unwrapId(res: unknown): number {
   return unwrapLabelGridId(res);
 }
@@ -234,6 +310,23 @@ async function loadTerritoryCodes(): Promise<string[]> {
   return territoriesCache;
 }
 
+let distroOutletKeysCache: string[] | null = null;
+
+/** All distro outlet key slugs from GET /distro-outlets (cached). */
+async function loadDistroOutletKeys(): Promise<string[]> {
+  if (distroOutletKeysCache && distroOutletKeysCache.length > 0) {
+    return distroOutletKeysCache;
+  }
+  const raw = await listDistroOutlets();
+  const list = Array.isArray(raw)
+    ? raw
+    : ((raw as { data?: unknown[] })?.data ?? []);
+  distroOutletKeysCache = (list as Array<{ key?: string }>)
+    .map((o) => o.key ?? "")
+    .filter(Boolean);
+  return distroOutletKeysCache;
+}
+
 /**
  * Store + territory selections → LabelGrid fields.
  * - dsp_configs is sent explicitly on every create/update (not just the
@@ -260,16 +353,26 @@ async function buildDistributionFields(
   // distro_outlet_id is the outlet's `key` slug (e.g. "spotify"), fetched
   // live from GET /distro-outlets — never a hardcoded numeric id.
   const outletKeys = stores.outletKeys ?? meta.selectedOutletKeys ?? [];
-  fields.dsp_configs =
-    !allStores && outletKeys.length > 0
-      ? [
-          { distro_outlet_id: "all_dsps", enabled: false },
-          ...outletKeys.map((key) => ({
-            distro_outlet_id: key,
-            enabled: true,
-          })),
-        ]
-      : [{ distro_outlet_id: "all_dsps", enabled: true }];
+  if (!allStores && outletKeys.length > 0) {
+    // document.json only documents "all_dsps changes all dsp's" — it does
+    // not confirm that a per-outlet enabled:true entry overrides a prior
+    // all_dsps:false in the same array. Rather than rely on that unverified
+    // interaction, enumerate every real outlet explicitly (enabled only
+    // for the selected ones) so there is no wildcard/override ambiguity.
+    const allOutlets = await loadDistroOutletKeys();
+    if (!allOutlets.length) {
+      throw new Error(
+        "Could not load LabelGrid distro outlets to apply the store selection."
+      );
+    }
+    const selected = new Set(outletKeys);
+    fields.dsp_configs = allOutlets.map((key) => ({
+      distro_outlet_id: key,
+      enabled: selected.has(key),
+    }));
+  } else {
+    fields.dsp_configs = [{ distro_outlet_id: "all_dsps", enabled: true }];
+  }
 
   const territories = parseJsonObject<{ worldwide?: boolean; codes?: string[] }>(
     release.territoriesJson
@@ -317,25 +420,23 @@ async function buildTrackContributors(
       (c) => c.firstName?.trim() && c.lastName?.trim() && c.roles?.length
     ) ?? [];
 
-  const fallbackName = splitName(artist.fullName || artist.name);
-  const contributorsInput =
-    contribList.length > 0
-      ? contribList
-      : [
-          {
-            firstName: fallbackName.first,
-            lastName: fallbackName.last,
-            roles: ["Composer", "Lyricist"],
-          },
-        ];
-
   const lgContributors: Array<{
     writer_id: number;
     roles: Record<string, string>;
     ai_contribution: string;
   }> = [];
 
-  for (const c of contributorsInput) {
+  for (const c of contribList) {
+    // Roles arrive as the exact display_value strings the Credits step
+    // fetched live — resolve each to LabelGrid's real key. A label that no
+    // longer matches the catalog (stale client state) is dropped rather
+    // than sent as an invalid key.
+    const resolved = await Promise.all(
+      c.roles.map((label) => resolveContributorRoleKey(label))
+    );
+    const roleKeys = resolved.filter((k): k is string => Boolean(k));
+    if (roleKeys.length === 0) continue;
+
     const writerId = await ensureWriter({
       first_name: c.firstName.trim(),
       last_name: c.lastName.trim(),
@@ -346,10 +447,29 @@ async function buildTrackContributors(
       // LabelGrid validates each roles.* entry as a string (422: "The
       // contributor role field must be a string") — a boolean presence
       // flag is rejected even though it's semantically what this is.
-      roles: Object.fromEntries(c.roles.map((r) => [r, "true"])),
+      roles: Object.fromEntries(roleKeys.map((k) => [k, "true"])),
       ai_contribution: "none",
     });
   }
+
+  // LabelGrid requires at least one contributor in a Performer / Composition
+  // & Lyrics / Production & Engineering role. Cover both the "no credits
+  // entered" case and the case where every entered role failed to resolve.
+  if (lgContributors.length === 0) {
+    const fallbackName = splitName(artist.fullName || artist.name);
+    const writerId = await ensureWriter({
+      first_name: fallbackName.first,
+      last_name: fallbackName.last,
+      email: artist.email ?? undefined,
+    });
+    const roleKeys = await requiredCategoryRoleKeys();
+    lgContributors.push({
+      writer_id: writerId,
+      roles: Object.fromEntries(roleKeys.map((k) => [k, "true"])),
+      ai_contribution: "none",
+    });
+  }
+
   return lgContributors;
 }
 

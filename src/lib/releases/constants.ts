@@ -105,15 +105,8 @@ export const PRIMARY_GENRES = [
   "Other",
 ] as const;
 
-export const CONTRIBUTOR_ROLE_KEYS = [
-  "Composer",
-  "Lyricist",
-  "Producer",
-  "Mixer",
-  "Engineer",
-  "Arranger",
-  "FeaturedArtist",
-] as const;
+// Contributor roles are never hardcoded — the Credits step fetches
+// LabelGrid's live catalog via GET /api/labelgrid/contributor-roles.
 
 export type ContributorDraft = {
   id: string;

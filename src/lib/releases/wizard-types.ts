@@ -105,7 +105,10 @@ export function newContributor(): ContributorDraft {
     id: crypto.randomUUID(),
     firstName: "",
     lastName: "",
-    roles: ["Composer", "Lyricist"],
+    // No default roles — the Credits step offers only LabelGrid's live
+    // contributor-role catalog, so nothing here can pre-select a label
+    // that may not actually exist in it.
+    roles: [],
   };
 }
 

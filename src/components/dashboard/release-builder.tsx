@@ -34,7 +34,6 @@ import {
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
   COMPOSITION_TYPES,
-  CONTRIBUTOR_ROLE_KEYS,
   LOCALES,
   parseJsonObject,
   PRIMARY_GENRES,
@@ -52,6 +51,9 @@ import { cn } from "@/lib/utils";
 type ArtistOption = { id: string; name: string; locked: boolean };
 
 type Outlet = { id: number; name: string; key: string };
+/** display_value is what gets sent as the role label — must be the exact
+ * live LabelGrid catalog string, never a hardcoded guess. */
+type ContributorRole = { display_value: string; category: string | null };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "sync-error";
 
@@ -875,6 +877,13 @@ export function ReleaseBuilder({
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [outletsError, setOutletsError] = useState<string | null>(null);
   const [outletsLoaded, setOutletsLoaded] = useState(false);
+  const [contributorRoles, setContributorRoles] = useState<ContributorRole[]>(
+    []
+  );
+  const [contributorRolesError, setContributorRolesError] = useState<
+    string | null
+  >(null);
+  const [contributorRolesLoaded, setContributorRolesLoaded] = useState(false);
   const [audioAiUsed, setAudioAiUsed] = useState(false);
   const [liveSnapshot, setLiveSnapshot] = useState<LiveReleaseSnapshot | null>(
     null
@@ -935,6 +944,36 @@ export function ReleaseBuilder({
         if (cancelled) return;
         setOutletsError("Network error while loading stores.");
         setOutletsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load contributor roles — never hardcode these, LabelGrid 422s on an
+  // unrecognized roles.* key.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/labelgrid/contributor-roles")
+      .then(async (r) => ({ ok: r.ok, data: await r.json() }))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (ok && Array.isArray(data.roles)) {
+          setContributorRoles(
+            data.roles.map((r: ContributorRole) => ({
+              display_value: r.display_value,
+              category: r.category ?? null,
+            }))
+          );
+        } else {
+          setContributorRolesError(data.error ?? "Could not load roles.");
+        }
+        setContributorRolesLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setContributorRolesError("Network error while loading roles.");
+        setContributorRolesLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -2186,7 +2225,21 @@ export function ReleaseBuilder({
                       <div className="grid gap-2">
                         <p className="text-sm font-medium">Roles</p>
                         <div className="flex flex-wrap gap-2">
-                          {CONTRIBUTOR_ROLE_KEYS.map((role) => {
+                          {!contributorRolesLoaded ? (
+                            <p className="text-sm text-muted-foreground">
+                              Loading roles…
+                            </p>
+                          ) : contributorRolesError ? (
+                            <p className="text-sm text-destructive">
+                              {contributorRolesError}
+                            </p>
+                          ) : contributorRoles.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              No roles available right now.
+                            </p>
+                          ) : (
+                          contributorRoles.map((r) => {
+                            const role = r.display_value;
                             const on = c.roles.includes(role);
                             return (
                               <button
@@ -2216,7 +2269,8 @@ export function ReleaseBuilder({
                                 {role}
                               </button>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       </div>
                       {state.contributors.length > 1 ? (
