@@ -457,21 +457,24 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
   writers: TrackSyncContext["writers"];
   publishers: TrackSyncContext["publishers"];
 }> {
-  // Writer-split roles are their OWN vocabulary, distinct from the
-  // contributor-roles catalog: the sandbox 422s contributor-role values
-  // here ("The selected writer role is not valid"), and LabelGrid's UI
-  // offers exactly Music and Lyrics. Same index-keyed values shape.
-  const WRITER_SPLIT_ROLES = new Set(["music", "lyrics"]);
+  // Writer-split roles resolve against the LIVE GET /contributor-roles
+  // catalog, restricted to the "Composition & Lyrics" category — the
+  // sandbox accepted Composer/Songwriter (that category) as writer roles
+  // while rejecting Producer/Artist (other categories) and any raw
+  // non-catalog string. Nothing is hardcoded; a label that doesn't resolve
+  // to a C&L catalog row is dropped rather than guessed.
   const writers: TrackSyncContext["writers"] = [];
   for (const w of rMeta.writerSplits ?? []) {
     if (!w.writerId || !w.roles?.length) continue;
-    const roles: Record<string, string> = {};
-    let i = 0;
-    for (const label of w.roles) {
-      if (WRITER_SPLIT_ROLES.has(label.trim().toLowerCase())) {
-        roles[String(i++)] = label.trim();
-      }
-    }
+    const resolved = await Promise.all(
+      w.roles.map((label) => resolveContributorRole(label))
+    );
+    const rows = resolved.filter(
+      (r): r is ContributorRoleRow =>
+        Boolean(r) &&
+        (r!.category ?? "").trim().toLowerCase() === "composition & lyrics"
+    );
+    const roles = rolesDictFromRows(rows);
     if (Object.keys(roles).length === 0) continue;
     writers.push({
       writer_id: w.writerId,
@@ -633,6 +636,25 @@ async function buildTrackBody(
  * PATCH the existing one with current metadata (composition, credits,
  * explicit, etc.) — never creates a second track for an already-synced row.
  */
+/**
+ * Log the exact sanitized credits structures about to be sent to LabelGrid
+ * (writers, publishers, contributors) so a 422 in the server logs can be
+ * matched against the precise payload shape — no reconstruction needed.
+ */
+function logTrackCreditsPayload(
+  label: string,
+  body: Record<string, unknown>
+): void {
+  console.log(
+    `[labelgrid/track-payload] ${label}`,
+    JSON.stringify({
+      writers: body.writers ?? null,
+      publishers: body.publishers ?? null,
+      contributors: body.contributors ?? null,
+    })
+  );
+}
+
 async function ensureLabelGridTrack(
   track: Track,
   ctx: TrackSyncContext
@@ -641,10 +663,12 @@ async function ensureLabelGridTrack(
     if (track.labelgridId && /^\d+$/.test(track.labelgridId)) {
       const lgTrackId = Number(track.labelgridId);
       const body = await buildTrackBody(track, ctx, { forUpdate: true });
+      logTrackCreditsPayload("PATCH /tracks", body);
       await updateTrack(lgTrackId, body);
       return lgTrackId;
     }
     const body = await buildTrackBody(track, ctx);
+    logTrackCreditsPayload("POST /tracks", body);
     const created = await createTrack(body);
     const lgTrackId = unwrapId(created);
     await prisma.track.update({

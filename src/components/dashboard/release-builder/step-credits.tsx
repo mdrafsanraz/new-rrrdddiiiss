@@ -57,11 +57,22 @@ export function pickContributorRoles(
 }
 
 /**
- * Publishing-split (track `writers`) roles are their OWN vocabulary — the
- * sandbox rejects contributor-role values here ("The selected writer role
- * is not valid"), and LabelGrid's UI offers exactly Music and Lyrics.
+ * Publishing-split (track `writers`) roles come from the SAME live
+ * GET /contributor-roles catalog, restricted to the "Composition & Lyrics"
+ * category. Evidence from the sandbox's own 422s: Composer and Songwriter
+ * (C&L category) passed writer-role validation while Producer (Production
+ * & Engineering) and Artist (Performer) were rejected, and raw non-catalog
+ * strings ("Music"/"Lyrics") were rejected outright. Nothing hardcoded —
+ * if the category filter matches nothing, the full catalog is offered.
  */
-const WRITER_SPLIT_ROLES = ["Music", "Lyrics"] as const;
+export function pickWriterSplitRoles(
+  catalog: CatalogState<ContributorRole>
+): CatalogState<ContributorRole> {
+  const composition = catalog.items.filter(
+    (r) => (r.category ?? "").trim().toLowerCase() === "composition & lyrics"
+  );
+  return composition.length > 0 ? { ...catalog, items: composition } : catalog;
+}
 
 function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   const total = splitTotal(rows);
@@ -139,6 +150,7 @@ export function StepCredits({
   contributorRoles: CatalogState<ContributorRole>;
 }) {
   const contributorRolePicks = pickContributorRoles(contributorRoles);
+  const writerSplitRoles = pickWriterSplitRoles(contributorRoles);
 
   return (
     <div className="space-y-5">
@@ -356,27 +368,22 @@ export function StepCredits({
 
             <div className="grid gap-2">
               <p className="text-sm font-medium">Roles</p>
-              <div className="flex flex-wrap gap-2">
-                {WRITER_SPLIT_ROLES.map((role) => (
-                  <RoleChip
-                    key={role}
-                    role={role}
-                    on={w.roles.includes(role)}
-                    onToggle={() =>
-                      setState((prev) => ({
-                        ...prev,
-                        writerSplits: prev.writerSplits.map((x) => {
-                          if (x.id !== w.id) return x;
-                          const roles = x.roles.includes(role)
-                            ? x.roles.filter((r) => r !== role)
-                            : [...x.roles, role];
-                          return { ...x, roles };
-                        }),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
+              <RoleChips
+                roles={writerSplitRoles}
+                selected={w.roles}
+                onToggle={(role) =>
+                  setState((prev) => ({
+                    ...prev,
+                    writerSplits: prev.writerSplits.map((x) => {
+                      if (x.id !== w.id) return x;
+                      const roles = x.roles.includes(role)
+                        ? x.roles.filter((r) => r !== role)
+                        : [...x.roles, role];
+                      return { ...x, roles };
+                    }),
+                  }))
+                }
+              />
             </div>
 
             <button
