@@ -3,10 +3,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import {
-  loadAllTrackAudios,
-  pushMediaToLabelGrid,
-} from "@/lib/labelgrid/sync-submit";
+import { syncReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { getPlanLimits } from "@/lib/plans";
 import {
@@ -14,7 +11,6 @@ import {
   canUserSubmitRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
-import { loadStoredUpload } from "@/lib/uploads/store";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -174,90 +170,36 @@ export async function POST(_request: Request, { params }: Params) {
     releaseId: release.labelgridId ? Number(release.labelgridId) : undefined,
   };
 
-  // Sync draft + media to LabelGrid (POST photo + stereo). Never create a second LG release.
+  // Assets already live on LabelGrid (uploaded straight there as the user
+  // worked through the wizard) — this just resyncs metadata (title, dates,
+  // distribution config, any tracks not yet created) before review.
   if (isLabelGridLive()) {
     const forSync = await prisma.release.findUnique({
       where: { id },
       include: { artist: true, tracks: { orderBy: { trackNumber: "asc" } } },
     });
     if (forSync) {
-      const artwork = await loadStoredUpload(forSync.artworkUrl);
-      const audios = await loadAllTrackAudios(forSync.tracks);
-
-      if (forSync.labelgridId) {
-        // Already on LG — refresh media only when files are still available.
-        if (artwork || audios.length > 0) {
-          const result = await pushMediaToLabelGrid({
-            release: forSync,
-            artwork,
-            audios,
-          });
-          if (result.ok) {
-            labelgrid = {
-              draftSynced: true,
-              releaseId: result.releaseId,
-            };
-            await prisma.release.update({
-              where: { id },
-              data: {
-                labelgridReviewStatus: forSync.labelgridReviewStatus ?? "draft",
-                syncError: null,
-              },
-            });
-          } else {
-            labelgrid = {
-              draftSynced: true,
-              releaseId: Number(forSync.labelgridId),
-              error: result.error,
-            };
-          }
-        } else {
-          // Draft exists on LG; local files may be gone — approve can still distribute.
-          labelgrid = {
-            draftSynced: true,
-            releaseId: Number(forSync.labelgridId),
-          };
-          await prisma.release.update({
-            where: { id },
-            data: {
-              labelgridReviewStatus: forSync.labelgridReviewStatus ?? "draft",
-              syncError: null,
-            },
-          });
-        }
-      } else if (artwork && audios.length === forSync.tracks.length) {
-        const result = await pushMediaToLabelGrid({
-          release: forSync,
-          artwork,
-          audios,
-        });
-        if (result.ok) {
-          labelgrid = { draftSynced: true, releaseId: result.releaseId };
-          await prisma.release.update({
-            where: { id },
-            data: { labelgridReviewStatus: "draft", syncError: null },
-          });
-        } else {
-          labelgrid = { draftSynced: false, error: result.error };
-          await prisma.release.update({
-            where: { id },
-            data: {
-              syncError: `LabelGrid draft sync deferred: ${result.error}`.slice(
-                0,
-                2000
-              ),
-            },
-          });
-        }
-      } else {
-        const note =
-          "LabelGrid draft not created yet — artwork/audio missing on server. " +
-          "Re-upload media (uploads to LabelGrid API), then staff can approve.";
-        labelgrid = { draftSynced: false, error: note };
+      const result = await syncReleaseToLabelGrid({
+        release: forSync,
+        artwork: null,
+        audios: [],
+      });
+      if (result.ok) {
+        labelgrid = { draftSynced: true, releaseId: result.releaseId };
         await prisma.release.update({
           where: { id },
-          data: { syncError: note.slice(0, 2000) },
+          data: {
+            labelgridReviewStatus: forSync.labelgridReviewStatus ?? "draft",
+          },
         });
+      } else {
+        labelgrid = {
+          draftSynced: Boolean(forSync.labelgridId),
+          releaseId: forSync.labelgridId
+            ? Number(forSync.labelgridId)
+            : undefined,
+          error: result.error,
+        };
       }
     }
   }

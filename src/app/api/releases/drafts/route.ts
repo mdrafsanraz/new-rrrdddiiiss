@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { syncReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import {
   ARTWORK_AI_USAGE,
@@ -10,7 +12,7 @@ import {
   makeCatalogCandidate,
   type ReleaseMetadata,
 } from "@/lib/releases/constants";
-import { saveArtwork } from "@/lib/uploads/store";
+import { validateArtwork } from "@/lib/uploads/store";
 
 const schema = z.object({
   artistId: z.string().min(1),
@@ -72,11 +74,10 @@ export async function POST(request: Request) {
     }
 
     const artworkFile = form.get("artwork");
-    let artworkUrl: string | null = null;
-    if (artworkFile instanceof File && artworkFile.size > 0) {
-      const stored = await saveArtwork(user.id, artworkFile);
-      artworkUrl = stored.publicUrl;
-    }
+    const artwork =
+      artworkFile instanceof File && artworkFile.size > 0
+        ? await validateArtwork(artworkFile)
+        : null;
 
     const catalogNumber = await allocateCatalogNumber();
     const title = fields.title?.trim() || "Untitled release";
@@ -117,7 +118,6 @@ export async function POST(request: Request) {
         releaseDate: fields.releaseDate
           ? new Date(`${fields.releaseDate}T00:00:00.000Z`)
           : null,
-        artworkUrl,
         metadataJson: JSON.stringify(meta),
         status: "draft",
         storesJson: JSON.stringify({
@@ -139,7 +139,32 @@ export async function POST(request: Request) {
       actorUserId: user.id,
     });
 
-    return NextResponse.json({ release }, { status: 201 });
+    // Create the LabelGrid release right away (section 6: don't wait for
+    // the whole form) so cover art / audio have a release to attach to as
+    // soon as the user provides them. Artwork uploads straight to LabelGrid
+    // now — never staged on our own disk.
+    let labelgrid: { synced: boolean; releaseId?: number; error?: string } = {
+      synced: false,
+    };
+    if (isLabelGridLive()) {
+      const result = await syncReleaseToLabelGrid({
+        release,
+        artwork,
+        audios: [],
+      });
+      labelgrid = result.ok
+        ? { synced: true, releaseId: result.releaseId }
+        : { synced: false, error: result.error };
+    }
+
+    const fresh = labelgrid.synced
+      ? await prisma.release.findUnique({
+          where: { id: release.id },
+          include: { artist: true, tracks: true },
+        })
+      : release;
+
+    return NextResponse.json({ release: fresh, labelgrid }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

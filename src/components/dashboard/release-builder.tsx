@@ -27,6 +27,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import NumberFlow from "@number-flow/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import {
@@ -52,7 +53,7 @@ type ArtistOption = { id: string; name: string; locked: boolean };
 
 type Outlet = { id: number; name: string; key: string };
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
+type SaveStatus = "idle" | "saving" | "saved" | "error" | "sync-error";
 
 const currentYear = new Date().getFullYear();
 
@@ -95,6 +96,22 @@ function formatDuration(sec: number | null) {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+const REQUIRED_ARTWORK_SIZE = 3000;
+
+/** Read a File's pixel dimensions in the browser (no upload needed). */
+async function readImageFileDimensions(
+  file: File
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const dims = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return dims;
+  } catch {
+    return null;
+  }
 }
 
 function initialState(
@@ -440,7 +457,12 @@ function StepRail({
   step: number;
   onJump: (i: number) => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const progress = ((step + 1) / WIZARD_STEPS.length) * 100;
+  const spring = reduceMotion
+    ? { duration: 0 }
+    : { type: "spring" as const, stiffness: 380, damping: 32 };
+
   return (
     <aside className="lg:sticky lg:top-6 lg:self-start">
       <div className="border border-border bg-card p-5">
@@ -453,48 +475,76 @@ function StepRail({
               {WIZARD_STEPS[step].label}
             </p>
           </div>
-          <p className="font-mono text-xs tabular-nums text-muted-foreground">
-            {Math.round(progress)}%
-          </p>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            <NumberFlow value={Math.round(progress)} suffix="%" />
+          </span>
         </div>
-        <div className="mt-4 h-1 bg-muted">
-          <div
-            className="h-full bg-primary transition-[width] duration-300"
-            style={{ width: `${progress}%` }}
+        <div className="mt-4 h-1 overflow-hidden rounded-full bg-muted">
+          <motion.div
+            className="h-full rounded-full bg-primary"
+            initial={false}
+            animate={{ width: `${progress}%` }}
+            transition={spring}
           />
         </div>
-        <ol className="mt-5 space-y-1">
-          {WIZARD_STEPS.map((s, i) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                disabled={i > step}
-                onClick={() => onJump(i)}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-3 px-2 py-2 text-left text-sm transition-colors",
-                  i === step
-                    ? "bg-primary/10 font-semibold text-foreground"
-                    : i < step
-                      ? "text-foreground hover:bg-muted"
-                      : "cursor-not-allowed text-muted-foreground"
-                )}
-              >
-                <span
+        <ol className="mt-5 space-y-0.5">
+          {WIZARD_STEPS.map((s, i) => {
+            const isDone = i < step;
+            const isCurrent = i === step;
+            return (
+              <li key={s.id} className="relative">
+                {isCurrent ? (
+                  <motion.span
+                    layoutId="step-rail-active"
+                    transition={spring}
+                    className="absolute inset-0 rounded-md bg-primary/10"
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  disabled={i > step}
+                  onClick={() => onJump(i)}
+                  aria-current={isCurrent ? "step" : undefined}
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center border text-xs font-medium",
-                    i < step
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : i === step
-                        ? "border-primary text-primary"
-                        : "border-border text-muted-foreground"
+                    "relative flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors duration-150",
+                    isCurrent
+                      ? "font-semibold text-foreground"
+                      : isDone
+                        ? "text-foreground hover:bg-muted"
+                        : "cursor-not-allowed text-muted-foreground"
                   )}
                 >
-                  {i < step ? <Check size={12} weight="bold" /> : i + 1}
-                </span>
-                {s.label}
-              </button>
-            </li>
-          ))}
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium transition-colors duration-150",
+                      isDone
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : isCurrent
+                          ? "border-primary text-primary"
+                          : "border-border text-muted-foreground"
+                    )}
+                  >
+                    <AnimatePresence mode="wait" initial={false}>
+                      {isDone ? (
+                        <motion.span
+                          key="check"
+                          initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={spring}
+                          className="flex"
+                        >
+                          <Check size={12} weight="bold" />
+                        </motion.span>
+                      ) : (
+                        <span key="num">{i + 1}</span>
+                      )}
+                    </AnimatePresence>
+                  </span>
+                  {s.label}
+                </button>
+              </li>
+            );
+          })}
         </ol>
       </div>
     </aside>
@@ -756,7 +806,9 @@ export function ReleaseBuilder({
   );
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [continuing, setContinuing] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [storesManual, setStoresManual] = useState(false);
   const [territoriesOpen, setTerritoriesOpen] = useState(false);
@@ -863,13 +915,20 @@ export function ReleaseBuilder({
           return null;
         }
         const id = data.release.id as string;
+        const artworkLanded = Boolean(data.release.artworkUrl);
         setState((prev) => ({
           ...prev,
           releaseId: id,
           artworkUrl: data.release.artworkUrl ?? prev.artworkUrl,
-          artworkFile: null,
+          artworkFile:
+            current.artworkFile && !artworkLanded ? prev.artworkFile : null,
         }));
-        setSaveStatus("saved");
+        if (current.artworkFile && !artworkLanded && data.labelgrid?.error) {
+          setSaveStatus("sync-error");
+          setSyncErrorMessage(data.labelgrid.error);
+        } else {
+          setSaveStatus("saved");
+        }
         return id;
       } catch {
         setSaveStatus("error");
@@ -896,6 +955,14 @@ export function ReleaseBuilder({
     }
 
     setSaveStatus("saving");
+    // LabelGrid is the only store for artwork/audio — if this save's upload
+    // doesn't visibly land (no url, no processing, no recorded error), the
+    // file must be kept in memory so the next autosave retries it instead
+    // of silently losing the user's selection.
+    const hadArtworkFile = Boolean(current.artworkFile);
+    const pendingAudioClientIds = new Set(
+      current.tracks.filter((t) => t.audioFile).map((t) => t.clientId)
+    );
     try {
       const fd = new FormData();
       fd.set("payload", JSON.stringify(buildPayload(current)));
@@ -916,6 +983,8 @@ export function ReleaseBuilder({
       }
 
       const release = data.release;
+      const labelgridError: string | undefined = data.labelgrid?.error;
+
       setState((prev) => {
         const byClient = new Map(prev.tracks.map((t) => [t.clientId, t]));
         const nextTracks: WizardTrack[] =
@@ -939,12 +1008,20 @@ export function ReleaseBuilder({
                   const tMeta = parseJsonObject<TrackMetadata>(
                     rt.metadataJson
                   );
+                  const audioLanded =
+                    Boolean(rt.audioUrl) ||
+                    Boolean(tMeta.audioProcessing) ||
+                    Boolean(tMeta.audioProcessingError);
+                  const wasPending = pendingAudioClientIds.has(
+                    existing.clientId
+                  );
                   return {
                     ...existing,
                     id: rt.id,
                     title: existing.title || rt.title,
                     audioUrl: rt.audioUrl ?? existing.audioUrl,
-                    audioFile: null,
+                    audioFile:
+                      wasPending && !audioLanded ? existing.audioFile : null,
                     audioProcessing: tMeta.audioProcessing ?? false,
                     audioProcessingError: tMeta.audioProcessingError ?? null,
                     licenseFile: null,
@@ -958,15 +1035,24 @@ export function ReleaseBuilder({
                 licenseFile: t.licenseFile ? null : t.licenseFile,
               }));
 
+        const artworkLanded = Boolean(release.artworkUrl);
         return {
           ...prev,
           releaseId: release.id,
           artworkUrl: release.artworkUrl ?? prev.artworkUrl,
-          artworkFile: null,
+          artworkFile:
+            hadArtworkFile && !artworkLanded ? prev.artworkFile : null,
           tracks: nextTracks,
         };
       });
-      setSaveStatus("saved");
+
+      if (labelgridError) {
+        setSaveStatus("sync-error");
+        setSyncErrorMessage(labelgridError);
+      } else {
+        setSaveStatus("saved");
+        setSyncErrorMessage(null);
+      }
       return true;
     } catch {
       setSaveStatus("error");
@@ -1067,6 +1153,7 @@ export function ReleaseBuilder({
   }, [state.releaseId, processingKey]);
 
   async function ensureDraftThenContinue() {
+    if (continuing) return;
     setError("");
     const msg = validateStep(state, state.step);
     if (msg) {
@@ -1074,27 +1161,32 @@ export function ReleaseBuilder({
       return;
     }
 
-    if (state.step === 0 && !state.releaseId) {
-      const id = await createDraft(stateRef.current);
-      if (!id) return;
-    } else if (state.releaseId) {
-      await saveDraft(stateRef.current);
-    }
-
-    setState((prev) => {
-      const nextStep = Math.min(prev.step + 1, WIZARD_STEPS.length - 1);
-      if (prev.contentType === "Single") {
-        const t0 = prev.tracks[0] ?? newTrack();
-        return {
-          ...prev,
-          step: nextStep,
-          tracks: [{ ...t0, title: t0.title || prev.title }],
-        };
+    setContinuing(true);
+    try {
+      if (state.step === 0 && !state.releaseId) {
+        const id = await createDraft(stateRef.current);
+        if (!id) return;
+      } else if (state.releaseId) {
+        await saveDraft(stateRef.current);
       }
-      return { ...prev, step: nextStep };
-    });
-    if (state.step === 0) {
-      setEditingTrackId((prev) => prev ?? state.tracks[0]?.clientId ?? null);
+
+      setState((prev) => {
+        const nextStep = Math.min(prev.step + 1, WIZARD_STEPS.length - 1);
+        if (prev.contentType === "Single") {
+          const t0 = prev.tracks[0] ?? newTrack();
+          return {
+            ...prev,
+            step: nextStep,
+            tracks: [{ ...t0, title: t0.title || prev.title }],
+          };
+        }
+        return { ...prev, step: nextStep };
+      });
+      if (state.step === 0) {
+        setEditingTrackId((prev) => prev ?? state.tracks[0]?.clientId ?? null);
+      }
+    } finally {
+      setContinuing(false);
     }
   }
 
@@ -1111,6 +1203,7 @@ export function ReleaseBuilder({
   }
 
   async function submitForReview() {
+    if (submitting) return;
     setError("");
     const msg = validateStep(state, 4);
     if (msg) {
@@ -1262,6 +1355,14 @@ export function ReleaseBuilder({
                 <Check size={12} weight="bold" aria-hidden />
                 Saved
               </span>
+            ) : saveStatus === "sync-error" ? (
+              <span
+                className="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
+                title={syncErrorMessage ?? undefined}
+              >
+                <WarningCircle size={12} weight="fill" aria-hidden />
+                Saved — distributor sync pending
+              </span>
             ) : saveStatus === "error" ? (
               <span className="text-destructive">Save failed</span>
             ) : null}
@@ -1323,16 +1424,36 @@ export function ReleaseBuilder({
                     previewUrl={
                       state.artworkPreview ?? state.artworkUrl
                     }
-                    onFile={(file) =>
+                    onFile={async (file) => {
+                      if (!file) {
+                        patch({
+                          artworkFile: null,
+                          artworkPreview: null,
+                          artworkUrl: null,
+                        });
+                        return;
+                      }
+                      setError("");
+                      const dims = await readImageFileDimensions(file);
+                      if (
+                        !dims ||
+                        dims.width !== REQUIRED_ARTWORK_SIZE ||
+                        dims.height !== REQUIRED_ARTWORK_SIZE
+                      ) {
+                        setError(
+                          dims
+                            ? `Cover artwork must be exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px — this file is ${dims.width}×${dims.height}px.`
+                            : "Could not read this image. Try a different file."
+                        );
+                        return;
+                      }
                       patch({
                         artworkFile: file,
-                        artworkPreview: file
-                          ? URL.createObjectURL(file)
-                          : null,
-                        artworkUrl: file ? state.artworkUrl : null,
-                      })
-                    }
-                    helper="Square cover recommended (min 1400×1400)."
+                        artworkPreview: URL.createObjectURL(file),
+                        artworkUrl: null,
+                      });
+                    }}
+                    helper={`Exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px required — square JPEG, PNG, or WebP.`}
                   />
                 </Panel>
 
@@ -2301,7 +2422,7 @@ export function ReleaseBuilder({
               type="button"
               variant="outline"
               className="h-11 px-4"
-              disabled={state.step === 0 || submitting}
+              disabled={state.step === 0 || submitting || continuing}
               onClick={() => patch({ step: Math.max(0, state.step - 1) })}
             >
               <ArrowLeft size={16} weight="bold" aria-hidden />
@@ -2311,16 +2432,19 @@ export function ReleaseBuilder({
               <Button
                 type="button"
                 className="h-11 px-5"
+                loading={continuing}
                 onClick={() => void ensureDraftThenContinue()}
               >
                 Continue
-                <ArrowRight size={16} weight="bold" aria-hidden />
+                {!continuing ? (
+                  <ArrowRight size={16} weight="bold" aria-hidden />
+                ) : null}
               </Button>
             ) : (
               <Button
                 type="button"
                 className="h-11 px-5"
-                disabled={submitting}
+                loading={submitting}
                 onClick={() => void submitForReview()}
               >
                 {submitting ? "Submitting…" : "Submit for Review"}

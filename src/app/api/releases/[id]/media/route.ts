@@ -4,8 +4,7 @@ import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
-  loadAllTrackAudios,
-  pushMediaToLabelGrid,
+  syncReleaseToLabelGrid,
   type TrackAudioInput,
 } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
@@ -13,19 +12,15 @@ import {
   canUserReplaceMedia,
   isFinalRejection,
 } from "@/lib/releases/status";
-import {
-  loadStoredUpload,
-  saveArtwork,
-  saveAudio,
-  type StoredUpload,
-} from "@/lib/uploads/store";
+import { validateArtwork, validateAudio } from "@/lib/uploads/store";
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * Replace cover artwork and/or track audio, then push to LabelGrid API
- * (POST /releases/{id}/photo + track stereo upload-url).
- * Owner (when canUserReplaceMedia) or staff with releases.moderate.
+ * Replace cover artwork and/or track audio — uploaded straight to LabelGrid
+ * (POST /releases/{id}/photo + track stereo upload-url); never staged on
+ * our own disk. Owner (when canUserReplaceMedia) or staff with
+ * releases.moderate.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -66,7 +61,12 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  const ownerId = release.userId;
+  if (!isLabelGridLive()) {
+    return NextResponse.json(
+      { error: "Distributor is not configured — cannot accept media." },
+      { status: 503 }
+    );
+  }
 
   try {
     const form = await request.formData();
@@ -78,19 +78,15 @@ export async function POST(request: Request, { params }: Params) {
         ? trackIdRaw.trim()
         : null;
 
-    let artworkUrl = release.artworkUrl;
-    let audioUrl: string | null = null;
-    let updatedTrackId: string | null = null;
-    let artworkUpload: StoredUpload | null = null;
-    let audioUpload: StoredUpload | null = null;
     const changed: string[] = [];
 
-    if (artworkFile instanceof File && artworkFile.size > 0) {
-      artworkUpload = await saveArtwork(ownerId, artworkFile);
-      artworkUrl = artworkUpload.publicUrl;
-      changed.push("artwork");
-    }
+    const artwork =
+      artworkFile instanceof File && artworkFile.size > 0
+        ? await validateArtwork(artworkFile)
+        : null;
+    if (artwork) changed.push("artwork");
 
+    const audios: TrackAudioInput[] = [];
     if (audioFile instanceof File && audioFile.size > 0) {
       const track =
         (trackId
@@ -102,9 +98,8 @@ export async function POST(request: Request, { params }: Params) {
           { status: 400 }
         );
       }
-      audioUpload = await saveAudio(ownerId, audioFile);
-      audioUrl = audioUpload.publicUrl;
-      updatedTrackId = track.id;
+      const audio = await validateAudio(audioFile);
+      audios.push({ localTrackId: track.id, upload: audio });
       changed.push(`audio (track ${track.trackNumber})`);
     }
 
@@ -115,88 +110,28 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    await prisma.$transaction(async (tx) => {
-      if (artworkUpload) {
-        await tx.release.update({
-          where: { id },
-          data: { artworkUrl, syncError: null },
-        });
-      }
-      if (updatedTrackId && audioUrl) {
-        await tx.track.update({
-          where: { id: updatedTrackId },
-          data: { audioUrl },
-        });
-        if (!artworkUpload) {
-          await tx.release.update({
-            where: { id },
-            data: { syncError: null },
-          });
-        }
-      }
+    const pushResult = await syncReleaseToLabelGrid({
+      release,
+      artwork,
+      audios,
     });
 
-    let labelgrid: {
-      uploaded: boolean;
-      releaseId?: number;
-      trackId?: number;
-      created?: boolean;
-      error?: string;
-      processingTrackIds?: string[];
-    } = { uploaded: false };
-
-    if (isLabelGridLive()) {
-      const forSync = await prisma.release.findUnique({
-        where: { id },
-        include: {
-          artist: true,
-          tracks: { orderBy: { trackNumber: "asc" } },
-        },
-      });
-
-      if (forSync) {
-        // Existing LG draft: upload only files from this request.
-        // New draft: need artwork + audio for EVERY track (load from disk).
-        let artwork: StoredUpload | null = artworkUpload;
-        let audios: TrackAudioInput[] =
-          audioUpload && updatedTrackId
-            ? [{ localTrackId: updatedTrackId, upload: audioUpload }]
-            : [];
-
-        if (!forSync.labelgridId) {
-          if (!artwork) artwork = await loadStoredUpload(forSync.artworkUrl);
-          const fromDisk = await loadAllTrackAudios(
-            forSync.tracks.filter((t) => t.id !== updatedTrackId)
-          );
-          audios = [...audios, ...fromDisk];
+    const labelgrid = pushResult.ok
+      ? {
+          uploaded: true,
+          releaseId: pushResult.releaseId,
+          trackId: pushResult.trackIds[0],
+          created: pushResult.created,
+          processingTrackIds: pushResult.processingTrackIds,
         }
-
-        const pushResult = await pushMediaToLabelGrid({
-          release: forSync,
-          artwork,
-          audios,
-        });
-
-        if (pushResult.ok) {
-          labelgrid = {
-            uploaded: true,
-            releaseId: pushResult.releaseId,
-            trackId: pushResult.trackIds[0],
-            created: pushResult.created,
-            processingTrackIds: pushResult.processingTrackIds,
-          };
-        } else {
-          labelgrid = { uploaded: false, error: pushResult.error };
-        }
-      }
-    }
+      : { uploaded: false, error: pushResult.error };
 
     await logReleaseActivity({
       releaseId: id,
       type: "track_uploaded",
       title: labelgrid.uploaded
         ? "Media uploaded to LabelGrid"
-        : "Media re-uploaded locally",
+        : "Media upload failed",
       description: labelgrid.error
         ? `${changed.join(", ")} — LabelGrid: ${labelgrid.error}`
         : changed.join(", "),
@@ -209,10 +144,10 @@ export async function POST(request: Request, { params }: Params) {
       include: { tracks: { orderBy: { trackNumber: "asc" } }, artist: true },
     });
 
-    if (labelgrid.error && !labelgrid.uploaded) {
+    if (!pushResult.ok) {
       return NextResponse.json(
         {
-          error: `Saved locally, but LabelGrid upload failed: ${labelgrid.error}`,
+          error: `LabelGrid upload failed: ${labelgrid.error}`,
           release: fresh,
           labelgrid,
           changed,

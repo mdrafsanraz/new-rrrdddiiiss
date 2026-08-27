@@ -221,6 +221,7 @@ export function createTrack(body: Record<string, unknown>) {
   });
 }
 
+/** POST /releases/{id}/photo — 200 returns the stored FileData (has .url). */
 export async function uploadReleasePhoto(
   releaseId: number | string,
   file: Blob,
@@ -228,7 +229,11 @@ export async function uploadReleasePhoto(
 ) {
   const form = new FormData();
   form.append("file", file, filename);
-  return labelgridUpload<unknown>(`/releases/${releaseId}/photo`, form);
+  const raw = await labelgridUpload<FileData | { data: FileData }>(
+    `/releases/${releaseId}/photo`,
+    form
+  );
+  return raw && typeof raw === "object" && "data" in raw ? raw.data : raw;
 }
 
 export function getTrackFileUploadUrl(
@@ -301,7 +306,20 @@ export type StereoUploadResult = {
   /** true while LabelGrid is still processing the audio asynchronously. */
   processing: boolean;
   attemptId: string | null;
+  /** LabelGrid's hosted file URL — null while still processing. */
+  url: string | null;
 };
+
+/** Best-effort fetch of the stored file's URL — never throws. */
+async function fetchStereoUrl(trackId: number | string): Promise<string | null> {
+  try {
+    const raw = await getTrackFile(trackId, "stereo");
+    const file = raw && typeof raw === "object" && "data" in raw ? raw.data : raw;
+    return file?.url ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Full stereo upload flow per document.json:
@@ -344,7 +362,12 @@ export async function uploadTrackStereoAudio(
 
   const stored = await storeTrackFile(trackId, "stereo", { s3_key: key });
   if (!stored.queued || !stored.attempt) {
-    return { key, processing: false, attemptId: null };
+    return {
+      key,
+      processing: false,
+      attemptId: null,
+      url: await fetchStereoUrl(trackId),
+    };
   }
 
   const attemptId = stored.attempt.id;
@@ -356,7 +379,12 @@ export async function uploadTrackStereoAudio(
     await new Promise((r) => setTimeout(r, waitSec * 1000));
     const attempt = await getAudioUploadStatus(trackId, attemptId);
     if (attempt.status === "completed") {
-      return { key, processing: false, attemptId };
+      return {
+        key,
+        processing: false,
+        attemptId,
+        url: await fetchStereoUrl(trackId),
+      };
     }
     if (attempt.status === "failed") {
       const reason =
@@ -367,12 +395,17 @@ export async function uploadTrackStereoAudio(
     }
     if (attempt.status === "superseded") {
       // A newer upload replaced this one; treat as done for this attempt.
-      return { key, processing: false, attemptId };
+      return {
+        key,
+        processing: false,
+        attemptId,
+        url: await fetchStereoUrl(trackId),
+      };
     }
     waitSec = Math.max(1, attempt.poll_after_seconds ?? waitSec);
   }
 
-  return { key, processing: true, attemptId };
+  return { key, processing: true, attemptId, url: null };
 }
 
 /** GET /territories — full distribution territory catalog. */

@@ -20,7 +20,6 @@ import {
   getLabelGridMediaStatus,
   isLabelGridDraftMediaReady,
 } from "@/lib/labelgrid/catalog";
-import { storedUploadExists } from "@/lib/uploads/store";
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 
 type Props = { params: Promise<{ id: string }> };
@@ -108,15 +107,14 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
 
   const canImpersonate = hasPermission(admin.role, "users.impersonate");
 
-  const artworkOnDisk = await storedUploadExists(release.artworkUrl);
-  const trackMedia = await Promise.all(
-    release.tracks.map(async (t) => ({
-      id: t.id,
-      title: t.title,
-      trackNumber: t.trackNumber,
-      hasAudioOnDisk: await storedUploadExists(t.audioUrl),
-    }))
-  );
+  // Artwork/audio live only on LabelGrid now — a set URL means it's there.
+  const artworkOnDisk = Boolean(release.artworkUrl);
+  const trackMedia = release.tracks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    trackNumber: t.trackNumber,
+    hasAudioOnDisk: Boolean(t.audioUrl),
+  }));
   const needsArtwork = !artworkOnDisk;
   const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
 

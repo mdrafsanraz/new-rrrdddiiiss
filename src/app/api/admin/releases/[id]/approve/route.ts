@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
-import {
-  loadAllTrackAudios,
-  submitLabelGridDraftForReview,
-} from "@/lib/labelgrid/sync-submit";
+import { submitLabelGridDraftForReview } from "@/lib/labelgrid/sync-submit";
 import { prisma } from "@/lib/db";
-import {
-  describeMissingUploads,
-  loadStoredUpload,
-  storedUploadExists,
-} from "@/lib/uploads/store";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { writeAuditLog } from "@/lib/admin/audit";
 import {
@@ -81,51 +73,9 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    const artwork = await loadStoredUpload(release.artworkUrl);
-    const audios = await loadAllTrackAudios(release.tracks);
-
-    // No local labelgridId yet — need files for EVERY track to POST release +
-    // upload media via LG API.
-    if (
-      !release.labelgridId &&
-      (!artwork || audios.length < release.tracks.length)
-    ) {
-      const missing = describeMissingUploads({
-        artworkUrl: release.artworkUrl,
-        audioUrl: release.tracks[0]?.audioUrl,
-        artworkOnDisk: await storedUploadExists(release.artworkUrl),
-        audioOnDisk: await storedUploadExists(release.tracks[0]?.audioUrl),
-      });
-      const loaded = new Set(audios.map((a) => a.localTrackId));
-      for (const t of release.tracks) {
-        if (!loaded.has(t.id)) {
-          missing.push(`audio for “${t.title}” is missing on the server`);
-        }
-      }
-      const message =
-        `Cannot create LabelGrid draft: ${missing.join("; ")}. ` +
-        "Send back to draft so the user can re-upload (files go to LabelGrid API), then approve again.";
-
-      await prisma.release.update({
-        where: { id },
-        data: {
-          status: "sync_error",
-          syncError: message.slice(0, 2000),
-        },
-      });
-      await logReleaseActivity({
-        releaseId: id,
-        type: "sync_error",
-        title: "Approve blocked — media missing",
-        description: message.slice(0, 500),
-        actorUserId: gate.admin.id,
-      });
-
-      return NextResponse.json(
-        { error: message, labelgrid: { submittedForReview: false } },
-        { status: 400 }
-      );
-    }
+    // Cover art and audio already live on LabelGrid — uploaded straight
+    // there as the user worked through the wizard. Readiness is verified
+    // inside submitLabelGridDraftForReview via getLabelGridMediaStatus.
 
     const now = new Date();
 
@@ -188,8 +138,8 @@ export async function POST(request: Request, { params }: Params) {
 
     const result = await submitLabelGridDraftForReview({
       release: forSync,
-      artwork,
-      audios,
+      artwork: null,
+      audios: [],
     });
 
     if (!result.ok) {

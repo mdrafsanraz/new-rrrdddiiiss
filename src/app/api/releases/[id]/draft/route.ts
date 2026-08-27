@@ -6,7 +6,7 @@ import { logReleaseActivity } from "@/lib/releases/activity";
 import { canUserEditRelease, isFinalRejection } from "@/lib/releases/status";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
-  pushMediaToLabelGrid,
+  syncReleaseToLabelGrid,
   type TrackAudioInput,
 } from "@/lib/labelgrid/sync-submit";
 import {
@@ -18,10 +18,11 @@ import {
   type TrackMetadata,
 } from "@/lib/releases/constants";
 import {
-  saveArtwork,
-  saveAudio,
   saveGenericUpload,
+  validateArtwork,
+  validateAudio,
   type StoredUpload,
+  type ValidatedFile,
 } from "@/lib/uploads/store";
 
 type Params = { params: Promise<{ id: string }> };
@@ -137,14 +138,10 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const artworkFile = form.get("artwork");
-    let artworkUrl = existing.artworkUrl;
-    let artworkUpload: StoredUpload | null = null;
-    if (artworkFile instanceof File && artworkFile.size > 0) {
-      artworkUpload = await saveArtwork(user.id, artworkFile);
-      artworkUrl = artworkUpload.publicUrl;
-    }
-
-    const audioUploads = new Map<string, StoredUpload>();
+    const artwork: ValidatedFile | null =
+      artworkFile instanceof File && artworkFile.size > 0
+        ? await validateArtwork(artworkFile)
+        : null;
 
     const prevMeta = parseJsonObject<ReleaseMetadata & Record<string, unknown>>(
       existing.metadataJson
@@ -211,7 +208,6 @@ export async function PATCH(request: Request, { params }: Params) {
                 : null,
             }
           : {}),
-        artworkUrl,
         metadataJson: JSON.stringify(nextMeta),
         storesJson: JSON.stringify({
           allStores: nextMeta.allStores ?? true,
@@ -225,6 +221,7 @@ export async function PATCH(request: Request, { params }: Params) {
     });
 
     // Replace tracks when provided
+    const audioInputs: TrackAudioInput[] = [];
     if (fields.tracks) {
       const keepIds: string[] = [];
       let index = 0;
@@ -232,13 +229,10 @@ export async function PATCH(request: Request, { params }: Params) {
         index += 1;
         const audioKey = `audio_${t.clientId ?? t.id ?? index}`;
         const audioFile = form.get(audioKey);
-        let audioUrl: string | null = null;
-        if (audioFile instanceof File && audioFile.size > 0) {
-          const saved = await saveAudio(user.id, audioFile);
-          audioUrl = saved.publicUrl;
-          const trackKey = t.id ?? t.clientId ?? String(index);
-          audioUploads.set(trackKey, saved);
-        }
+        const audio: ValidatedFile | null =
+          audioFile instanceof File && audioFile.size > 0
+            ? await validateAudio(audioFile)
+            : null;
 
         const contributors =
           t.contributors ??
@@ -281,6 +275,7 @@ export async function PATCH(request: Request, { params }: Params) {
           tMeta.licenseSyncedAt = null;
         }
 
+        let trackId: string;
         if (t.id) {
           const owned = existing.tracks.find((x) => x.id === t.id);
           if (!owned) continue;
@@ -290,7 +285,6 @@ export async function PATCH(request: Request, { params }: Params) {
               title: t.title.trim(),
               trackNumber: index,
               isrc: t.isrc?.trim() || null,
-              ...(audioUrl ? { audioUrl } : {}),
               metadataJson: JSON.stringify(tMeta),
             },
           });
@@ -305,6 +299,7 @@ export async function PATCH(request: Request, { params }: Params) {
             });
           }
           keepIds.push(t.id);
+          trackId = t.id;
         } else {
           const created = await prisma.track.create({
             data: {
@@ -313,7 +308,6 @@ export async function PATCH(request: Request, { params }: Params) {
               title: t.title.trim(),
               trackNumber: index,
               isrc: t.isrc?.trim() || null,
-              audioUrl,
               metadataJson: JSON.stringify(tMeta),
               contributors: {
                 create: contributors.map((c) => ({
@@ -324,7 +318,10 @@ export async function PATCH(request: Request, { params }: Params) {
             },
           });
           keepIds.push(created.id);
+          trackId = created.id;
         }
+
+        if (audio) audioInputs.push({ localTrackId: trackId, upload: audio });
       }
 
       await prisma.track.deleteMany({
@@ -368,35 +365,20 @@ export async function PATCH(request: Request, { params }: Params) {
     let labelgrid:
       | { uploaded: boolean; error?: string; processingTrackIds?: string[] }
       | undefined;
-    if (
-      fresh &&
-      isLabelGridLive() &&
-      (artworkUpload || audioUploads.size > 0)
-    ) {
-      // Match each saved upload back to its (possibly newly created) track row.
-      const uploads = [...audioUploads.values()];
-      const audios: TrackAudioInput[] = fresh.tracks.flatMap((track) => {
-        const upload = uploads.find((u) => u.publicUrl === track.audioUrl);
-        return upload ? [{ localTrackId: track.id, upload }] : [];
-      });
-      const pushResult = await pushMediaToLabelGrid({
+    // Only hit LabelGrid when this request actually carries a new file —
+    // metadata-only keystrokes don't need a round trip on every autosave
+    // tick; full metadata syncs happen at submit-for-review/approve time.
+    if (fresh && isLabelGridLive() && (artwork || audioInputs.length > 0)) {
+      const pushResult = await syncReleaseToLabelGrid({
         release: fresh,
-        artwork: artworkUpload,
-        audios,
+        artwork,
+        audios: audioInputs,
       });
       labelgrid = pushResult.ok
         ? { uploaded: true, processingTrackIds: pushResult.processingTrackIds }
         : { uploaded: false, error: pushResult.error };
-      if (!pushResult.ok && !fresh.labelgridId) {
-        await prisma.release.update({
-          where: { id },
-          data: {
-            syncError: `LabelGrid upload: ${pushResult.error}`.slice(0, 2000),
-          },
-        });
-      }
-      // Re-fetch so the response reflects the labelgridId + per-track audio
-      // processing state written during the push above.
+      // Re-fetch so the response reflects the labelgridId + LabelGrid-hosted
+      // artwork/audio URLs + per-track processing state written above.
       fresh = await prisma.release.findUnique({
         where: { id },
         include: { artist: true, tracks: { orderBy: { trackNumber: "asc" } } },

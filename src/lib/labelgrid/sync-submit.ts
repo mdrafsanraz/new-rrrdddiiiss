@@ -26,7 +26,7 @@ import {
   isLabelGridDraftMediaReady,
   unwrapLabelGridId,
 } from "@/lib/labelgrid/catalog";
-import { loadStoredUpload, type StoredUpload } from "@/lib/uploads/store";
+import { loadStoredUpload, type ValidatedFile } from "@/lib/uploads/store";
 import {
   parseJsonObject,
   type ReleaseMetadata,
@@ -35,14 +35,11 @@ import {
 
 type ReleaseWithRels = Release & { artist: Artist | null; tracks: Track[] };
 
-/** One audio file per local track — every track needs one to create the draft. */
-export type TrackAudioInput = { localTrackId: string; upload: StoredUpload };
-
-type SyncInput = {
-  release: ReleaseWithRels;
-  artwork: StoredUpload;
-  audios: TrackAudioInput[];
-};
+/**
+ * Audio for one local track, held only in memory — LabelGrid is the file
+ * store; we never write this to our own disk.
+ */
+export type TrackAudioInput = { localTrackId: string; upload: ValidatedFile };
 
 function splitName(name: string): { first: string; last: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -425,10 +422,10 @@ async function ensureLabelGridTrack(
 }
 
 /**
- * Upload stereo audio for one track and persist the async-processing state
- * (attempt id + processing flag) in the local track metadata.
- */
-/**
+ * Upload stereo audio for one track, persist the resulting LabelGrid file
+ * URL (our only durable record of it — the bytes never touch our disk), and
+ * persist the async-processing state (attempt id + processing flag).
+ *
  * A per-track audio failure (e.g. LabelGrid's async processing rejected the
  * file) must not abort the whole release sync — other tracks still need to
  * upload. Failures are recorded on the track and surfaced in the UI instead.
@@ -436,7 +433,7 @@ async function ensureLabelGridTrack(
 async function uploadAudioForTrack(
   track: Track,
   lgTrackId: number,
-  upload: StoredUpload
+  upload: ValidatedFile
 ): Promise<{ processing: boolean }> {
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
 
@@ -451,7 +448,11 @@ async function uploadAudioForTrack(
     tMeta.audioProcessingError = null;
     await prisma.track.update({
       where: { id: track.id },
-      data: { metadataJson: JSON.stringify(tMeta) },
+      data: {
+        metadataJson: JSON.stringify(tMeta),
+        // LabelGrid's hosted URL is the only record of this file we keep.
+        ...(result.url ? { audioUrl: result.url } : {}),
+      },
     });
     return { processing: result.processing };
   } catch (error) {
@@ -469,6 +470,9 @@ async function uploadAudioForTrack(
 /**
  * Push the track's cover/sample license to LabelGrid once
  * (POST /tracks/{id}/licenses). No-op when absent or already synced.
+ * License documents are still staged on our own storage (LabelGrid's public
+ * API has no equivalent "get me a license upload URL" endpoint), unlike
+ * artwork/audio which go straight to LabelGrid.
  */
 async function syncTrackLicense(track: Track, lgTrackId: number): Promise<void> {
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
@@ -548,11 +552,56 @@ async function buildReleaseBody(
   return body;
 }
 
+/** Create the release on LabelGrid if needed, or update it; persist labelgridId. */
+async function ensureLabelGridReleaseMetadata(
+  release: ReleaseWithRels
+): Promise<{ lgReleaseId: number; lgArtistId: number; locale: string; artisticRole: string }> {
+  if (!release.artist) {
+    throw new Error("Release has no artist to sync.");
+  }
+
+  const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const [labelId, primaryGenreId, lgArtistId] = await Promise.all([
+    resolveLabelId(),
+    requireGenreId(release.primaryGenre),
+    ensureLabelGridArtist(release.artist),
+  ]);
+
+  const locale = rMeta.preferredLocalization || "en";
+  const artisticRole = rMeta.artisticRole || "MainArtist";
+
+  const releaseBody = await buildReleaseBody(release, {
+    labelId,
+    primaryGenreId,
+    lgArtistId,
+    locale,
+    artisticRole,
+  });
+
+  const lgRelease = release.labelgridId
+    ? await updateRelease(Number(release.labelgridId), releaseBody).then(
+        () => ({ data: { id: Number(release.labelgridId) } })
+      )
+    : await createRelease(releaseBody);
+  const lgReleaseId = unwrapId(lgRelease);
+
+  // Persist the mapping immediately so a mid-sync failure never orphans the
+  // LabelGrid draft or creates a duplicate on retry.
+  await prisma.release.update({
+    where: { id: release.id },
+    data: { labelgridId: String(lgReleaseId) },
+  });
+
+  return { lgReleaseId, lgArtistId, locale, artisticRole };
+}
+
 export type SyncOutcome =
   | {
       ok: true;
       releaseId: number;
       trackIds: number[];
+      /** true if this call created the LabelGrid release for the first time. */
+      created: boolean;
       /** true when at least one audio file is still processing on LabelGrid. */
       audioProcessing: boolean;
       /** Local track ids whose audio is still processing on LabelGrid. */
@@ -561,14 +610,19 @@ export type SyncOutcome =
   | { ok: false; error: string };
 
 /**
- * Push release + cover + ALL track audio into LabelGrid as a **draft**.
- * Create Release first, then Create Track per local track, then per-track
- * stereo upload (presigned flow) and license upload. Does not submit for
- * LabelGrid review — admin approval does that later.
+ * Push a release into LabelGrid as a **draft** and sync whatever assets are
+ * provided. Order matches the documented flow — Release, then Track(s),
+ * THEN assets (cover, audio, licenses) — so a cover-art rejection or a
+ * missing audio file never prevents the release and its tracks from
+ * existing on LabelGrid. Safe to call repeatedly (idempotent — only ever
+ * creates what doesn't already exist) as the wizard autosaves. Does not
+ * submit for LabelGrid review — admin approval does that later.
  */
-export async function syncSubmittedReleaseToLabelGrid(
-  input: SyncInput
-): Promise<SyncOutcome> {
+export async function syncReleaseToLabelGrid(input: {
+  release: ReleaseWithRels;
+  artwork?: ValidatedFile | null;
+  audios?: TrackAudioInput[];
+}): Promise<SyncOutcome> {
   if (!isLabelGridLive()) {
     return {
       ok: false,
@@ -576,57 +630,14 @@ export async function syncSubmittedReleaseToLabelGrid(
     };
   }
 
-  const { release, artwork, audios } = input;
-  if (!release.artist) {
-    return { ok: false, error: "Release has no artist to sync." };
-  }
-  if (!release.tracks.length) {
-    return { ok: false, error: "Release has no track to sync." };
-  }
-
-  // Tracks without audio are still created on LabelGrid — audio can follow
-  // in a later autosave. Completeness is enforced at distribute time.
+  const { release, artwork } = input;
+  const audios = input.audios ?? [];
+  const created = !release.labelgridId;
   const audioByTrackId = new Map(audios.map((a) => [a.localTrackId, a.upload]));
 
-  const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-
   try {
-    const [labelId, primaryGenreId, lgArtistId] = await Promise.all([
-      resolveLabelId(),
-      requireGenreId(release.primaryGenre),
-      ensureLabelGridArtist(release.artist),
-    ]);
-
-    const locale = rMeta.preferredLocalization || "en";
-    const artisticRole = rMeta.artisticRole || "MainArtist";
-
-    const releaseBody = await buildReleaseBody(release, {
-      labelId,
-      primaryGenreId,
-      lgArtistId,
-      locale,
-      artisticRole,
-    });
-
-    const lgRelease = release.labelgridId
-      ? await updateRelease(Number(release.labelgridId), releaseBody).then(
-          () => ({ data: { id: Number(release.labelgridId) } })
-        )
-      : await createRelease(releaseBody);
-    const lgReleaseId = unwrapId(lgRelease);
-
-    // Persist the mapping immediately so a mid-sync failure never orphans
-    // the LabelGrid draft or creates a duplicate on retry.
-    await prisma.release.update({
-      where: { id: release.id },
-      data: { labelgridId: String(lgReleaseId) },
-    });
-
-    await uploadReleasePhoto(
-      lgReleaseId,
-      new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
-      artwork.filename
-    );
+    const { lgReleaseId, lgArtistId, locale, artisticRole } =
+      await ensureLabelGridReleaseMetadata(release);
 
     const ctx: TrackSyncContext = {
       lgReleaseId,
@@ -635,19 +646,43 @@ export async function syncSubmittedReleaseToLabelGrid(
       artisticRole,
       releaseExplicit: release.explicit,
       releasePrimaryGenre: release.primaryGenre,
-      artist: release.artist,
+      artist: release.artist!,
     };
 
+    // Every local track must exist on LabelGrid before any asset upload is
+    // attempted, regardless of whether this call carries files for it yet.
     const ordered = [...release.tracks].sort(
       (a, b) => a.trackNumber - b.trackNumber
     );
     const trackIds: number[] = [];
-    const processingTrackIds: string[] = [];
-
     for (const track of ordered) {
-      const lgTrackId = await ensureLabelGridTrack(track, ctx);
-      trackIds.push(lgTrackId);
+      trackIds.push(await ensureLabelGridTrack(track, ctx));
+    }
 
+    let coverArtError: string | null = null;
+    if (artwork) {
+      try {
+        const file = await uploadReleasePhoto(
+          lgReleaseId,
+          new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
+          artwork.filename
+        );
+        await prisma.release.update({
+          where: { id: release.id },
+          data: { artworkUrl: file?.url ?? null },
+        });
+      } catch (error) {
+        // Non-fatal: tracks are already created above. Surface the failure
+        // (e.g. LabelGrid rejecting dimensions) without losing track sync.
+        coverArtError = formatLgError(error);
+        console.error("[labelgrid/sync/cover]", release.id, coverArtError);
+      }
+    }
+
+    const processingTrackIds: string[] = [];
+    for (let i = 0; i < ordered.length; i++) {
+      const track = ordered[i];
+      const lgTrackId = trackIds[i];
       const upload = audioByTrackId.get(track.id);
       if (upload) {
         const { processing } = await uploadAudioForTrack(
@@ -662,13 +697,19 @@ export async function syncSubmittedReleaseToLabelGrid(
 
     await prisma.release.update({
       where: { id: release.id },
-      data: { labelgridId: String(lgReleaseId), syncError: null },
+      data: {
+        syncError: coverArtError
+          ? `Cover art: ${coverArtError}`.slice(0, 2000)
+          : null,
+        ...(created ? { labelgridReviewStatus: "draft" } : {}),
+      },
     });
 
     return {
       ok: true,
       releaseId: lgReleaseId,
       trackIds,
+      created,
       audioProcessing: processingTrackIds.length > 0,
       processingTrackIds,
     };
@@ -684,163 +725,13 @@ export async function syncSubmittedReleaseToLabelGrid(
 }
 
 /**
- * Upload cover and/or track audio to LabelGrid via their API.
- * - No labelgridId yet → creates the draft (requires artwork + audio for
- *   every track).
- * - Existing draft → POST /releases/{id}/photo and/or per-track stereo
- *   upload-url flow for each provided audio.
- */
-export async function pushMediaToLabelGrid(input: {
-  release: ReleaseWithRels;
-  artwork?: StoredUpload | null;
-  audios?: TrackAudioInput[];
-}): Promise<
-  | {
-      ok: true;
-      releaseId: number;
-      trackIds: number[];
-      created: boolean;
-      audioProcessing: boolean;
-      processingTrackIds: string[];
-    }
-  | { ok: false; error: string }
-> {
-  if (!isLabelGridLive()) {
-    return {
-      ok: false,
-      error: "LABELGRID_API_TOKEN is not set — cannot upload to LabelGrid.",
-    };
-  }
-
-  const { release, artwork } = input;
-  const audios = input.audios ?? [];
-  const lgReleaseId = release.labelgridId ? Number(release.labelgridId) : NaN;
-
-  // First-time: create draft + upload available assets.
-  if (!Number.isFinite(lgReleaseId)) {
-    if (!artwork) {
-      return {
-        ok: false,
-        error: "Need cover artwork to create the LabelGrid draft.",
-      };
-    }
-    const synced = await syncSubmittedReleaseToLabelGrid({
-      release,
-      artwork,
-      audios,
-    });
-    if (!synced.ok) return synced;
-    return {
-      ok: true,
-      releaseId: synced.releaseId,
-      trackIds: synced.trackIds,
-      created: true,
-      audioProcessing: synced.audioProcessing,
-      processingTrackIds: synced.processingTrackIds,
-    };
-  }
-
-  try {
-    if (!artwork && audios.length === 0) {
-      return {
-        ok: true,
-        releaseId: lgReleaseId,
-        trackIds: [],
-        created: false,
-        audioProcessing: false,
-        processingTrackIds: [],
-      };
-    }
-
-    if (artwork) {
-      await uploadReleasePhoto(
-        lgReleaseId,
-        new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
-        artwork.filename
-      );
-    }
-
-    const trackIds: number[] = [];
-    const processingTrackIds: string[] = [];
-
-    if (audios.length > 0) {
-      if (!release.artist) {
-        return { ok: false, error: "Release has no artist to sync track." };
-      }
-      const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-      const ctx: TrackSyncContext = {
-        lgReleaseId,
-        lgArtistId: await ensureLabelGridArtist(release.artist),
-        locale: rMeta.preferredLocalization || "en",
-        artisticRole: rMeta.artisticRole || "MainArtist",
-        releaseExplicit: release.explicit,
-        releasePrimaryGenre: release.primaryGenre,
-        artist: release.artist,
-      };
-
-      for (const { localTrackId, upload } of audios) {
-        const track = release.tracks.find((t) => t.id === localTrackId);
-        if (!track) continue;
-
-        const lgTrackId = await ensureLabelGridTrack(track, ctx);
-        trackIds.push(lgTrackId);
-
-        const { processing } = await uploadAudioForTrack(
-          track,
-          lgTrackId,
-          upload
-        );
-        if (processing) processingTrackIds.push(track.id);
-        await syncTrackLicense(track, lgTrackId);
-      }
-    }
-
-    await prisma.release.update({
-      where: { id: release.id },
-      data: {
-        syncError: null,
-        labelgridReviewStatus: release.labelgridReviewStatus ?? "draft",
-      },
-    });
-
-    return {
-      ok: true,
-      releaseId: lgReleaseId,
-      trackIds,
-      created: false,
-      audioProcessing: processingTrackIds.length > 0,
-      processingTrackIds,
-    };
-  } catch (error) {
-    const message = formatLgError(error);
-    console.error("[labelgrid/media]", release.id, message);
-    await prisma.release.update({
-      where: { id: release.id },
-      data: { syncError: message.slice(0, 2000) },
-    });
-    return { ok: false, error: message };
-  }
-}
-
-/** Load every track's audio from local storage (null entries are dropped). */
-export async function loadAllTrackAudios(
-  tracks: Track[]
-): Promise<TrackAudioInput[]> {
-  const out: TrackAudioInput[] = [];
-  for (const track of tracks) {
-    const upload = await loadStoredUpload(track.audioUrl);
-    if (upload) out.push({ localTrackId: track.id, upload });
-  }
-  return out;
-}
-
-/**
  * Submit an already-synced LabelGrid draft into LG distribution review.
- * If local release has no labelgridId yet, syncs as draft first (with files).
+ * If local release has no labelgridId yet, syncs as draft first (with
+ * whatever assets are provided).
  */
 export async function submitLabelGridDraftForReview(input: {
   release: ReleaseWithRels;
-  artwork?: StoredUpload | null;
+  artwork?: ValidatedFile | null;
   audios?: TrackAudioInput[];
 }): Promise<
   | { ok: true; releaseId: number; trackIds: number[] }
@@ -855,50 +746,21 @@ export async function submitLabelGridDraftForReview(input: {
 
   const { release } = input;
   const audios = input.audios ?? [];
-  let lgReleaseId = release.labelgridId ? Number(release.labelgridId) : NaN;
-  let trackIds: number[] = release.tracks
-    .map((t) => (t.labelgridId ? Number(t.labelgridId) : NaN))
-    .filter((n) => Number.isFinite(n));
-
   const expected = release.tracks.length;
 
   try {
-    if (!Number.isFinite(lgReleaseId)) {
-      if (!input.artwork || audios.length < expected) {
-        return {
-          ok: false,
-          error:
-            "Release is not on LabelGrid yet and local files are incomplete. " +
-            "Upload cover art and audio for every track, then approve again.",
-        };
-      }
-      const synced = await syncSubmittedReleaseToLabelGrid({
-        release,
-        artwork: input.artwork,
-        audios,
-      });
-      if (!synced.ok) return synced;
-      lgReleaseId = synced.releaseId;
-      trackIds = synced.trackIds;
-    } else {
-      // Draft exists on LabelGrid — refresh media if provided.
-      const mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
-      if (
-        !isLabelGridDraftMediaReady(mediaStatus, expected) &&
-        (input.artwork || audios.length > 0)
-      ) {
-        const pushed = await pushMediaToLabelGrid({
-          release,
-          artwork: input.artwork,
-          audios,
-        });
-        if (!pushed.ok) return pushed;
-        if (pushed.trackIds.length) trackIds = pushed.trackIds;
-      }
-    }
+    // Always resync so this request's assets (if any) are pushed and the
+    // release/tracks are guaranteed to exist before we check readiness.
+    const synced = await syncReleaseToLabelGrid({
+      release,
+      artwork: input.artwork,
+      audios,
+    });
+    if (!synced.ok) return synced;
+    const { releaseId: lgReleaseId, trackIds } = synced;
 
     // Uniform gate before distribute: cover + stereo audio on EVERY track
-    // (also catches audio still processing after a fresh sync).
+    // (also catches audio still processing).
     const mediaStatus = await getLabelGridMediaStatus(lgReleaseId);
     if (!isLabelGridDraftMediaReady(mediaStatus, expected)) {
       const gaps = describeLabelGridMediaGaps(mediaStatus, expected);
@@ -907,7 +769,7 @@ export async function submitLabelGridDraftForReview(input: {
         error:
           `LabelGrid draft is missing media: ${gaps.join("; ")}. ` +
           "If audio was just uploaded it may still be processing — try again shortly. " +
-          "Otherwise re-upload in the release builder, then approve again.",
+          "Otherwise upload the missing files in the release builder, then approve again.",
       };
     }
 

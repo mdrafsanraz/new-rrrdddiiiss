@@ -1,6 +1,10 @@
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { readImageDimensions } from "@/lib/uploads/image-dimensions";
+
+/** LabelGrid cover art requirement — exact square, no exceptions. */
+export const REQUIRED_ARTWORK_SIZE = 3000;
 
 /**
  * Persistent upload root.
@@ -50,6 +54,18 @@ export type StoredUpload = {
   buffer: Buffer;
 };
 
+/**
+ * A validated file held only in memory for the duration of the request.
+ * Artwork and audio are never written to our disk — LabelGrid is the file
+ * store for these; this is just the buffer in transit to their API.
+ */
+export type ValidatedFile = {
+  buffer: Buffer;
+  filename: string;
+  mimeType: string;
+  size: number;
+};
+
 function extFor(mime: string, originalName: string): string {
   const fromName = path.extname(originalName).toLowerCase();
   if (fromName && fromName.length <= 8) return fromName;
@@ -62,13 +78,17 @@ function extFor(mime: string, originalName: string): string {
   return ".bin";
 }
 
-async function saveFile(
-  userId: string,
+/**
+ * Validate an artwork or audio file and return its bytes in memory — never
+ * written to our disk. LabelGrid is the storage for these assets; the
+ * caller uploads this buffer straight to their API and discards it.
+ */
+async function validateFile(
   kind: "artwork" | "audio",
   file: File,
   allowed: Set<string>,
   maxBytes: number
-): Promise<StoredUpload> {
+): Promise<ValidatedFile> {
   if (!allowed.has(file.type)) {
     throw new Error(
       kind === "artwork"
@@ -85,30 +105,35 @@ async function saveFile(
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const token = randomBytes(8).toString("hex");
-  const filename = `${kind}-${token}${extFor(file.type, file.name)}`;
-  const dir = path.join(ROOT, userId);
-  await mkdir(dir, { recursive: true });
-  const abs = path.join(dir, filename);
-  await writeFile(abs, buf);
 
-  const relativePath = path.posix.join(userId, filename);
+  if (kind === "artwork") {
+    const dims = readImageDimensions(buf, file.type);
+    if (
+      !dims ||
+      dims.width !== REQUIRED_ARTWORK_SIZE ||
+      dims.height !== REQUIRED_ARTWORK_SIZE
+    ) {
+      const got = dims ? `${dims.width}×${dims.height}` : "unreadable dimensions";
+      throw new Error(
+        `Artwork must be exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px (got ${got}).`
+      );
+    }
+  }
+
   return {
-    relativePath,
-    publicUrl: `/api/media/${relativePath}`,
-    filename: file.name || filename,
+    filename: file.name || `${kind}${extFor(file.type, file.name)}`,
     mimeType: file.type,
     size: buf.length,
     buffer: buf,
   };
 }
 
-export function saveArtwork(userId: string, file: File) {
-  return saveFile(userId, "artwork", file, ARTWORK_TYPES, 10 * 1024 * 1024);
+export function validateArtwork(file: File) {
+  return validateFile("artwork", file, ARTWORK_TYPES, 10 * 1024 * 1024);
 }
 
-export function saveAudio(userId: string, file: File) {
-  return saveFile(userId, "audio", file, AUDIO_TYPES, 200 * 1024 * 1024);
+export function validateAudio(file: File) {
+  return validateFile("audio", file, AUDIO_TYPES, 200 * 1024 * 1024);
 }
 
 const DOCUMENT_TYPES = new Set([
@@ -167,22 +192,7 @@ export function relativePathFromPublicUrl(publicUrl: string | null | undefined):
   return publicUrl.slice(idx + prefix.length).split("?")[0] || null;
 }
 
-export async function storedUploadExists(
-  publicUrl: string | null | undefined
-): Promise<boolean> {
-  const relative = relativePathFromPublicUrl(publicUrl);
-  if (!relative) return false;
-  const abs = resolveUploadPath(relative);
-  if (!abs) return false;
-  try {
-    await access(abs);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Reload a saved upload from disk (used when admin approves → LabelGrid). */
+/** Reload a saved local document (e.g. a track license) from disk. */
 export async function loadStoredUpload(
   publicUrl: string | null | undefined
 ): Promise<StoredUpload | null> {
@@ -213,28 +223,6 @@ export async function loadStoredUpload(
   } catch {
     return null;
   }
-}
-
-export function describeMissingUploads(input: {
-  artworkUrl: string | null | undefined;
-  audioUrl: string | null | undefined;
-  artworkOnDisk: boolean;
-  audioOnDisk: boolean;
-}): string[] {
-  const missing: string[] = [];
-  if (!input.artworkUrl) missing.push("cover artwork was never saved");
-  else if (!input.artworkOnDisk) {
-    missing.push(
-      "cover artwork file is missing on the server (often after a redeploy without a persistent volume)"
-    );
-  }
-  if (!input.audioUrl) missing.push("audio was never saved");
-  else if (!input.audioOnDisk) {
-    missing.push(
-      "audio file is missing on the server (often after a redeploy without a persistent volume)"
-    );
-  }
-  return missing;
 }
 
 export function getUploadsRootForDiagnostics(): string {
