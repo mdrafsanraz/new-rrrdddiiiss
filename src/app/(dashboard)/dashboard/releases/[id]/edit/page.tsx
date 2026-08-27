@@ -9,6 +9,12 @@ import {
   canUserEditRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import {
+  fetchLiveRelease,
+  withTimeout,
+  type LiveRelease,
+} from "@/lib/labelgrid/live-release";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -43,9 +49,27 @@ export default async function EditReleasePage({ params }: Props) {
     orderBy: { name: "asc" },
   });
 
+  // Prefer LabelGrid's actual cover/audio URLs over the local cache, which
+  // can lag behind (e.g. audio whose async processing finished after the
+  // original sync request's own poll budget expired). Best-effort — never
+  // block editing on LabelGrid latency, the local cache is still a fine
+  // fallback if this fails.
+  let live: LiveRelease | null = null;
+  if (isLabelGridLive() && release.labelgridId) {
+    try {
+      live = await withTimeout(
+        fetchLiveRelease(user.id, Number(release.labelgridId)),
+        8000
+      );
+    } catch (error) {
+      console.error("[releases/edit] live fetch failed", error);
+    }
+  }
+
   const initialWizard = wizardStateFromRelease(
     release,
-    release.artist?.name ?? ""
+    release.artist?.name ?? "",
+    live
   );
 
   return (

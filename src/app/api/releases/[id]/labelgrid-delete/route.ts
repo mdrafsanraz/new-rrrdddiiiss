@@ -51,10 +51,10 @@ export async function POST(_request: Request, { params }: Params) {
     const raw = await getReleaseDeliveryStatus(release.labelgridId);
     const delivery =
       raw && typeof raw === "object" && "data" in raw
-        ? (raw as { data: { state?: string; ever_submitted?: boolean } }).data
-        : (raw as { state?: string; ever_submitted?: boolean });
+        ? (raw as { data: { state?: string; ever_delivered?: boolean } }).data
+        : (raw as { state?: string; ever_delivered?: boolean });
     const { canDelete } = computeReleaseLifecycleActions({
-      everSubmitted: delivery?.ever_submitted,
+      everDelivered: delivery?.ever_delivered,
       deliveryState: delivery?.state ?? null,
     });
     if (!canDelete) {

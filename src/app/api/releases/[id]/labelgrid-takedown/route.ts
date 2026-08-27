@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: Params) {
 
   const delivery = await fetchLabelGridDeliveryStatus(release.labelgridId);
   const { canTakedown, takedownDisabledReason } = computeReleaseLifecycleActions({
-    everSubmitted: delivery?.ever_submitted,
+    everDelivered: delivery?.ever_delivered,
     deliveryState: delivery?.state ?? null,
   });
   if (!canTakedown) {

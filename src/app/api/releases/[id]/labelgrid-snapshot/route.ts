@@ -3,6 +3,8 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getRelease } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { unwrapLabelGridData } from "@/lib/labelgrid/catalog";
+import type { ReleaseData } from "@/lib/labelgrid/types";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -64,51 +66,49 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   try {
-    const raw = await getRelease(release.labelgridId);
-    const lg = (raw as { data: Record<string, unknown> }).data;
+    // document.json documents GET /releases/{release} as returning
+    // ReleaseData directly (not wrapped in {data: ReleaseData}) — a naive
+    // `.data` cast left `lg` undefined and crashed on the first property
+    // read. unwrapLabelGridData handles both shapes defensively.
+    const lg = unwrapLabelGridData<ReleaseData>(await getRelease(release.labelgridId));
 
     const artists = Array.isArray(lg.artists)
-      ? (lg.artists as Array<{ artist?: { artist_name?: string } }>)
+      ? lg.artists
           .map((a) => a.artist?.artist_name)
           .filter(Boolean)
           .join(", ")
       : null;
 
-    const genre = (lg.primary_genre as { name?: string } | null)?.name ?? null;
-    const cover = (lg.front_cover as { url?: string } | null)?.url ?? null;
+    const genre = lg.primary_genre?.name ?? null;
+    const cover = lg.front_cover?.url ?? null;
 
     const dspConfigs = lg.dsp_configs;
     const allStoresConfig = Array.isArray(dspConfigs)
-      ? (dspConfigs as Array<{ distro_outlet_id: string; enabled: boolean }>).find(
-          (c) => c.distro_outlet_id === "all_dsps"
-        )
+      ? dspConfigs.find((c) => c.distro_outlet_id === "all_dsps")
       : null;
     const allStores = allStoresConfig ? allStoresConfig.enabled : true;
-    const storeCount = Array.isArray(dspConfigs)
-      ? (dspConfigs as unknown[]).length
-      : null;
+    const storeCount = Array.isArray(dspConfigs) ? dspConfigs.length : null;
 
     const tracks: LiveTrack[] = Array.isArray(lg.tracks)
-      ? (lg.tracks as Array<Record<string, unknown>>).map((t) => ({
-          id: t.id as number,
-          track_num: (t.track_num as number | null) ?? null,
-          title: (t.title as string | null) ?? null,
-          mix_version: (t.mix_version as string | null) ?? null,
-          default_display_artist:
-            (t.default_display_artist as string | null) ?? null,
+      ? lg.tracks.map((t) => ({
+          id: t.id,
+          track_num: t.track_num ?? null,
+          title: t.title ?? null,
+          mix_version: t.mix_version ?? null,
+          default_display_artist: t.default_display_artist ?? null,
         }))
       : [];
 
     const snapshot: LiveReleaseSnapshot = {
-      id: lg.id as number,
-      title: (lg.title as string | null) ?? null,
+      id: lg.id,
+      title: lg.title ?? null,
       artist: artists,
       primary_genre: genre,
-      content_type: (lg.content_type as string | null) ?? null,
-      release_date: (lg.release_date as string | null) ?? null,
-      barcode_number: (lg.barcode_number as string | null) ?? null,
+      content_type: lg.content_type ?? null,
+      release_date: lg.release_date ?? null,
+      barcode_number: lg.barcode_number ?? null,
       cover_url: cover,
-      review_status: (lg.review_status as string | null) ?? null,
+      review_status: lg.review_status ?? null,
       store_count: storeCount,
       all_stores: allStores,
       tracks: tracks.sort((a, b) => (a.track_num ?? 0) - (b.track_num ?? 0)),
@@ -116,13 +116,9 @@ export async function GET(_request: Request, { params }: Params) {
 
     return NextResponse.json({ snapshot });
   } catch (error) {
+    console.error("[releases/labelgrid-snapshot]", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not fetch the release from LabelGrid.",
-      },
+      { error: "Could not fetch the release from LabelGrid. Please try again." },
       { status: 502 }
     );
   }

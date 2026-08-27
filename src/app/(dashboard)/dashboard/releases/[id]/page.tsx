@@ -166,7 +166,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
   let deliveryError: string | null = null;
   let outletNames: Record<string, string> = {};
   let territoryNames: Record<string, string> = {};
-  let everSubmitted = false;
+  let everDelivered = false;
 
   if (isLabelGridLive() && release.labelgridId) {
     const lgId = Number(release.labelgridId);
@@ -204,7 +204,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
           ? (d.outlets as DeliveryStatusData["outlets"])
           : [],
       };
-      everSubmitted = delivery.everSubmitted;
+      everDelivered = delivery.everDelivered;
     } else {
       deliveryError = "Could not load delivery status from LabelGrid.";
       console.error(
@@ -220,7 +220,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
   const { canDelete, canTakedown, takedownDisabledReason } =
     computeReleaseLifecycleActions({
-      everSubmitted,
+      everDelivered,
       deliveryState: delivery?.state ?? null,
     });
 

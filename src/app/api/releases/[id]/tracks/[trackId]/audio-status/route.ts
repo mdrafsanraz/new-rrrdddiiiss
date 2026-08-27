@@ -2,9 +2,20 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
-import { getAudioUploadStatus } from "@/lib/labelgrid";
+import { getAudioUploadStatus, getTrackFile } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
+
+/** GET /tracks/{track}/files/stereo — best-effort, never throws. */
+async function fetchStereoUrl(trackId: string): Promise<string | null> {
+  try {
+    const raw = await getTrackFile(trackId, "stereo");
+    const file = raw && typeof raw === "object" && "data" in raw ? raw.data : raw;
+    return file?.url ?? null;
+  } catch {
+    return null;
+  }
+}
 
 type Params = { params: Promise<{ id: string; trackId: string }> };
 
@@ -56,6 +67,7 @@ export async function POST(_request: Request, { params }: Params) {
           ? "ready"
           : "none",
       error: tMeta.audioProcessingError ?? null,
+      audioUrl: track.audioUrl ?? null,
     });
   }
 
@@ -72,14 +84,26 @@ export async function POST(_request: Request, { params }: Params) {
     tMeta.audioProcessing = false;
     tMeta.audioProcessingError =
       attempt.status === "failed" ? attempt.error?.message ?? "Audio processing failed" : null;
+
+    // Completed/superseded but never resolved within uploadTrackStereoAudio's
+    // own poll budget — this is the only place that ever finds out, so it
+    // must persist the file URL itself or the track's audio silently
+    // disappears on the next page load (audioUrl stays null forever).
+    const audioUrl =
+      attempt.status === "failed" ? null : await fetchStereoUrl(track.labelgridId);
+
     await prisma.track.update({
       where: { id: track.id },
-      data: { metadataJson: JSON.stringify(tMeta) },
+      data: {
+        metadataJson: JSON.stringify(tMeta),
+        ...(audioUrl ? { audioUrl } : {}),
+      },
     });
 
     return NextResponse.json({
       status: attempt.status === "failed" ? "failed" : "ready",
       error: tMeta.audioProcessingError,
+      audioUrl: audioUrl ?? track.audioUrl ?? null,
     });
   } catch (error) {
     return NextResponse.json(

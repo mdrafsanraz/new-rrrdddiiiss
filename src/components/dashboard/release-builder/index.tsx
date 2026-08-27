@@ -672,6 +672,7 @@ export function ReleaseBuilder({
                       data.status === "failed"
                         ? data.error || "Audio processing failed"
                         : null,
+                    audioUrl: data.audioUrl ?? t.audioUrl,
                   }
                 : t
             ),

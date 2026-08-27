@@ -10,21 +10,35 @@ import {
   type WizardState,
   type WizardTrack,
 } from "@/lib/releases/wizard-types";
+import type { LiveRelease } from "@/lib/labelgrid/live-release";
 
 type ReleaseWithTracks = Release & {
   tracks: Track[];
 };
 
-/** Map a saved release into ReleaseBuilder initial state (edit / re-upload flow). */
+/**
+ * Map a saved release into ReleaseBuilder initial state (edit / re-upload
+ * flow). `live`, when supplied, is the just-fetched LabelGrid release —
+ * its cover/audio URLs win over the local cache, which can lag behind
+ * (e.g. a track whose async processing finished after the local sync
+ * request's own poll budget expired never got its audioUrl persisted).
+ */
 export function wizardStateFromRelease(
   release: ReleaseWithTracks,
-  artistName: string
+  artistName: string,
+  live?: LiveRelease | null
 ): WizardState {
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const liveTrackById = new Map(
+    (live?.tracks ?? []).map((lt) => [String(lt.id), lt])
+  );
   const tracks: WizardTrack[] =
     release.tracks.length > 0
       ? release.tracks.map((t) => {
           const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+          const liveTrack = t.labelgridId
+            ? liveTrackById.get(t.labelgridId)
+            : undefined;
           return newTrack({
             id: t.id,
             clientId: t.id,
@@ -48,7 +62,7 @@ export function wizardStateFromRelease(
             hasMechanicalLicense: tMeta.hasMechanicalLicense ?? false,
             lyrics: tMeta.lyrics ?? "",
             audioFile: null,
-            audioUrl: t.audioUrl,
+            audioUrl: liveTrack?.audio?.url ?? t.audioUrl,
             audioDurationSec: null,
             audioProcessing: tMeta.audioProcessing ?? false,
             audioProcessingError: tMeta.audioProcessingError ?? null,
@@ -92,13 +106,14 @@ export function wizardStateFromRelease(
   }));
 
   const year = String(new Date().getFullYear());
+  const artworkUrl = live?.coverUrl ?? release.artworkUrl;
 
   return {
     releaseId: release.id,
     step: 0,
     artworkFile: null,
-    artworkUrl: release.artworkUrl,
-    artworkPreview: release.artworkUrl,
+    artworkUrl,
+    artworkPreview: artworkUrl,
     artworkAiUsage:
       (release.artworkAiUsage as WizardState["artworkAiUsage"]) ?? "none",
     isTransfer: Boolean(rMeta.transferFromDistributor),
