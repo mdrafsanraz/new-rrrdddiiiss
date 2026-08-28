@@ -42,7 +42,7 @@ export function SiteHeader({ authenticated = false }: { authenticated?: boolean 
 
         <div className="hidden items-center gap-2.5 lg:flex">
           {authenticated ? (
-            <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "h-10 px-5")}>Start distributing</Link>
+            <Link href="/dashboard" className={cn(buttonVariants(), "h-10 px-5")}>Start distributing</Link>
           ) : (
             <>
               <Link href="/login" className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-4")}>Login</Link>
@@ -97,7 +97,7 @@ export function SiteHeader({ authenticated = false }: { authenticated?: boolean 
                 </Link>
               ))}
               {authenticated ? (
-                <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "mt-2 h-11 w-full")} onClick={() => setOpen(false)}>Start distributing</Link>
+                <Link href="/dashboard" className={cn(buttonVariants(), "mt-2 h-11 w-full")} onClick={() => setOpen(false)}>Start distributing</Link>
               ) : (
                 <>
                   <Link href="/login" className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setOpen(false)}>Login</Link>

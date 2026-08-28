@@ -6,12 +6,14 @@ import { Reveal } from "@/components/site/reveal";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { features } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: "Features",
 };
 
-export default function FeaturesPage() {
+export default async function FeaturesPage() {
+  const distributeHref = (await getSessionUser()) ? "/dashboard" : "/signup";
   return (
     <>
       <section className="mx-auto max-w-7xl px-6 pt-16 md:pt-24">
@@ -53,7 +55,7 @@ export default function FeaturesPage() {
           ))}
         </div>
         <Reveal className="mt-16 text-center">
-          <Link href="/signup" className={cn(buttonVariants(), "h-12 px-7")}>
+          <Link href={distributeHref} className={cn(buttonVariants(), "h-12 px-7")}>
             Start distributing
             <ArrowRight className="size-4" weight="bold" />
           </Link>

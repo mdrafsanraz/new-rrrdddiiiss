@@ -132,7 +132,7 @@ function parseDeliveryItems(releases: Array<{
         outlet: titleCase(outletName),
         state: text(outlet, ["customer_state", "state", "operation"]) || "processing",
       });
-      if (items.length === 6) return items;
+      if (items.length === 4) return items;
     }
   }
   return items;
@@ -171,7 +171,7 @@ export default async function DashboardHomePage() {
   const user = await requireUser();
   const analyticsEnabled = getPlanLimits(user.planId).analytics;
 
-  const [releases, artist, balances, upcomingRelease, liveCount, totalReleases] = await Promise.all([
+  const [releases, artist, balances, liveCount] = await Promise.all([
     prisma.release.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
@@ -183,21 +183,12 @@ export default async function DashboardHomePage() {
       orderBy: { updatedAt: "desc" },
     }),
     getWalletBalances(user.id),
-    prisma.release.findFirst({
-      where: {
-        userId: user.id,
-        releaseDate: { gte: new Date() },
-        status: { notIn: ["taken_down", "rejected", "internal_rejected", "labelgrid_rejected"] },
-      },
-      orderBy: { releaseDate: "asc" },
-    }),
     prisma.release.count({
       where: {
         userId: user.id,
         status: { in: statusesForUserFacingFilter("live") as never[] },
       },
     }),
-    prisma.release.count({ where: { userId: user.id } }),
   ]);
 
   const labelgridReleases = releases.filter((release) => release.labelgridId).slice(0, 6);
@@ -301,24 +292,24 @@ export default async function DashboardHomePage() {
       <DashboardReveal delay={0.03} className="grid gap-3 md:grid-cols-3">
         <SnapshotCard
           href="/dashboard/wallet"
+          icon={<TrendUp size={19} weight="duotone" />}
+          label="Total earnings"
+          value={`$${Number(balances.lifetimeEarnings).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          detail="Lifetime published royalties"
+        />
+        <SnapshotCard
+          href="/dashboard/wallet"
           icon={<Wallet size={19} weight="duotone" />}
           label="Available in wallet"
           value={`$${Number(balances.available).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          detail={Number(balances.pending) > 0 ? `$${Number(balances.pending).toFixed(2)} pending` : "No pending earnings"}
+          detail={Number(balances.pending) > 0 ? `$${Number(balances.pending).toFixed(2)} pending` : "Ready for payout when funded"}
         />
         <SnapshotCard
-          href="/dashboard/releases"
+          href="/dashboard/releases?status=live"
           icon={<Disc size={19} weight="duotone" />}
-          label="Catalog"
-          value={`${totalReleases} release${totalReleases === 1 ? "" : "s"}`}
-          detail={`${liveCount} currently live`}
-        />
-        <SnapshotCard
-          href={upcomingRelease ? `/dashboard/releases/${upcomingRelease.id}` : "/dashboard/releases/new"}
-          icon={<TrendUp size={19} weight="duotone" />}
-          label="Next release"
-          value={upcomingRelease ? releaseTitleLabel(upcomingRelease.title) : "Nothing scheduled"}
-          detail={upcomingRelease?.releaseDate ? upcomingRelease.releaseDate.toLocaleDateString() : "Create a release when ready"}
+          label="Live catalog"
+          value={`${liveCount} release${liveCount === 1 ? "" : "s"}`}
+          detail="Available on selected stores"
         />
       </DashboardReveal>
 
@@ -396,19 +387,19 @@ export default async function DashboardHomePage() {
       <DashboardReveal delay={0.12}>
         <SectionHeading title="Releases" href="/dashboard/releases" action="View all" />
         {releases.length ? (
-          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {displayReleases.slice(0, 10).map((release) => (
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {displayReleases.slice(0, 5).map((release) => (
               <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group min-w-0">
-                <div className="aspect-square overflow-hidden rounded-[22px] bg-muted shadow-[0_12px_35px_oklch(0.3_0.02_250/0.08)]">
+                <div className="aspect-square overflow-hidden rounded-2xl bg-muted shadow-[0_10px_28px_oklch(0.3_0.02_250/0.07)]">
                   {release.artworkUrl ? (
                     <img src={release.artworkUrl} alt="" className="size-full object-cover transition-transform duration-700 ease-[var(--ease-rdistro)] group-hover:scale-[1.045]" />
                   ) : (
                     <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_55%)] text-muted-foreground"><Disc size={30} weight="duotone" /></div>
                   )}
                 </div>
-                <p className="mt-3 truncate font-semibold">{releaseTitleLabel(release.title)}</p>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">{release.artistName}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={release.status} /><span className="text-xs text-muted-foreground">{release.contentType}</span></div>
+                <p className="mt-2.5 truncate text-sm font-semibold">{releaseTitleLabel(release.title)}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{release.artistName}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2"><StatusBadge status={release.status} /><span className="text-[11px] text-muted-foreground">{release.contentType}</span></div>
               </Link>
             ))}
           </div>
@@ -421,13 +412,13 @@ export default async function DashboardHomePage() {
 
       <DashboardReveal delay={0.16}>
         <SectionHeading title="Delivery log" href="/dashboard/releases" action="Open releases" />
-        <section className="mt-5 overflow-hidden rounded-[22px] border border-border/80 bg-card">
+        <section className="mt-4 overflow-hidden rounded-2xl border border-border/80 bg-card">
           {deliveryItems.length ? deliveryItems.map((item, index) => (
-            <Link key={item.key} href={`/dashboard/releases/${item.releaseId}`} className={cn("group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6", index !== deliveryItems.length - 1 && "border-b border-border/60") }>
-              <div className="size-12 shrink-0 overflow-hidden rounded-xl bg-muted">
+            <Link key={item.key} href={`/dashboard/releases/${item.releaseId}`} className={cn("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40 sm:px-5", index !== deliveryItems.length - 1 && "border-b border-border/60") }>
+              <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted">
                 {item.artworkUrl ? <img src={item.artworkUrl} alt="" className="size-full object-cover" /> : <div className="grid size-full place-items-center text-muted-foreground"><Disc size={18} /></div>}
               </div>
-              <div className="min-w-0 flex-1"><p className="truncate text-sm text-muted-foreground">{item.outlet}</p><p className="truncate font-semibold">{item.releaseTitle}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate text-xs text-muted-foreground">{item.outlet}</p><p className="truncate text-sm font-semibold">{item.releaseTitle}</p></div>
               <DeliveryBadge state={item.state} />
             </Link>
           )) : (

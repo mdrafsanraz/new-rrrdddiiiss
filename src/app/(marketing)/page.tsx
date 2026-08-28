@@ -39,7 +39,7 @@ const steps = [
 
 export default async function Home() {
   const authenticated = Boolean(await getSessionUser());
-  const distributeHref = authenticated ? "/dashboard/releases/new" : "/signup";
+  const distributeHref = authenticated ? "/dashboard" : "/signup";
   return (
     <>
       {/* Hero */}

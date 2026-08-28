@@ -297,7 +297,7 @@ export function DashboardShell({
   return (
     <div className="dashboard-theme min-h-dvh bg-background">
       <div className="flex min-h-dvh">
-        <aside className="hidden w-[248px] shrink-0 flex-col border-r border-border/70 bg-card/75 px-5 py-7 backdrop-blur-xl lg:flex">
+        <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 self-start flex-col overflow-y-auto border-r border-border/70 bg-card/75 px-5 py-7 backdrop-blur-xl lg:flex">
           <AnimatedBrandLogo className="h-9 w-auto" gradientId="dashSideWave" />
           <div className="mt-8 flex-1">
             <NavList pathname={pathname} showAdminLink={showAdminLink} />
