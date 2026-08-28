@@ -17,8 +17,8 @@ if [ -z "${AUTH_SECRET:-}" ]; then
   exit 1
 fi
 
-echo "[rdistro] applying database migrations (prisma migrate deploy)…"
-npx prisma migrate deploy
+echo "[rdistro] syncing database schema (prisma db push)…"
+npx prisma db push --skip-generate
 
 echo "[rdistro] starting Next.js…"
 exec node .next/standalone/server.js
