@@ -349,7 +349,7 @@ export function SubmissionProgress({
       if (!releaseRes.ok) {
         setReleaseStatus("failed");
         setReleaseError(
-          releaseData.error ?? "Could not sync the release with LabelGrid."
+          releaseData.error ?? "Could not sync the release."
         );
         return;
       }

@@ -51,7 +51,7 @@ export function DeleteReleaseDialog({
         Delete this draft?
       </AlertDialog.Title>
       <AlertDialog.Description className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        This will permanently delete the draft release from LabelGrid. This
+        This will permanently delete the draft release. This
         action cannot be undone.
       </AlertDialog.Description>
       {error ? (

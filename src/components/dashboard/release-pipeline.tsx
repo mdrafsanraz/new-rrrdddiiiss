@@ -37,7 +37,7 @@ export function ReleasePipeline({
       icon: <ShieldCheck size={18} weight="regular" aria-hidden />,
     },
     {
-      label: "LabelGrid Review",
+      label: "Distribution Review",
       count: labelgridReview,
       icon: <MagnifyingGlass size={18} weight="regular" aria-hidden />,
     },

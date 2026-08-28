@@ -60,8 +60,8 @@ export function ReplaceReleaseMediaForm({
       }
       setOk(
         data.labelgrid?.uploaded
-          ? "Uploaded to LabelGrid. Staff can approve."
-          : "Media saved. Staff can approve once LabelGrid has the files."
+          ? "Uploaded. Staff can approve."
+          : "Media saved. Staff can approve once the files are received."
       );
       setArtwork(null);
       setAudio(null);
@@ -82,8 +82,8 @@ export function ReplaceReleaseMediaForm({
         <p className="text-sm font-semibold">Re-upload media</p>
         <p className="mt-1 text-xs text-amber-900/80">
           {needsArtwork || needsAudio
-            ? "Cover art and/or audio are missing on this server. Upload again — files are sent to the LabelGrid API so Approve can proceed."
-            : "Replace cover art or audio. Files are uploaded to LabelGrid."}
+            ? "Cover art and/or audio are missing on this server. Upload again so Approve can proceed."
+            : "Replace cover art or audio."}
         </p>
         <ul className="mt-2 list-inside list-disc text-xs">
           <li>

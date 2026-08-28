@@ -147,8 +147,8 @@ export default async function ReleaseDetailPage({ params }: Props) {
     } else {
       liveError =
         liveResult.reason instanceof LiveFetchTimeoutError
-          ? "LabelGrid did not respond in time."
-          : "Could not load current data from LabelGrid.";
+          ? "Distribution didn't respond in time."
+          : "Could not load current data from distribution.";
       console.error("[releases/detail] live fetch failed", liveResult.reason);
     }
 
@@ -169,7 +169,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
       };
       everDelivered = delivery.everDelivered;
     } else {
-      deliveryError = "Could not load delivery status from LabelGrid.";
+      deliveryError = "Could not load delivery status.";
       console.error(
         "[releases/detail] delivery fetch failed",
         deliveryResult.reason
@@ -246,7 +246,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
             <StatusBadge status={release.status} />
             {live?.reviewStatus ? (
               <Badge tone={reviewStatusTone(live.reviewStatus)}>
-                LabelGrid: {reviewStatusLabel(live.reviewStatus)}
+                Distribution: {reviewStatusLabel(live.reviewStatus)}
               </Badge>
             ) : null}
           </div>
@@ -377,8 +377,8 @@ export default async function ReleaseDetailPage({ params }: Props) {
         <div className="border border-border bg-card">
           <EmptyState
             icon={<Disc size={22} weight="regular" aria-hidden />}
-            title="Not synced to LabelGrid yet"
-            description="Continue the release builder to sync this release to LabelGrid — catalog details will appear here once it has."
+            title="Not synced yet"
+            description="Continue the release builder to sync this release — catalog details will appear here once it has."
           />
         </div>
       ) : liveError ? (

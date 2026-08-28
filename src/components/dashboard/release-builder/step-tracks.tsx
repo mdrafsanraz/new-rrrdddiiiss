@@ -178,7 +178,7 @@ function TrackLicenseUpload({
             className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-primary"
           />
           <p className="text-xs text-muted-foreground">
-            Required by LabelGrid for cover licenses — a streaming or store
+            Required for cover licenses — a streaming or store
             link to the original track being covered.
           </p>
         </div>

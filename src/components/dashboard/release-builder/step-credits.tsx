@@ -582,8 +582,8 @@ export function StepCredits({
               <span className="text-destructive">· Required</span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Writer shares of the composition — LabelGrid only accepts
-              Composer and/or Lyricist for a publishing split. Totals must
+              Writer shares of the composition — only Composer and/or
+              Lyricist are accepted for a publishing split. Totals must
               equal 100%.
             </p>
           </div>
@@ -670,7 +670,7 @@ export function StepCredits({
                 groups={writerGroups}
                 selected={w.roles}
                 scope="writer-split"
-                emptyLabel="Composer/Lyricist roles not available from LabelGrid yet."
+                emptyLabel="Composer/Lyricist roles not available yet."
                 onToggle={(role) =>
                   setState((prev) => ({
                     ...prev,

@@ -528,7 +528,7 @@ function DeliveryTab({
 }) {
   return (
     <div className="space-y-4">
-      <Section title="Delivery" subtitle="LabelGrid delivery-status">
+      <Section title="Delivery" subtitle="Store delivery status">
         {deliveryError ? (
           <p className="text-sm text-destructive">{deliveryError}</p>
         ) : !delivery ? (
