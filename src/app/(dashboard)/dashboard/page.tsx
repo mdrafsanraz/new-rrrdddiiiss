@@ -10,7 +10,9 @@ import {
   IdentificationCard,
   MusicNotesPlus,
   Plus,
+  TrendUp,
   UserCircle,
+  Wallet,
 } from "@phosphor-icons/react/dist/ssr";
 import { DashboardReveal } from "@/components/dashboard/dashboard-home-motion";
 import { PlatformSparkline } from "@/components/dashboard/platform-sparkline";
@@ -20,9 +22,16 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getReleaseAnalytics } from "@/lib/labelgrid/analytics";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
+import {
+  fetchLiveReleaseSummary,
+  withTimeout,
+  type LiveReleaseSummary,
+} from "@/lib/labelgrid/live-release";
 import { getPlanLimits, planLabel } from "@/lib/plans";
 import { releaseTitleLabel } from "@/lib/releases/display";
+import { statusesForUserFacingFilter } from "@/lib/releases/status";
 import { cn } from "@/lib/utils";
+import { getWalletBalances } from "@/lib/wallet";
 
 export const metadata = { title: "Dashboard" };
 
@@ -78,6 +87,22 @@ function compact(value: number) {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+async function fetchLiveArtwork(labelgridIds: string[]) {
+  if (!isLabelGridLive() || labelgridIds.length === 0) {
+    return new Map<string, LiveReleaseSummary>();
+  }
+  const results = await Promise.allSettled(
+    labelgridIds.map((id) =>
+      withTimeout(fetchLiveReleaseSummary(Number(id)), 4000)
+    )
+  );
+  const summaries = new Map<string, LiveReleaseSummary>();
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") summaries.set(labelgridIds[index], result.value);
+  });
+  return summaries;
 }
 
 function parseDeliveryItems(releases: Array<{
@@ -146,7 +171,7 @@ export default async function DashboardHomePage() {
   const user = await requireUser();
   const analyticsEnabled = getPlanLimits(user.planId).analytics;
 
-  const [releases, artist] = await Promise.all([
+  const [releases, artist, balances, upcomingRelease, liveCount, totalReleases] = await Promise.all([
     prisma.release.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
@@ -157,9 +182,42 @@ export default async function DashboardHomePage() {
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     }),
+    getWalletBalances(user.id),
+    prisma.release.findFirst({
+      where: {
+        userId: user.id,
+        releaseDate: { gte: new Date() },
+        status: { notIn: ["taken_down", "rejected", "internal_rejected", "labelgrid_rejected"] },
+      },
+      orderBy: { releaseDate: "asc" },
+    }),
+    prisma.release.count({
+      where: {
+        userId: user.id,
+        status: { in: statusesForUserFacingFilter("live") as never[] },
+      },
+    }),
+    prisma.release.count({ where: { userId: user.id } }),
   ]);
 
   const labelgridReleases = releases.filter((release) => release.labelgridId).slice(0, 6);
+  const liveArtworkByLabelgridId = await fetchLiveArtwork(
+    releases
+      .map((release) => release.labelgridId)
+      .filter((id): id is string => Boolean(id))
+  );
+  const displayRelease = (release: (typeof releases)[number]) => {
+    const live = release.labelgridId
+      ? liveArtworkByLabelgridId.get(release.labelgridId)
+      : undefined;
+    return {
+      ...release,
+      title: live?.title ?? release.title,
+      artworkUrl: live?.coverUrl ?? release.artworkUrl,
+      artistName: live?.artist ?? release.artist?.name ?? "Artist not assigned",
+    };
+  };
+  const displayReleases = releases.map(displayRelease);
   const end = new Date();
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - 27);
@@ -225,11 +283,11 @@ export default async function DashboardHomePage() {
     },
   ];
   const completedSetup = setupItems.filter((item) => item.complete).length;
-  const deliveryItems = parseDeliveryItems(releases);
+  const deliveryItems = parseDeliveryItems(displayReleases);
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-12 pb-16">
+    <div className="mx-auto max-w-[1320px] space-y-10 pb-16">
       <DashboardReveal className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="text-sm text-muted-foreground">{planLabel(user.planId)} workspace</p>
@@ -238,6 +296,30 @@ export default async function DashboardHomePage() {
         <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "h-11 rounded-full px-5")}>
           <Plus size={16} weight="bold" /> New release
         </Link>
+      </DashboardReveal>
+
+      <DashboardReveal delay={0.03} className="grid gap-3 md:grid-cols-3">
+        <SnapshotCard
+          href="/dashboard/wallet"
+          icon={<Wallet size={19} weight="duotone" />}
+          label="Available in wallet"
+          value={`$${Number(balances.available).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          detail={Number(balances.pending) > 0 ? `$${Number(balances.pending).toFixed(2)} pending` : "No pending earnings"}
+        />
+        <SnapshotCard
+          href="/dashboard/releases"
+          icon={<Disc size={19} weight="duotone" />}
+          label="Catalog"
+          value={`${totalReleases} release${totalReleases === 1 ? "" : "s"}`}
+          detail={`${liveCount} currently live`}
+        />
+        <SnapshotCard
+          href={upcomingRelease ? `/dashboard/releases/${upcomingRelease.id}` : "/dashboard/releases/new"}
+          icon={<TrendUp size={19} weight="duotone" />}
+          label="Next release"
+          value={upcomingRelease ? releaseTitleLabel(upcomingRelease.title) : "Nothing scheduled"}
+          detail={upcomingRelease?.releaseDate ? upcomingRelease.releaseDate.toLocaleDateString() : "Create a release when ready"}
+        />
       </DashboardReveal>
 
       {completedSetup < setupItems.length ? (
@@ -292,9 +374,9 @@ export default async function DashboardHomePage() {
             <ArrowRight size={20} className="shrink-0 text-[#675bea]" />
           </Link>
         ) : platformMetrics.length ? (
-          <div className="mt-5 grid auto-cols-[minmax(13rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 [scrollbar-width:none] xl:grid-flow-row xl:grid-cols-6">
+          <div className="mt-5 grid auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 [scrollbar-width:none] xl:grid-flow-row xl:grid-cols-4">
             {platformMetrics.map((platform) => (
-              <Link key={platform.key} href={`/dashboard/analytics?platform=${platform.key}`} className="flex min-h-48 flex-col rounded-[22px] border border-border/80 bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-[0_16px_35px_oklch(0.3_0.02_250/0.08)]">
+              <Link key={platform.key} href={`/dashboard/analytics?platform=${platform.key}`} className="flex min-h-52 flex-col rounded-[22px] border border-border/80 bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-[0_16px_35px_oklch(0.3_0.02_250/0.08)]">
                 <p className="text-sm font-semibold text-muted-foreground">{platform.label}</p>
                 <p className="mt-5 text-3xl font-semibold tracking-[-0.04em] tabular-nums">{compact(platform.value)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Streams, last 28 days</p>
@@ -314,8 +396,8 @@ export default async function DashboardHomePage() {
       <DashboardReveal delay={0.12}>
         <SectionHeading title="Releases" href="/dashboard/releases" action="View all" />
         {releases.length ? (
-          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {releases.slice(0, 10).map((release) => (
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {displayReleases.slice(0, 10).map((release) => (
               <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group min-w-0">
                 <div className="aspect-square overflow-hidden rounded-[22px] bg-muted shadow-[0_12px_35px_oklch(0.3_0.02_250/0.08)]">
                   {release.artworkUrl ? (
@@ -325,7 +407,7 @@ export default async function DashboardHomePage() {
                   )}
                 </div>
                 <p className="mt-3 truncate font-semibold">{releaseTitleLabel(release.title)}</p>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">{release.artist?.name ?? "Artist not assigned"}</p>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">{release.artistName}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={release.status} /><span className="text-xs text-muted-foreground">{release.contentType}</span></div>
               </Link>
             ))}
@@ -363,6 +445,37 @@ function SectionHeading({ title, href, action }: { title: string; href: string; 
       <h2 className="text-2xl font-semibold tracking-[-0.035em]">{title}</h2>
       <Link href={href} className="inline-flex items-center gap-1 text-sm font-semibold text-foreground hover:text-[#6256e5]">{action}<ArrowRight size={14} weight="bold" /></Link>
     </div>
+  );
+}
+
+function SnapshotCard({
+  href,
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-36 flex-col justify-between rounded-[22px] border border-border/80 bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-[#776bff]/30 hover:shadow-[0_14px_36px_oklch(0.3_0.02_250/0.07)]"
+    >
+      <div className="flex items-center justify-between text-muted-foreground">
+        <span className="grid size-9 place-items-center rounded-xl bg-muted">{icon}</span>
+        <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+      </div>
+      <div className="mt-5 min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="mt-1 truncate text-xl font-semibold tracking-[-0.025em]">{value}</p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </Link>
   );
 }
 
