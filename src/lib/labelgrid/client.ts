@@ -16,6 +16,24 @@ export class LabelGridApiError extends Error {
   }
 }
 
+/** Turn LabelGrid's documented validation body into safe, useful UI text. */
+export function labelGridApiErrorMessage(error: LabelGridApiError): string {
+  const body = error.body;
+  if (!body || typeof body !== "object") return error.message;
+  const payload = body as { message?: unknown; errors?: unknown };
+  const details: string[] = [];
+  if (payload.errors && typeof payload.errors === "object") {
+    for (const [field, messages] of Object.entries(payload.errors)) {
+      if (!Array.isArray(messages)) continue;
+      for (const message of messages) {
+        if (typeof message === "string") details.push(`${field}: ${message}`);
+      }
+    }
+  }
+  if (details.length > 0) return details.join(" · ");
+  return typeof payload.message === "string" ? payload.message : error.message;
+}
+
 type RequestOptions = {
   method?: string;
   body?: unknown;

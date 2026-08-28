@@ -3,6 +3,7 @@ import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { ensureLabelGridReleaseForSubmit } from "@/lib/labelgrid/sync-submit";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { withSubmissionLock } from "@/lib/releases/submission-lock";
+import { LabelGridApiError, labelGridApiErrorMessage } from "@/lib/labelgrid/client";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,7 +43,9 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
+          error instanceof LabelGridApiError
+            ? labelGridApiErrorMessage(error)
+            : error instanceof Error
             ? error.message
             : "Could not create the release on LabelGrid.",
       },

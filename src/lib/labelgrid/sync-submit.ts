@@ -977,7 +977,9 @@ async function buildReleaseBody(
   const body: Record<string, unknown> = {
     content_type: release.contentType,
     label_id: input.labelId,
-    cat: release.catalogNumber,
+    // ReleaseUpdateData allows an optional string, but not null. Sending
+    // Prisma's null here caused PATCH /releases/{id} to fail with 422.
+    cat: release.catalogNumber || undefined,
     artwork_ai_usage: release.artworkAiUsage,
     primary_genre_id: input.primaryGenreId,
     preferred_localization: input.locale,

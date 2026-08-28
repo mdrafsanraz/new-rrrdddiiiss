@@ -3,13 +3,11 @@
 /**
  * Release Builder — Release → Distribution → Tracks → Credits → Review.
  *
- * Network model: Steps 1-4 are LOCAL DATA ENTRY ONLY. Every "Continue"
- * click (and Save & Exit) saves metadata to the RDISTRO database — title,
- * tracks, contributors, splits, license documents — but NEVER touches
- * LabelGrid: no release/track is created or updated there, and artwork/
- * audio files stay as in-memory File objects in this component's state,
- * never uploaded anywhere, until the user reaches Step 5 and clicks
- * "Submit Release". That single action drives the whole LabelGrid sync
+ * Network model: new releases checkpoint draft metadata between steps so
+ * they are resumable. Existing-release edits stay in browser state and are
+ * checkpointed only after the user explicitly clicks "Submit Release".
+ * Artwork/audio files stay as in-memory File objects until submission.
+ * That single action drives the whole LabelGrid sync
  * (create release → upload artwork → create tracks → upload audio → wait
  * for processing → sync credits) through <SubmissionProgress>, which is
  * resumable and idempotent — see /api/releases/[id]/submit/*.
@@ -18,7 +16,6 @@
  * stores ownership, mapping ids, and workflow state only.
  */
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, WarningCircle, Check } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -344,8 +341,8 @@ export function ReleaseBuilder({
   /** Pre-fill wizard when editing an existing release. */
   initialWizard?: WizardState;
 }) {
-  const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const isEditing = Boolean(initialWizard?.releaseId);
   const errorRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<WizardState>(
     initialWizard ?? initialState(artists, defaultArtistId)
@@ -365,6 +362,7 @@ export function ReleaseBuilder({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [continuing, setContinuing] = useState(false);
   const [submissionStarted, setSubmissionStarted] = useState(false);
+  const [preparingSubmission, setPreparingSubmission] = useState(false);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
 
   // Live LabelGrid catalogs — nothing in the wizard hardcodes these.
@@ -505,8 +503,8 @@ export function ReleaseBuilder({
       }
 
       const release = data.release;
-      setState((prev) => {
-        const byClient = new Map(prev.tracks.map((t) => [t.clientId, t]));
+      const prev = stateRef.current;
+      const byClient = new Map(prev.tracks.map((t) => [t.clientId, t]));
         const nextTracks: WizardTrack[] =
           Array.isArray(release.tracks) && release.tracks.length
             ? release.tracks.map(
@@ -535,8 +533,9 @@ export function ReleaseBuilder({
                 licenseFile: t.licenseFile ? null : t.licenseFile,
               }));
 
-        return { ...prev, releaseId: release.id, tracks: nextTracks };
-      });
+      const nextState = { ...prev, releaseId: release.id, tracks: nextTracks };
+      stateRef.current = nextState;
+      setState(nextState);
 
       setSaveStatus("saved");
       return { ok: true };
@@ -562,15 +561,18 @@ export function ReleaseBuilder({
 
     setContinuing(true);
     try {
-      // Every step transition saves metadata locally — never LabelGrid.
-      const result = state.releaseId
-        ? await saveDraft(stateRef.current)
-        : await createDraft(stateRef.current);
-      if (!result.ok) {
-        setError(
-          result.error ?? "Could not save your progress. Please try again."
-        );
-        return;
+      // New releases remain resumable drafts. Existing-release edits stay
+      // browser-only until the user explicitly clicks Submit Release.
+      if (!isEditing) {
+        const result = state.releaseId
+          ? await saveDraft(stateRef.current)
+          : await createDraft(stateRef.current);
+        if (!result.ok) {
+          setError(
+            result.error ?? "Could not save your progress. Please try again."
+          );
+          return;
+        }
       }
 
       setState((prev) => {
@@ -593,28 +595,15 @@ export function ReleaseBuilder({
     }
   }
 
-  async function saveAndExit() {
-    setError("");
-    // Nothing exists anywhere until Distribution completes — no row to save.
-    if (state.releaseId) {
-      const result = await saveDraft(stateRef.current);
-      if (!result.ok) {
-        setError(result.error ?? "Could not save your changes. Please try again.");
-        return;
-      }
-    }
-    router.push("/dashboard/releases");
-  }
-
   /**
-   * Step 5's Submit button — purely a client-side validation gate. All
-   * data through Step 4 is already saved locally (every Continue click
-   * saves it); there's nothing left to persist here. Once validated, this
+   * Step 5's Submit button validates all steps. New-release drafts have
+   * already checkpointed between steps; edits checkpoint once here so the
+   * server-side submission stages receive one coherent payload. It then
    * hands off to <SubmissionProgress>, which drives the entire LabelGrid
    * sync (create release → artwork → tracks → audio → processing →
    * credits → finalize).
    */
-  function beginSubmission() {
+  async function beginSubmission() {
     setError("");
     const msg = validateStep(state, STEP_REVIEW, roleCategories);
     if (msg) {
@@ -630,10 +619,19 @@ export function ReleaseBuilder({
       }
     }
     if (!state.releaseId) {
-      setError("Draft missing — try Save & Exit, then reopen.");
+      setError("Draft missing — return to your releases and reopen this draft.");
       return;
     }
-    if (state.tracks.some((t) => !t.id)) {
+    if (isEditing) {
+      setPreparingSubmission(true);
+      const result = await saveDraft(stateRef.current);
+      setPreparingSubmission(false);
+      if (!result.ok) {
+        setError(result.error ?? "Could not prepare these changes for submission.");
+        return;
+      }
+    }
+    if (stateRef.current.tracks.some((t) => !t.id)) {
       setError("Your tracks are still saving — please wait a moment and try again.");
       return;
     }
@@ -687,15 +685,6 @@ export function ReleaseBuilder({
               </span>
             ) : saveStatus === "error" ? (
               <span className="text-destructive">Save failed</span>
-            ) : null}
-            {!submissionStarted ? (
-              <button
-                type="button"
-                onClick={() => void saveAndExit()}
-                className="cursor-pointer font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              >
-                Save & Exit
-              </button>
             ) : null}
           </div>
         </div>
@@ -825,9 +814,10 @@ export function ReleaseBuilder({
                 <Button
                   type="button"
                   className="h-11 px-5"
-                  onClick={beginSubmission}
+                  loading={preparingSubmission}
+                  onClick={() => void beginSubmission()}
                 >
-                  Submit Release
+                  {preparingSubmission ? "Preparing…" : "Submit Release"}
                 </Button>
               )}
             </div>

@@ -95,9 +95,8 @@ export default async function EditReleasePage({ params }: Props) {
               Edit release
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Update metadata and re-upload artwork or audio. Your progress
-              saves when you continue past Distribution and Credits — submit
-              for review when ready.
+              Update metadata and re-upload artwork or audio. Changes stay in
+              this editor until you click Submit Release.
             </p>
           </div>
           <div className="flex size-12 items-center justify-center border border-border bg-primary/10 text-primary">
