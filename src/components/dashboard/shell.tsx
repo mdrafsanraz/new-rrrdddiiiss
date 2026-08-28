@@ -22,7 +22,6 @@ import { useState, type ComponentType } from "react";
 import AnimatedBrandLogo from "@/components/site/logo";
 import { dashboardNav } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button-variants";
 
 type PhosphorIcon = ComponentType<{ className?: string; weight?: "bold" | "regular" | "fill" }>;
 
@@ -156,11 +155,6 @@ export function DashboardShell({
                 <List className="size-5" weight="bold" />
               </button>
               <AnimatedBrandLogo className="h-8 w-auto" gradientId="dashMobileWave" />
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "h-9 px-4 text-sm")}>
-                New release
-              </Link>
             </div>
           </header>
 

@@ -10,13 +10,17 @@ import { cn } from "@/lib/utils";
 import { ReleasesFilter } from "@/components/dashboard/releases-filter";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip } from "@/components/ui/tooltip";
-import { statusesForUserFacingFilter } from "@/lib/releases/status";
+import {
+  statusesForUserFacingFilter,
+  type ReleaseStatusValue,
+} from "@/lib/releases/status";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
   fetchLiveReleaseSummary,
   withTimeout,
   type LiveReleaseSummary,
 } from "@/lib/labelgrid/live-release";
+import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 
 /**
  * Best-effort live overlay for the list view — LabelGrid is the source of
@@ -34,6 +38,41 @@ async function fetchLiveSummaries(
   const map = new Map<string, LiveReleaseSummary>();
   results.forEach((r, i) => {
     if (r.status === "fulfilled") map.set(labelgridIds[i], r.value);
+  });
+  return map;
+}
+
+/**
+ * Same reconciliation the detail page runs on every visit, applied here so
+ * status pills on the list are current too. `deep: false` skips the extra
+ * delivery-status fetch per release (that page loads one release at a
+ * time; this one loads N) — review-status reconciliation still happens for
+ * every release that has passed internal review, which is what drives
+ * status transitions. Best-effort: a slow/failed reconcile for one release
+ * just leaves its last-synced status showing, same fallback as the live
+ * overlay above.
+ */
+async function reconcileStatuses(
+  releases: { id: string; labelgridId: string | null }[]
+): Promise<Map<string, ReleaseStatusValue>> {
+  if (!isLabelGridLive()) return new Map();
+  const targets = releases.filter(
+    (r): r is { id: string; labelgridId: string } => Boolean(r.labelgridId)
+  );
+  if (targets.length === 0) return new Map();
+  const results = await Promise.allSettled(
+    targets.map((r) =>
+      withTimeout(
+        reconcileLabelGridReleaseStatus(r.id, { deep: false }),
+        4000
+      )
+    )
+  );
+  const map = new Map<string, ReleaseStatusValue>();
+  results.forEach((res, i) => {
+    if (res.status === "fulfilled" && res.value.ok && res.value.status) {
+      map.set(targets[i].id, res.value.status);
+    }
   });
   return map;
 }
@@ -84,11 +123,14 @@ export default async function ReleasesPage({ searchParams }: Props) {
     getUserUsage(user.id, user.planId),
   ]);
 
-  const liveByLabelgridId = await fetchLiveSummaries(
-    releases
-      .map((r) => r.labelgridId)
-      .filter((id): id is string => Boolean(id))
-  );
+  const [liveByLabelgridId, statusByReleaseId] = await Promise.all([
+    fetchLiveSummaries(
+      releases
+        .map((r) => r.labelgridId)
+        .filter((id): id is string => Boolean(id))
+    ),
+    reconcileStatuses(releases),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -153,6 +195,7 @@ export default async function ReleasesPage({ searchParams }: Props) {
                 const live = r.labelgridId
                   ? liveByLabelgridId.get(r.labelgridId)
                   : undefined;
+                const status = statusByReleaseId.get(r.id) ?? r.status;
                 const title = live?.title ?? r.title;
                 const artworkUrl = live?.coverUrl ?? r.artworkUrl;
                 const artistName = live?.artist ?? r.artist?.name ?? "No artist";
@@ -190,7 +233,7 @@ export default async function ReleasesPage({ searchParams }: Props) {
                             {title}
                           </p>
                           <span className="sm:hidden">
-                            <StatusBadge status={r.status} />
+                            <StatusBadge status={status} />
                           </span>
                         </div>
                         <p className="mt-1 truncate text-sm text-muted-foreground">
