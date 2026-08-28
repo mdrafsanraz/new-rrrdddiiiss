@@ -280,7 +280,6 @@ export function SubmissionProgress({
         audioProcessingError: string | null;
         creditsSynced: boolean;
       };
-      const releaseAlreadyCreated = Boolean(statusData.release?.hasLabelGridId);
       const artworkAlreadyDone = Boolean(statusData.release?.hasArtwork);
       const trackServerState = new Map<string, ServerTrackStatus>(
         (statusData.tracks ?? []).map(
@@ -298,13 +297,20 @@ export function SubmissionProgress({
         const processingFailed = !s.hasAudioUrl && Boolean(s.audioProcessingError);
         return {
           ...t,
-          createStatus: s.hasLabelGridId ? "completed" : t.createStatus,
-          audioStatus: s.hasAudioUrl
+          // Stage 4 is deliberately re-run even when the track already has
+          // a LabelGrid id. The server uses that id to PATCH current track
+          // metadata; it only POSTs for a genuinely new local track.
+          createStatus: "waiting",
+          audioStatus: t.audioFile
+            ? "waiting"
+            : s.hasAudioUrl
             ? "completed"
             : processingFailed
               ? "waiting"
               : t.audioStatus,
-          processStatus: s.hasAudioUrl
+          processStatus: t.audioFile
+            ? "waiting"
+            : s.hasAudioUrl
             ? "completed"
             : processingFailed
               ? "waiting"
@@ -329,29 +335,29 @@ export function SubmissionProgress({
       }
       setValidateStatus("completed");
 
-      // ---- Stage 2: Create Release ----
-      let lgReleaseCreated = releaseAlreadyCreated;
-      if (releaseAlreadyCreated) {
-        setReleaseStatus("completed");
-      } else {
-        setReleaseStatus("processing");
-        const res = await fetch(`/api/releases/${releaseId}/submit/release`, {
-          method: "POST",
-        });
-        const data = await res.json();
-        if (stale()) return;
-        if (!res.ok) {
-          setReleaseStatus("failed");
-          setReleaseError(data.error ?? "Could not create the release on LabelGrid.");
-          return;
-        }
-        setReleaseStatus("completed");
-        lgReleaseCreated = true;
+      // ---- Stage 2: Create or PATCH Release ----
+      // Always invoke the idempotent server stage. When labelgridId exists,
+      // ensureLabelGridReleaseForSubmit PATCHes that exact LabelGrid release;
+      // it only creates a release when no mapping exists yet.
+      setReleaseStatus("processing");
+      setReleaseError(null);
+      const releaseRes = await fetch(`/api/releases/${releaseId}/submit/release`, {
+        method: "POST",
+      });
+      const releaseData = await releaseRes.json();
+      if (stale()) return;
+      if (!releaseRes.ok) {
+        setReleaseStatus("failed");
+        setReleaseError(
+          releaseData.error ?? "Could not sync the release with LabelGrid."
+        );
+        return;
       }
-      if (!lgReleaseCreated) return;
+      setReleaseStatus("completed");
 
       // ---- Stage 3: Upload Artwork ----
-      if (artworkAlreadyDone) {
+      // Existing artwork is retained unless the editor selected a new file.
+      if (artworkAlreadyDone && !artworkFileRef.current) {
         setArtworkStatus("completed");
         setArtworkPct(100);
       } else {
@@ -391,10 +397,9 @@ export function SubmissionProgress({
         }
       }
 
-      // ---- Stage 4: Create Tracks ----
+      // ---- Stage 4: Create or PATCH Tracks ----
       for (const t of tracksRef.current) {
         if (stale()) return;
-        if (t.createStatus === "completed") continue;
         patchTrack(t.id, { createStatus: "processing", createError: null });
         const res = await fetch(
           `/api/releases/${releaseId}/submit/tracks/${t.id}`,

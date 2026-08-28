@@ -9,15 +9,14 @@
  * into LabelGrid's own review queue (ever_submitted=true) but never
  * actually delivered anywhere yet has nothing to take down; it should
  * still be deletable (or edited) like any other not-yet-distributed
- * release. Confirmed against the live behavior report: an "in review"
- * release (admin-approved, awaiting LabelGrid's own review, not yet
- * delivered) needs to stay Delete-eligible, not get funneled into
- * Takedown prematurely.
+ * release. RDISTRO review is an explicit exception: while a release is in
+ * review it exposes neither Delete nor Takedown. It must leave review before
+ * another destructive lifecycle action becomes available.
  *
- *   Never delivered (draft, in RDISTRO/LabelGrid review, etc.) → Delete Release
- *                            (DELETE /releases/{release})
- *   Delivering / ever delivered / live / action needed → Request Takedown
- *                            (POST /releases/{release}/takedown-all)
+ *   Never delivered draft → Delete Release (DELETE /releases/{release})
+ *   In RDISTRO/LabelGrid review → No destructive action
+ *   Delivering / delivered / live → Request Takedown
+ *                                    (POST /releases/{release}/takedown-all)
  *
  * The two actions are mutually exclusive by construction — never both true.
  */
@@ -33,9 +32,15 @@ export function computeReleaseLifecycleActions(input: {
   everDelivered: boolean | null | undefined;
   /** GET /releases/{id}/delivery-status .state — null when never checked. */
   deliveryState: string | null | undefined;
+  /** RDISTRO's user-facing review state overrides pre-delivery deletion. */
+  isInReview?: boolean;
 }): ReleaseLifecycleActions {
   const everDelivered = Boolean(input.everDelivered);
   const state = input.deliveryState ?? null;
+
+  if (input.isInReview) {
+    return { canDelete: false, canTakedown: false, takedownDisabledReason: null };
+  }
 
   if (state === "removed") {
     return {

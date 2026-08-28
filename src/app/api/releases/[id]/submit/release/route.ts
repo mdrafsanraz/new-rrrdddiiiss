@@ -7,11 +7,12 @@ import { withSubmissionLock } from "@/lib/releases/submission-lock";
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * Stage 2 (Create Release). Idempotent: ensureLabelGridReleaseForSubmit
- * skips straight to returning the existing id if release.labelgridId is
- * already set — never creates a second LabelGrid release for the same
- * RDISTRO row. Wrapped in the submission lock so two concurrent requests
- * (double-click, two tabs) can't both race past that check.
+ * Stage 2 (Create or update Release). Idempotent:
+ * ensureLabelGridReleaseForSubmit PATCHes the mapped release whenever
+ * release.labelgridId is already set, and only POSTs when no mapping exists.
+ * This guarantees an edit updates the same LabelGrid release instead of
+ * creating a duplicate. Wrapped in the submission lock so concurrent runs
+ * cannot race while creating the first mapping.
  */
 export async function POST(_request: Request, { params }: Params) {
   const { id } = await params;

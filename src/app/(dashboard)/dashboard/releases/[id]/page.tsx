@@ -94,28 +94,13 @@ export default async function ReleaseDetailPage({ params }: Props) {
   if (!release) notFound();
 
   // ---------------------------------------------------------------------
-  // Status synchronization — UNCHANGED. Do not modify this block.
-  const normalized = normalizeReleaseStatus(release.status);
-  if (
-    isLabelGridLive() &&
-    release.labelgridId &&
-    !release.lastSyncedAt &&
-    [
-      "labelgrid_in_review",
-      "labelgrid_changes_required",
-      "labelgrid_approved",
-      "delivering",
-      "live",
-      "submitting_to_labelgrid",
-    ].includes(normalized)
-  ) {
+  // Refresh the persisted RDISTRO status from LabelGrid on every release-page
+  // request. lastSyncedAt is an audit timestamp, not a one-time sync flag.
+  // The reconciliation function owns all status mapping and protects local
+  // internal-review states from being overwritten by a LabelGrid draft.
+  if (isLabelGridLive() && release.labelgridId) {
     try {
-      await Promise.race([
-        reconcileLabelGridReleaseStatus(release.id, { deep: true }),
-        new Promise<{ ok: false }>((resolve) =>
-          setTimeout(() => resolve({ ok: false }), 2500)
-        ),
-      ]);
+      await reconcileLabelGridReleaseStatus(release.id, { deep: true });
       release =
         (await prisma.release.findFirst({
           where: { id, userId: user.id },
@@ -230,6 +215,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
     computeReleaseLifecycleActions({
       everDelivered,
       deliveryState: delivery?.state ?? null,
+      isInReview: facing === "in_review",
     });
 
   const trackDurationsByLgId: Record<number, number | null> = {};

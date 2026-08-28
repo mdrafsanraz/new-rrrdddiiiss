@@ -5,6 +5,7 @@ import { deleteRelease, getReleaseDeliveryStatus } from "@/lib/labelgrid";
 import { LabelGridApiError } from "@/lib/labelgrid/client";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
+import { getUserFacingReleaseStatus } from "@/lib/releases/status";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -29,6 +30,14 @@ export async function POST(_request: Request, { params }: Params) {
   });
   if (!release) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const isInReview = getUserFacingReleaseStatus(release.status) === "in_review";
+  if (isInReview) {
+    return NextResponse.json(
+      { error: "A release that is in review cannot be deleted." },
+      { status: 409 }
+    );
   }
 
   if (!release.labelgridId) {
@@ -56,6 +65,7 @@ export async function POST(_request: Request, { params }: Params) {
     const { canDelete } = computeReleaseLifecycleActions({
       everDelivered: delivery?.ever_delivered,
       deliveryState: delivery?.state ?? null,
+      isInReview,
     });
     if (!canDelete) {
       return NextResponse.json(
