@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { AnalyticsIllustration } from "@/components/site/illustrations";
 import { LoginForm } from "@/components/site/login-form";
 import { Reveal } from "@/components/site/reveal";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: "Login",
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  if (await getSessionUser()) redirect("/dashboard");
   return (
     <section className="mx-auto grid max-w-7xl items-center gap-14 px-6 py-16 md:py-24 lg:grid-cols-2">
       <Reveal>

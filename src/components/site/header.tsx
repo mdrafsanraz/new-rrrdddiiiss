@@ -15,7 +15,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SiteHeader() {
+export function SiteHeader({ authenticated = false }: { authenticated?: boolean }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
@@ -41,15 +41,14 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-2.5 lg:flex">
-          <Link
-            href="/login"
-            className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-4")}
-          >
-            Login
-          </Link>
-          <Link href="/signup" className={cn(buttonVariants(), "h-10 px-5")}>
-            Sign up
-          </Link>
+          {authenticated ? (
+            <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "h-10 px-5")}>Start distributing</Link>
+          ) : (
+            <>
+              <Link href="/login" className={cn(buttonVariants({ variant: "ghost" }), "h-10 px-4")}>Login</Link>
+              <Link href="/signup" className={cn(buttonVariants(), "h-10 px-5")}>Sign up</Link>
+            </>
+          )}
         </div>
 
         <button
@@ -97,20 +96,14 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
-              <Link
-                href="/login"
-                className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={() => setOpen(false)}
-              >
-                Login
-              </Link>
-              <Link
-                href="/signup"
-                className={cn(buttonVariants(), "mt-2 h-11 w-full")}
-                onClick={() => setOpen(false)}
-              >
-                Sign up
-              </Link>
+              {authenticated ? (
+                <Link href="/dashboard/releases/new" className={cn(buttonVariants(), "mt-2 h-11 w-full")} onClick={() => setOpen(false)}>Start distributing</Link>
+              ) : (
+                <>
+                  <Link href="/login" className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setOpen(false)}>Login</Link>
+                  <Link href="/signup" className={cn(buttonVariants(), "mt-2 h-11 w-full")} onClick={() => setOpen(false)}>Sign up</Link>
+                </>
+              )}
             </nav>
           </motion.div>
         ) : null}

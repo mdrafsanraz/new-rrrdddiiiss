@@ -14,6 +14,7 @@ import { StoreTicker } from "@/components/site/store-ticker";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { getSessionUser } from "@/lib/auth/session";
 
 const steps = [
   {
@@ -36,7 +37,9 @@ const steps = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const authenticated = Boolean(await getSessionUser());
+  const distributeHref = authenticated ? "/dashboard/releases/new" : "/signup";
   return (
     <>
       {/* Hero */}
@@ -63,7 +66,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/signup"
+                href={distributeHref}
                 className={cn(buttonVariants(), "h-11 px-6 text-sm md:h-12 md:px-7 md:text-base")}
               >
                 Start distributing
@@ -134,10 +137,10 @@ export default function Home() {
               Three moves. Then it is live.
             </h2>
             <Link
-              href="/signup"
+              href={distributeHref}
               className={cn(buttonVariants(), "mt-8 h-12 px-6")}
             >
-              Sign up
+              Start distributing
               <ArrowRight className="size-4" weight="bold" />
             </Link>
           </Reveal>
@@ -234,7 +237,7 @@ export default function Home() {
               Ready when the mix is.
             </h2>
             <Link
-              href="/signup"
+              href={distributeHref}
               className={cn(buttonVariants(), "h-12 px-7 text-base")}
             >
               Start distributing

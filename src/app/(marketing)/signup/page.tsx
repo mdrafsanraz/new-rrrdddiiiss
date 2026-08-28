@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import {
   ChartLineUp,
   Globe,
@@ -8,6 +9,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Reveal } from "@/components/site/reveal";
 import { SignupFlow } from "@/components/site/signup-flow";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: "Sign up",
@@ -28,7 +30,8 @@ const valueProps = [
   },
 ];
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  if (await getSessionUser()) redirect("/dashboard");
   return (
     <section className="mx-auto grid max-w-7xl items-start gap-14 px-6 py-16 md:py-24 lg:grid-cols-[0.9fr_1.1fr]">
       <Reveal className="lg:sticky lg:top-28">
