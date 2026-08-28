@@ -19,11 +19,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   Check,
   CircleNotch,
+  Disc,
+  MusicNotes,
   WarningCircle,
+  Waveform,
 } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
@@ -93,16 +97,17 @@ function xhrRequest(
 
 function StatusIcon({ status }: { status: ItemStatus }) {
   return (
-    <span
+    <motion.span
+      layout
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center border text-[0]",
+        "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full border text-[0] transition-colors duration-500",
         status === "completed"
-          ? "border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400"
+          ? "border-primary bg-primary text-primary-foreground"
           : status === "failed"
             ? "border-destructive/30 bg-destructive/10 text-destructive"
             : status === "processing"
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-border bg-muted"
+              ? "border-primary/50 bg-primary/12 text-primary shadow-[0_0_0_5px_color-mix(in_oklch,var(--primary)_10%,transparent)]"
+              : "border-border bg-card text-muted-foreground"
       )}
       aria-hidden
     >
@@ -111,9 +116,11 @@ function StatusIcon({ status }: { status: ItemStatus }) {
       ) : status === "failed" ? (
         <WarningCircle size={12} weight="bold" />
       ) : status === "processing" ? (
-        <CircleNotch size={12} weight="bold" className="animate-spin" />
-      ) : null}
-    </span>
+        <CircleNotch size={14} weight="bold" className="animate-spin" />
+      ) : (
+        <span className="size-1.5 rounded-full bg-current opacity-40" />
+      )}
+    </motion.span>
   );
 }
 
@@ -129,13 +136,20 @@ function StageRow({
   pct?: number | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 py-1.5">
-      <div className="flex items-center gap-2.5">
+    <motion.div
+      layout
+      className={cn(
+        "relative flex flex-col gap-2 rounded-xl px-3 py-2.5 transition-colors duration-500",
+        status === "processing" && "bg-primary/[0.055]",
+        status === "failed" && "bg-destructive/[0.045]"
+      )}
+    >
+      <div className="flex items-center gap-3">
         <StatusIcon status={status} />
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "text-sm",
+              "text-sm transition-colors duration-500",
               status === "completed"
                 ? "text-muted-foreground"
                 : status === "failed"
@@ -150,20 +164,22 @@ function StageRow({
           {detail ? <p className="text-xs text-destructive">{detail}</p> : null}
         </div>
         {typeof pct === "number" && status === "processing" ? (
-          <span className="tabular-nums text-xs font-medium text-muted-foreground">
+          <span className="font-mono text-xs font-semibold tabular-nums text-primary">
             {Math.round(pct)}%
           </span>
         ) : null}
       </div>
       {typeof pct === "number" && status === "processing" ? (
-        <div className="ml-[30px] h-1 overflow-hidden bg-muted">
-          <div
-            className="h-full bg-primary transition-[width] duration-300 ease-linear"
-            style={{ width: `${Math.max(pct, 4)}%` }}
+        <div className="ml-10 h-1.5 overflow-hidden rounded-full bg-primary/10">
+          <motion.div
+            className="h-full rounded-full bg-primary"
+            initial={false}
+            animate={{ width: `${Math.max(pct, 2)}%` }}
+            transition={{ duration: 0.28, ease: "linear" }}
           />
         </div>
       ) : null}
-    </div>
+    </motion.div>
   );
 }
 
@@ -592,70 +608,122 @@ export function SubmissionProgress({
     return "waiting";
   };
 
+  const createTracksStatus = trackStageStatus("createStatus");
+  const uploadAudioStatus = trackStageStatus("audioStatus");
+  const processAudioStatus = trackStageStatus("processStatus");
+  const creditsStatus = trackStageStatus("creditsStatus");
+  const stageStatuses = [
+    validateStatus,
+    releaseStatus,
+    artworkStatus,
+    createTracksStatus,
+    uploadAudioStatus,
+    processAudioStatus,
+    creditsStatus,
+    finalizeStatus,
+  ];
+  const completedStages = stageStatuses.filter((status) => status === "completed").length;
+
   if (succeeded) {
     return (
-      <motion.div
-        className="space-y-6 border border-border bg-card p-8 text-center"
-        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      >
+      <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-foreground/70 p-4 backdrop-blur-md">
         <motion.div
-          className="mx-auto flex size-12 items-center justify-center border border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400"
-          initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.1, type: "spring", stiffness: 380, damping: 24 }}
+          className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-card p-8 text-center shadow-[0_40px_120px_color-mix(in_oklch,var(--foreground)_38%,transparent)] sm:p-12"
+          initial={reduceMotion ? false : { opacity: 0, transform: "scale(.94) translateY(16px)" }}
+          animate={{ opacity: 1, transform: "scale(1) translateY(0)" }}
+          transition={{ type: "spring", bounce: 0.18, visualDuration: 0.5 }}
         >
-          <Check size={22} weight="bold" aria-hidden />
-        </motion.div>
-        <div>
-          <p className="text-lg font-semibold">Release submitted successfully</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your release has been submitted to RDISTRO for review.
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_50%_0%,color-mix(in_oklch,var(--primary)_22%,transparent),transparent_68%)]" />
+          <motion.div
+            className="relative mx-auto flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_0_0_10px_color-mix(in_oklch,var(--primary)_10%,transparent)]"
+            initial={reduceMotion ? false : { transform: "scale(.5)", opacity: 0 }}
+            animate={{ transform: "scale(1)", opacity: 1 }}
+            transition={{ delay: 0.12, type: "spring", bounce: 0.35, visualDuration: 0.55 }}
+          >
+            <Check size={28} weight="bold" aria-hidden />
+          </motion.div>
+          <p className="relative mt-7 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+            Delivery initiated
           </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <Button
-            type="button"
-            className="h-10 px-5"
-            onClick={() => router.push(`/dashboard/releases/${releaseId}`)}
-          >
-            View Release
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-5"
-            onClick={() => router.push("/dashboard/releases")}
-          >
-            Back to My Releases
-          </Button>
-        </div>
-      </motion.div>
+          <h2 className="relative mt-2 text-3xl font-semibold tracking-[-0.04em]">
+            Your release is in motion
+          </h2>
+          <p className="relative mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+            “{title || "Your release"}” has been submitted to RDISTRO for review.
+          </p>
+          <div className="relative mt-8 flex flex-col justify-center gap-2 sm:flex-row">
+            <Button type="button" className="h-11 px-6" onClick={() => router.push(`/dashboard/releases/${releaseId}`)}>
+              View release <ArrowRight size={16} weight="bold" />
+            </Button>
+            <Button type="button" variant="outline" className="h-11 px-6" onClick={() => router.push("/dashboard/releases")}>
+              My releases
+            </Button>
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
   return (
-    <div className="border border-border bg-card" role="status" aria-live="polite">
-      <div className="border-b border-border p-6">
-        <p className="text-base font-semibold">Submitting your release</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Please keep this page open while we prepare “{title || "your release"}”.
-        </p>
-      </div>
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-foreground/70 p-3 backdrop-blur-md sm:p-6" role="status" aria-live="polite">
+      <motion.div
+        className="mx-auto my-2 grid min-h-[calc(100dvh-2.5rem)] w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-card shadow-[0_40px_120px_color-mix(in_oklch,var(--foreground)_42%,transparent)] lg:my-6 lg:min-h-0 lg:grid-cols-[0.78fr_1.22fr]"
+        initial={reduceMotion ? false : { opacity: 0, transform: "scale(.97) translateY(18px)" }}
+        animate={{ opacity: 1, transform: "scale(1) translateY(0)" }}
+        transition={{ type: "spring", bounce: 0.12, visualDuration: 0.52 }}
+      >
+        <section className="relative isolate overflow-hidden bg-foreground p-6 text-background sm:p-9 lg:flex lg:flex-col lg:justify-between">
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_5%_5%,color-mix(in_oklch,var(--primary)_48%,transparent),transparent_42%)]" />
+          <div className="pointer-events-none absolute -right-20 bottom-12 -z-10 size-64 rounded-full border border-background/10" />
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="flex size-10 items-center justify-center rounded-xl border border-background/15 bg-background/8">
+                <Disc size={21} weight="duotone" />
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-background/45">
+                Step 5 of 5
+              </span>
+            </div>
+            <p className="mt-10 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Release transfer</p>
+            <h2 className="mt-3 max-w-sm text-3xl font-semibold leading-[1.05] tracking-[-0.045em] sm:text-4xl">
+              Sending your music out into the world.
+            </h2>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-background/60">
+              Keep this window open. Every completed stage is safely saved, so a retry always resumes where it stopped.
+            </p>
+          </div>
+          <div className="mt-10 border-t border-background/12 pt-5">
+            <p className="truncate text-sm font-medium">{title || "Untitled release"}</p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-background/45">
+              <Waveform size={15} weight="bold" />
+              <span>{tracksState.length} {tracksState.length === 1 ? "track" : "tracks"}</span>
+              <span className="text-background/20">/</span>
+              <span>{completedStages} of 8 stages complete</span>
+            </div>
+          </div>
+        </section>
 
-      <div className="divide-y divide-border">
-        <div className="px-6 py-3">
+        <section className="flex min-h-0 flex-col bg-card">
+          <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-5 sm:px-8 sm:py-6">
+            <div>
+              <p className="text-lg font-semibold tracking-tight">Submitting your release</p>
+              <p className="mt-1 text-sm text-muted-foreground">Live status from RDISTRO distribution services</p>
+            </div>
+            <MusicNotes className="mt-0.5 size-5 text-primary" weight="duotone" />
+          </header>
+
+          <motion.div layout className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
+          <div>
           <StageRow
             status={validateStatus}
             label="Preparing release"
             detail={validateErrors[0] ?? null}
           />
         </div>
-        <div className="px-6 py-3">
+        <div>
           <StageRow status={releaseStatus} label="Creating release" detail={releaseError} />
         </div>
-        <div className="px-6 py-3">
+        <div>
           <StageRow
             status={artworkStatus}
             label="Uploading artwork"
@@ -663,10 +731,10 @@ export function SubmissionProgress({
             pct={artworkPct}
           />
         </div>
-        <div className="px-6 py-3">
-          <StageRow status={trackStageStatus("createStatus")} label="Creating tracks" />
-          {tracksState.length > 1 || trackStageStatus("createStatus") !== "waiting" ? (
-            <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
+        <div>
+          <StageRow status={createTracksStatus} label="Creating tracks" />
+          {tracksState.length > 1 || createTracksStatus !== "waiting" ? (
+            <AnimatePresence initial={false}><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="ml-7 space-y-0.5 border-l border-border pl-3">
               {tracksState.map((t) => (
                 <StageRow
                   key={t.id}
@@ -675,12 +743,12 @@ export function SubmissionProgress({
                   detail={t.createError}
                 />
               ))}
-            </div>
+            </motion.div></AnimatePresence>
           ) : null}
         </div>
-        <div className="px-6 py-3">
-          <StageRow status={trackStageStatus("audioStatus")} label="Uploading audio" />
-          <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
+        <div>
+          <StageRow status={uploadAudioStatus} label="Uploading audio" />
+          <div className="ml-7 space-y-0.5 border-l border-border pl-3">
             {tracksState.map((t) => (
               <StageRow
                 key={t.id}
@@ -692,9 +760,9 @@ export function SubmissionProgress({
             ))}
           </div>
         </div>
-        <div className="px-6 py-3">
-          <StageRow status={trackStageStatus("processStatus")} label="Processing audio" />
-          <div className="mt-1.5 ml-[30px] space-y-1 border-l border-border pl-3.5">
+        <div>
+          <StageRow status={processAudioStatus} label="Processing audio" />
+          <div className="ml-7 space-y-0.5 border-l border-border pl-3">
             {tracksState.map((t) => (
               <StageRow
                 key={t.id}
@@ -705,16 +773,16 @@ export function SubmissionProgress({
             ))}
           </div>
         </div>
-        <div className="px-6 py-3">
-          <StageRow status={trackStageStatus("creditsStatus")} label="Credits & rights" />
+        <div>
+          <StageRow status={creditsStatus} label="Credits & rights" />
         </div>
-        <div className="px-6 py-3">
+        <div>
           <StageRow status={finalizeStatus} label="Finalizing" detail={finalizeError} />
         </div>
-      </div>
+          </motion.div>
 
       {pendingFile ? (
-        <div className="p-6 pt-0">
+        <div className="px-6 pb-6">
           <Callout tone="warning" icon={<WarningCircle size={18} weight="fill" aria-hidden />}>
             <p className="font-medium text-amber-900 dark:text-amber-200">
               {pendingFile.kind === "artwork"
@@ -742,7 +810,7 @@ export function SubmissionProgress({
       ) : null}
 
       {anyFailed && !pendingFile ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-5 sm:px-8">
           <p className="text-sm text-destructive">
             Something did not go through — already-completed steps will not be redone.
           </p>
@@ -761,6 +829,8 @@ export function SubmissionProgress({
           </div>
         </div>
       ) : null}
+        </section>
+      </motion.div>
     </div>
   );
 }

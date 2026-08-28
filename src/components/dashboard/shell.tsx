@@ -54,7 +54,7 @@ function NavList({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="flex flex-col gap-0.5" aria-label="Dashboard">
+    <nav className="flex flex-col gap-1" aria-label="Dashboard">
       {dashboardNav.map((item) => {
         const active =
           "exact" in item && item.exact
@@ -67,10 +67,10 @@ function NavList({
             href={item.href}
             onClick={onNavigate}
             className={cn(
-              "group flex items-center gap-2.5 border-l-2 px-3 py-2 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)]",
+              "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-[background-color,color,transform] duration-300 ease-[var(--ease-rdistro)] active:translate-y-px",
               active
-                ? "border-primary bg-primary/8 text-primary"
-                : "border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+                ? "bg-primary/12 text-foreground"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
             )}
           >
             {Icon ? (
@@ -122,9 +122,9 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-dvh bg-background">
-      <div className="mx-auto flex min-h-dvh max-w-[1400px]">
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card px-4 py-6 lg:flex">
+    <div className="dashboard-theme min-h-dvh bg-background">
+      <div className="flex min-h-dvh">
+        <aside className="hidden w-[248px] shrink-0 flex-col border-r border-border/70 bg-card/75 px-5 py-7 backdrop-blur-xl lg:flex">
           <AnimatedBrandLogo className="h-9 w-auto" gradientId="dashSideWave" />
           <div className="mt-8 flex-1">
             <NavList pathname={pathname} showAdminLink={showAdminLink} />
@@ -144,7 +144,7 @@ export function DashboardShell({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:px-8">
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-border/70 bg-background/78 px-4 backdrop-blur-xl lg:px-10">
             <div className="flex items-center gap-3 lg:hidden">
               <button
                 type="button"
@@ -164,7 +164,7 @@ export function DashboardShell({
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+          <main className="rdistro-dashboard-grid flex-1 px-4 py-6 lg:px-10 lg:py-9">{children}</main>
         </div>
       </div>
 
