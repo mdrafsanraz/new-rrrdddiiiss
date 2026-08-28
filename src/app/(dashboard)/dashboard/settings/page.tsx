@@ -4,6 +4,7 @@ import { planLabel } from "@/lib/plans";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { EditAccountForm } from "@/components/dashboard/edit-account-form";
 import { ChangePasswordForm } from "@/components/dashboard/change-password-form";
+import { SettingsTabs } from "@/components/dashboard/settings-tabs";
 import { Badge } from "@/components/ui/badge";
 import { CreditCard, Receipt } from "@phosphor-icons/react/dist/ssr";
 
@@ -76,89 +77,93 @@ export default async function SettingsPage() {
         </dl>
       </section>
 
-      <EditAccountForm
-        account={{
-          name: user.name,
-          phone: user.phone ?? "",
-          addressLine1: user.addressLine1 ?? "",
-          addressLine2: user.addressLine2 ?? "",
-          city: user.city ?? "",
-          region: user.region ?? "",
-          postalCode: user.postalCode ?? "",
-          country: user.country ?? "",
-        }}
-      />
-
-      <ChangePasswordForm />
-
-      <div className="overflow-hidden border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-5 sm:px-7">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center bg-primary/10 text-primary">
-              <CreditCard size={19} weight="duotone" />
+      <SettingsTabs
+        profile={
+          <EditAccountForm
+            account={{
+              name: user.name,
+              phone: user.phone ?? "",
+              addressLine1: user.addressLine1 ?? "",
+              addressLine2: user.addressLine2 ?? "",
+              city: user.city ?? "",
+              region: user.region ?? "",
+              postalCode: user.postalCode ?? "",
+              country: user.country ?? "",
+            }}
+          />
+        }
+        password={<ChangePasswordForm />}
+        billing={
+          <div className="overflow-hidden border border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-5 sm:px-7">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center bg-primary/10 text-primary">
+                  <CreditCard size={19} weight="duotone" />
+                </div>
+                <div>
+                  <h2 className="font-semibold">Plan &amp; billing</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Current plan and recent payments
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/subscription"
+                className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                Manage plan
+              </Link>
             </div>
-            <div>
-              <h2 className="font-semibold">Plan &amp; billing</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Current plan and recent payments
+            <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-7">
+              <p className="text-sm text-muted-foreground">
+                {planLabel(user.planId)} · status{" "}
+                <span className="capitalize">{user.stripeStatus}</span>
               </p>
             </div>
+            <div className="p-5 sm:p-7">
+              {!isStripeConfigured() ? (
+                <p className="text-sm text-muted-foreground">
+                  Billing isn&apos;t configured yet, so there&apos;s no payment history to show.
+                </p>
+              ) : invoices.length === 0 ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Receipt size={16} weight="regular" />
+                  No payments yet.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {invoices.map((inv) => (
+                    <li
+                      key={inv.id}
+                      className="flex items-center justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0"
+                    >
+                      <div>
+                        <p className="font-medium">{inv.amount}</p>
+                        <p className="text-xs text-muted-foreground">{inv.date}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge tone={invoiceStatusTone[inv.status] ?? "neutral"} className="capitalize">
+                          {inv.status}
+                        </Badge>
+                        {inv.url ? (
+                          <a
+                            href={inv.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                          >
+                            View
+                          </a>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-          <Link
-            href="/dashboard/subscription"
-            className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            Manage plan
-          </Link>
-        </div>
-        <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-7">
-          <p className="text-sm text-muted-foreground">
-            {planLabel(user.planId)} · status{" "}
-            <span className="capitalize">{user.stripeStatus}</span>
-          </p>
-        </div>
-        <div className="p-5 sm:p-7">
-          {!isStripeConfigured() ? (
-            <p className="text-sm text-muted-foreground">
-              Billing isn&apos;t configured yet, so there&apos;s no payment history to show.
-            </p>
-          ) : invoices.length === 0 ? (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Receipt size={16} weight="regular" />
-              No payments yet.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {invoices.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="flex items-center justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0"
-                >
-                  <div>
-                    <p className="font-medium">{inv.amount}</p>
-                    <p className="text-xs text-muted-foreground">{inv.date}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge tone={invoiceStatusTone[inv.status] ?? "neutral"} className="capitalize">
-                      {inv.status}
-                    </Badge>
-                    {inv.url ? (
-                      <a
-                        href={inv.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-semibold text-primary underline-offset-4 hover:underline"
-                      >
-                        View
-                      </a>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+        }
+      />
     </div>
   );
 }
