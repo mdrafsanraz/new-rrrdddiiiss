@@ -16,6 +16,7 @@ import {
 import { WalletWithdraw } from "@/components/dashboard/wallet-withdraw";
 import { AnimatedMoney } from "@/components/dashboard/animated-money";
 import { PayoutMethodPanel } from "@/components/dashboard/payout-method-panel";
+import { describePayoutDestination } from "@/lib/payout-methods";
 
 export const metadata = { title: "Wallet" };
 export const dynamic = "force-dynamic";
@@ -91,10 +92,7 @@ export default async function WalletPage({
     sourceId: transaction.sourceId,
     createdAt: transaction.createdAt.toISOString(),
   }));
-  const maskedEmail = user.payoutEmail
-    ? user.payoutEmail.replace(/^(.)(.*)(@.*)$/, "$1••••$3")
-    : null;
-  const payoutDestination = `${user.payoutMethod === "wise" ? "Wise" : user.payoutMethod === "paypal" ? "PayPal" : user.payoutMethod === "bank_transfer" ? "Bank transfer" : "No payout method"}${maskedEmail ? ` · ${maskedEmail}` : ""}`;
+  const payoutDestination = describePayoutDestination(user);
   const href = (changes: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
     const merged = {
@@ -158,12 +156,18 @@ export default async function WalletPage({
           <PayoutMethodPanel
             initial={{
               method: user.payoutMethod,
-              email: user.payoutEmail ?? user.email,
-              currency: user.payoutCurrency,
-              threshold: user.payoutThreshold,
+              email: user.payoutEmail ?? "",
+              wiseAccount: user.payoutWiseAccount ?? "",
+              bankCurrency: user.payoutBankCurrency ?? "USD",
+              bankName: user.payoutBankName ?? "",
+              bankAddress: user.payoutBankAddress ?? "",
+              bankCountry: user.payoutBankCountry ?? "",
+              accountHolderName: user.payoutBankAccountHolder ?? "",
+              accountNumber: user.payoutBankAccountNumber ?? "",
+              swiftBic: user.payoutBankSwift ?? "",
             }}
-            accountName={user.name}
-            maskedEmail={maskedEmail}
+            accountName={user.payoutBankAccountHolder ?? user.name}
+            destination={user.payoutMethod ? payoutDestination : null}
           />
         </div>
         <section className="grid overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-3 lg:col-start-1">

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Prisma, type WalletTransactionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { describePayoutDestination, payoutMethodLabel } from "@/lib/payout-methods";
 
 const ZERO = new Prisma.Decimal(0);
 const RESERVED_DEBIT_STATUSES: WalletTransactionStatus[] = [
@@ -58,21 +59,6 @@ export async function getWalletBalances(userId: string) {
   return calculateWalletBalances(groups);
 }
 
-function destinationLabel(method: string, email: string | null) {
-  const label =
-    method === "bank_transfer"
-      ? "Bank transfer"
-      : method === "paypal"
-        ? "PayPal"
-        : "Wise";
-  if (!email) return `${label} · secure destination`;
-  const [name, domain] = email.split("@");
-  const masked = domain
-    ? `${name.slice(0, 1)}•••@${domain}`
-    : "secure destination";
-  return `${label} · ${masked}`;
-}
-
 export async function requestWithdrawal(input: {
   userId: string;
   amount: Prisma.Decimal;
@@ -84,6 +70,9 @@ export async function requestWithdrawal(input: {
         select: {
           payoutMethod: true,
           payoutEmail: true,
+          payoutWiseAccount: true,
+          payoutBankName: true,
+          payoutBankAccountNumber: true,
           payoutThreshold: true,
         },
       });
@@ -115,7 +104,7 @@ export async function requestWithdrawal(input: {
       if (input.amount.gt(available))
         throw new Error("Withdrawal amount exceeds your available balance.");
       const reference = `RDP-${randomBytes(5).toString("hex").toUpperCase()}`;
-      const destination = destinationLabel(user.payoutMethod, user.payoutEmail);
+      const destination = describePayoutDestination(user);
       const withdrawal = await tx.withdrawal.create({
         data: {
           userId: input.userId,
@@ -136,7 +125,7 @@ export async function requestWithdrawal(input: {
           direction: "debit",
           sourceType: "withdrawal",
           sourceId: withdrawal.id,
-          title: `${user.payoutMethod === "bank_transfer" ? "Bank" : user.payoutMethod === "paypal" ? "PayPal" : "Wise"} Withdrawal`,
+          title: `${payoutMethodLabel(user.payoutMethod)} Withdrawal`,
           description: destination,
           status: "pending",
         },

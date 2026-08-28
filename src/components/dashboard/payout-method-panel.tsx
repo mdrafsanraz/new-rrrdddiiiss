@@ -10,33 +10,22 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { PayoutSettingsForm } from "@/components/dashboard/payout-settings-form";
+import { PayoutSettingsForm, type PayoutInitial } from "@/components/dashboard/payout-settings-form";
+import { payoutMethodLabel } from "@/lib/payout-methods";
 
 export function PayoutMethodPanel({
   initial,
   accountName,
-  maskedEmail,
+  destination,
 }: {
-  initial: {
-    method: string | null;
-    email: string;
-    currency: string;
-    threshold: number;
-  };
+  initial: PayoutInitial;
   accountName: string;
-  maskedEmail: string | null;
+  destination: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const reduceMotion = useReducedMotion();
-  const label =
-    initial.method === "wise"
-      ? "Wise"
-      : initial.method === "paypal"
-        ? "PayPal"
-        : initial.method === "bank_transfer"
-          ? "Bank transfer"
-          : "No payout method";
+  const label = payoutMethodLabel(initial.method);
   const Icon =
     initial.method === "paypal"
       ? PaypalLogo
@@ -71,17 +60,13 @@ export function PayoutMethodPanel({
           {initial.method ? (
             <dl className="mt-5 space-y-3 text-xs">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Currency</dt>
-                <dd className="font-semibold">{initial.currency}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Account holder</dt>
                 <dd className="truncate font-semibold">{accountName}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Destination</dt>
                 <dd className="font-semibold">
-                  {maskedEmail ?? "Secure onboarding"}
+                  {destination ?? "Secure onboarding"}
                 </dd>
               </div>
             </dl>

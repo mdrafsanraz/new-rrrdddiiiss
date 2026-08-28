@@ -287,13 +287,28 @@ model User {
   postalCode           String?
   country              String?
   /**
-   * Non-sensitive payout preferences. Provider account details are never stored here.
+   * Payout destination. payoutCurrency/payoutThreshold are fixed at USD/50
+   * for every account (not user-editable) — kept as columns only so
+   * lib/wallet.ts has a single source to read the minimum from.
+   * Only the fields for the active payoutMethod are populated; switching
+   * methods clears the others. SWIFT/BIC is the only optional bank field.
    */
-  payoutMethod         String?
-  payoutEmail          String?
-  payoutCurrency       String             @default("USD")
-  payoutThreshold      Int                @default(50)
-  payoutUpdatedAt      DateTime?
+  payoutMethod             String?
+  payoutCurrency           String    @default("USD")
+  payoutThreshold          Int       @default(50)
+  payoutUpdatedAt          DateTime?
+  /** paypal */
+  payoutEmail              String?
+  /** wise — Wise tag or the email linked to the Wise account */
+  payoutWiseAccount        String?
+  /** bank_transfer */
+  payoutBankCurrency       String?
+  payoutBankName           String?
+  payoutBankAddress        String?
+  payoutBankCountry        String?
+  payoutBankAccountHolder  String?
+  payoutBankAccountNumber  String?
+  payoutBankSwift          String?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
