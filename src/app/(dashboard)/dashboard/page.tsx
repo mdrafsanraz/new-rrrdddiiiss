@@ -25,6 +25,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getReleaseAnalytics } from "@/lib/labelgrid/analytics";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import {
   fetchLiveReleaseSummary,
   withTimeout,
@@ -110,6 +111,24 @@ async function fetchLiveArtwork(labelgridIds: string[]) {
   return summaries;
 }
 
+async function reconcileDashboardStatuses(
+  releases: { id: string; labelgridId: string | null }[]
+) {
+  if (!isLabelGridLive()) return;
+  const targets = releases.filter(
+    (release): release is { id: string; labelgridId: string } =>
+      Boolean(release.labelgridId)
+  );
+  await Promise.allSettled(
+    targets.map((release) =>
+      withTimeout(
+        reconcileLabelGridReleaseStatus(release.id, { deep: true }),
+        4000
+      )
+    )
+  );
+}
+
 function parseDeliveryItems(releases: Array<{
   id: string;
   title: string;
@@ -178,10 +197,10 @@ export default async function DashboardHomePage() {
   const user = await requireUser();
   const analyticsEnabled = getPlanLimits(user.planId).analytics;
 
-  const [releases, artist, balances, liveCount] = await Promise.all([
+  const [initialReleases, artist, balances] = await Promise.all([
     prisma.release.findMany({
       where: { userId: user.id },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 10,
       include: { artist: true },
     }),
@@ -190,6 +209,22 @@ export default async function DashboardHomePage() {
       orderBy: { updatedAt: "desc" },
     }),
     getWalletBalances(user.id),
+  ]);
+
+  const [liveArtworkByLabelgridId] = await Promise.all([
+    fetchLiveArtwork(
+      initialReleases
+        .map((release) => release.labelgridId)
+        .filter((id): id is string => Boolean(id))
+    ),
+    reconcileDashboardStatuses(initialReleases),
+  ]);
+  const [releases, liveCount] = await Promise.all([
+    prisma.release.findMany({
+      where: { id: { in: initialReleases.map((release) => release.id) } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: { artist: true },
+    }),
     prisma.release.count({
       where: {
         userId: user.id,
@@ -197,13 +232,17 @@ export default async function DashboardHomePage() {
       },
     }),
   ]);
-
-  const labelgridReleases = releases.filter((release) => release.labelgridId).slice(0, 6);
-  const liveArtworkByLabelgridId = await fetchLiveArtwork(
+  const labelgridReleases = releases
+    .filter((release) => release.labelgridId)
+    .slice(0, 6);
+  const knownLabelgridIds = new Set(
     releases
       .map((release) => release.labelgridId)
       .filter((id): id is string => Boolean(id))
   );
+  for (const id of liveArtworkByLabelgridId.keys()) {
+    if (!knownLabelgridIds.has(id)) liveArtworkByLabelgridId.delete(id);
+  }
   const displayRelease = (release: (typeof releases)[number]) => {
     const live = release.labelgridId
       ? liveArtworkByLabelgridId.get(release.labelgridId)

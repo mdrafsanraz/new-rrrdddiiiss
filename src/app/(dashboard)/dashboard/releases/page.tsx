@@ -115,7 +115,7 @@ export default async function ReleasesPage({ searchParams }: Props) {
             }
           : {}),
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: { artist: true, _count: { select: { tracks: true } } },
     }),
     getUserUsage(user.id, user.planId),
