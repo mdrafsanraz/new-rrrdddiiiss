@@ -162,6 +162,34 @@ enum RoyaltyAdjustmentType {
   other
 }
 
+enum WalletTransactionType {
+  royalty_credit
+  withdrawal
+  adjustment
+  reversal
+}
+
+enum WalletDirection {
+  credit
+  debit
+}
+
+enum WalletSourceType {
+  user_royalty_statement
+  withdrawal
+  adjustment
+  reversal
+}
+
+enum WalletTransactionStatus {
+  pending
+  available
+  processing
+  paid
+  declined
+  reversed
+}
+
 /**
  * Local release lifecycle (two review layers).
  * User-facing labels come from getUserFacingStatusLabel() — never expose raw values.
@@ -291,6 +319,8 @@ model User {
   royaltyAdjustments        RoyaltyAdjustment[]    @relation("RoyaltyAdjustmentUser")
   royaltyAdjustmentsCreated RoyaltyAdjustment[]    @relation("RoyaltyAdjustmentCreator")
   royaltyManualMatches      RoyaltyTransaction[]   @relation("RoyaltyManualMatcher")
+  walletTransactions        WalletTransaction[]
+  withdrawals               Withdrawal[]
 }
 
 /**
@@ -831,6 +861,51 @@ model RoyaltyAdjustment {
   @@index([userId, royaltyPeriodId])
   @@index([transactionId])
   @@index([createdById])
+}
+
+model WalletTransaction {
+  id          String                  @id @default(cuid())
+  userId      String
+  type        WalletTransactionType
+  amount      Decimal                 @db.Decimal(28, 12)
+  currency    String                  @default("USD")
+  direction   WalletDirection
+  sourceType  WalletSourceType
+  sourceId    String
+  title       String
+  description String?
+  status      WalletTransactionStatus
+  availableAt DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceType, sourceId])
+  @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
+  @@index([userId, status])
+}
+
+model Withdrawal {
+  id            String                  @id @default(cuid())
+  userId        String
+  amount        Decimal                 @db.Decimal(28, 12)
+  currency      String                  @default("USD")
+  method        String
+  destination   String
+  status        WalletTransactionStatus @default(pending)
+  reference     String                  @unique
+  requestedAt   DateTime                @default(now())
+  processedAt   DateTime?
+  failureReason String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, requestedAt])
+  @@index([status])
 }
 
 model TrackContributor {

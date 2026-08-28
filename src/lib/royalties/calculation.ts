@@ -302,8 +302,26 @@ export async function publishRoyaltyPeriod(
             totalDeductions,
             userPayableTotal,
             transactionCount: rows.length,
-            status: "pending",
+            status: "available",
             publishedAt,
+            availableAt: publishedAt,
+          },
+        });
+        const isCredit = userPayableTotal.gte(0);
+        await tx.walletTransaction.create({
+          data: {
+            userId,
+            type: isCredit ? "royalty_credit" : "reversal",
+            amount: userPayableTotal.abs(),
+            currency: "USD",
+            direction: isCredit ? "credit" : "debit",
+            sourceType: "user_royalty_statement",
+            sourceId: statement.id,
+            title: `${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(period.startDate)} Royalties`,
+            description: "Published Royalty Statement",
+            status: "available",
+            availableAt: publishedAt,
+            createdAt: publishedAt,
           },
         });
         await tx.royaltyTransaction.updateMany({

@@ -1,23 +1,140 @@
 import Link from "next/link";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bank, ClockCountdown, Coins, DownloadSimple, Wallet } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowRight,
+  DownloadSimple,
+  MusicNotes,
+  Receipt,
+} from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { PayoutSettingsForm } from "@/components/dashboard/payout-settings-form";
 
-export const metadata = { title: "Wallet" };
+export const metadata = { title: "Royalties" };
 export const dynamic = "force-dynamic";
-const money = (value: { toString(): string }) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value.toString()));
-const month = (value: Date) => new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(value);
+const money = (value: { toString(): string }) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    Number(value.toString()),
+  );
+const month = (value: Date) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(value);
 
-export default async function WalletPage() {
+export default async function RoyaltiesPage() {
   const user = await requireUser();
-  const statements = await prisma.userRoyaltyStatement.findMany({ where: { userId: user.id, royaltyPeriod: { status: "published" } }, include: { royaltyPeriod: true }, orderBy: { royaltyPeriod: { startDate: "desc" } } });
-  const total = (status?: "pending" | "available" | "paid") => statements.filter((statement) => !status || statement.status === status).reduce((sum, statement) => sum + Number(statement.userPayableTotal), 0);
-  const available = total("available");
-
-  return <div className="mx-auto max-w-[1180px] space-y-7"><header className="relative overflow-hidden rounded-2xl border border-border bg-foreground px-6 py-8 text-background sm:px-9 sm:py-10"><div className="absolute -right-20 -top-24 size-72 rounded-full border border-background/10" /><div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end"><div><div className="flex items-center gap-2 text-primary"><Wallet size={18} weight="duotone" /><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em]">RDISTRO Wallet</p></div><h1 className="mt-4 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">Your music earns. Your wallet keeps score.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-background/55">Published royalty statements, balance status and payout preferences in one place.</p></div><div className="rounded-xl border border-background/15 bg-background/10 p-5"><p className="text-[10px] uppercase tracking-wider text-background/45">Available balance</p><p className="mt-2 text-4xl font-semibold tracking-tight">{money({ toString: () => String(available) })}</p><p className="mt-3 flex items-center gap-2 text-xs text-background/50"><ClockCountdown size={14} />{statements.length ? `${statements.length} published statement${statements.length === 1 ? "" : "s"}` : "Awaiting the first royalty statement"}</p></div></div></header>
-  <section className="grid overflow-hidden rounded-2xl border border-border bg-card md:grid-cols-3"><Stat icon={<ArrowDown size={19} weight="bold" />} tone="emerald" value={money({ toString: () => String(total()) })} label="Lifetime earnings" /><Stat icon={<ClockCountdown size={19} weight="duotone" />} tone="amber" value={money({ toString: () => String(total("pending")) })} label="Pending clearance" border /><Stat icon={<ArrowUpRight size={19} weight="bold" />} value={money({ toString: () => String(total("paid")) })} label="Paid out" /></section>
-  <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"><div className="space-y-6"><section className="overflow-hidden rounded-2xl border border-border bg-card"><div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Earnings by period</h2><p className="mt-1 text-xs text-muted-foreground">Only published statements are shown.</p></div>{statements.length ? <div className="divide-y divide-border">{statements.map((statement) => <div key={statement.id} className="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="font-semibold">{month(statement.royaltyPeriod.startDate)}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{statement.transactionCount.toLocaleString()} transactions · {statement.status}</p></div><p className="text-lg font-semibold">{money(statement.userPayableTotal)}</p><div className="flex gap-2"><a href={`/api/royalties/statements/${statement.id}/export?format=csv`} aria-label="Export CSV" className="grid size-8 place-items-center rounded-lg border border-border hover:bg-muted"><DownloadSimple /></a><Link href={`/dashboard/royalties/${statement.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-semibold text-background">View <ArrowRight /></Link></div></div>)}</div> : <div className="px-5 py-12 text-center"><Coins className="mx-auto text-muted-foreground" size={28} /><p className="mt-3 text-sm font-semibold">No published earnings yet</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Your monthly statements will appear here after RDISTRO finance reviews and publishes them.</p></div>}</section><PayoutSettingsForm initial={{ method: user.payoutMethod, email: user.payoutEmail ?? user.email, currency: user.payoutCurrency, threshold: user.payoutThreshold }} /></div><aside className="space-y-4"><section className="rounded-2xl border border-border bg-card p-5"><Coins size={21} className="text-primary" weight="duotone" /><h2 className="mt-4 font-semibold">Statement precision</h2><p className="mt-2 text-xs leading-5 text-muted-foreground">Transaction exports preserve micro-royalty precision while balance summaries use standard currency formatting.</p></section><section className="rounded-2xl border border-border bg-foreground p-5 text-background"><Bank size={21} className="text-primary" weight="duotone" /><h2 className="mt-4 font-semibold">Bank details stay private</h2><p className="mt-2 text-xs leading-5 text-background/55">RDISTRO stores only your payout preference. Account numbers and routing credentials belong in secure provider onboarding.</p></section></aside></div></div>;
+  const statements = await prisma.userRoyaltyStatement.findMany({
+    where: { userId: user.id, royaltyPeriod: { status: "published" } },
+    include: { royaltyPeriod: true },
+    orderBy: { royaltyPeriod: { startDate: "desc" } },
+  });
+  const lifetime = statements.reduce(
+    (sum, statement) => sum + Number(statement.userPayableTotal),
+    0,
+  );
+  return (
+    <div className="mx-auto max-w-[1120px] space-y-8">
+      <header className="grid gap-5 border-b border-border pb-7 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <div className="flex items-center gap-2 text-primary">
+            <MusicNotes size={18} weight="duotone" />
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+              Earnings detail
+            </p>
+          </div>
+          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
+            Royalties
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            See where your earnings came from and export each published
+            statement.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/wallet"
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold transition hover:bg-muted"
+        >
+          Open Wallet <ArrowRight />
+        </Link>
+      </header>
+      <section className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-muted-foreground">Published earnings</p>
+          <p className="mt-2 text-2xl font-semibold">
+            {money({ toString: () => String(lifetime) })}
+          </p>
+        </div>
+        <div className="border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+          <p className="text-xs text-muted-foreground">Statements</p>
+          <p className="mt-2 text-2xl font-semibold">{statements.length}</p>
+        </div>
+        <div className="border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+          <p className="text-xs text-muted-foreground">Latest period</p>
+          <p className="mt-2 text-lg font-semibold">
+            {statements[0] ? month(statements[0].royaltyPeriod.startDate) : "—"}
+          </p>
+        </div>
+      </section>
+      <section>
+        <div className="pb-4">
+          <h2 className="text-xl font-semibold">Statements</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Store, territory, release, track and usage detail lives here.
+          </p>
+        </div>
+        {statements.length ? (
+          <div className="divide-y divide-border border-y border-border">
+            {statements.map((statement) => (
+              <div
+                key={statement.id}
+                className="grid gap-4 py-5 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center"
+              >
+                <span className="grid size-10 place-items-center rounded-xl bg-muted">
+                  <Receipt size={18} weight="duotone" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">
+                    {month(statement.royaltyPeriod.startDate)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {statement.transactionCount.toLocaleString()} royalty rows ·
+                    Published
+                  </p>
+                </div>
+                <p className="text-lg font-semibold">
+                  {money(statement.userPayableTotal)}
+                </p>
+                <div className="flex gap-2">
+                  <a
+                    href={`/api/royalties/statements/${statement.id}/export?format=csv`}
+                    aria-label="Export CSV"
+                    className="grid size-9 place-items-center rounded-lg border border-border hover:bg-muted"
+                  >
+                    <DownloadSimple />
+                  </a>
+                  <Link
+                    href={`/dashboard/royalties/${statement.id}`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-semibold text-background"
+                  >
+                    View <ArrowRight />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-border">
+            <div className="max-w-sm text-center">
+              <Receipt className="mx-auto text-muted-foreground" size={30} />
+              <h2 className="mt-3 font-semibold">No published statements</h2>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Your royalty detail will appear after RDISTRO publishes a
+                statement.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
-
-function Stat({ icon, tone, value, label, border = false }: { icon: React.ReactNode; tone?: "emerald" | "amber"; value: string; label: string; border?: boolean }) { return <div className={`flex items-center gap-4 p-5 sm:p-6 ${border ? "border-y border-border md:border-x md:border-y-0" : ""}`}><div className={`flex size-10 items-center justify-center rounded-xl ${tone === "emerald" ? "bg-emerald-50 text-emerald-700" : tone === "amber" ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"}`}>{icon}</div><div><p className="text-xl font-semibold">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div></div>; }
