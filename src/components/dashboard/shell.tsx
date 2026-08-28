@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  CaretDown,
   ChartLineUp,
   Coins,
   CreditCard,
@@ -10,9 +11,11 @@ import {
   Gear,
   Lifebuoy,
   List,
+  PlusCircle,
   ShareNetwork,
   SignOut,
   SquaresFour,
+  Ticket,
   UsersThree,
   Wallet,
   X,
@@ -52,6 +55,10 @@ function NavList({
   showAdminLink: boolean;
   onNavigate?: () => void;
 }) {
+  const searchParams = useSearchParams();
+  const reduceMotion = useReducedMotion();
+  const [supportOpen, setSupportOpen] = useState(pathname.startsWith("/dashboard/support"));
+
   return (
     <nav className="flex flex-col gap-1" aria-label="Dashboard">
       {dashboardNav.map((item) => {
@@ -60,6 +67,47 @@ function NavList({
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = NAV_ICONS[item.href];
+        if (item.href === "/dashboard/support") {
+          const createActive = pathname === item.href && searchParams.get("view") === "new";
+          const ticketsActive = pathname.startsWith(`${item.href}/`) || (pathname === item.href && !createActive);
+          return (
+            <div key={item.href}>
+              <button
+                type="button"
+                onClick={() => setSupportOpen((value) => !value)}
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-300",
+                  active ? "bg-primary/12 text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                )}
+                aria-expanded={supportOpen}
+              >
+                {Icon ? <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} weight="bold" /> : null}
+                <span className="flex-1 text-left">{item.label}</span>
+                <CaretDown className={cn("size-3.5 transition-transform duration-300", supportOpen && "rotate-180")} weight="bold" />
+              </button>
+              <AnimatePresence initial={false}>
+                {supportOpen ? (
+                  <motion.div
+                    initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.22 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="ml-5 mt-1 space-y-1 border-l border-border pl-3">
+                      <Link href="/dashboard/support?view=new" onClick={onNavigate} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors", createActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                        <PlusCircle className="size-3.5" weight="bold" /> Create new ticket
+                      </Link>
+                      <Link href="/dashboard/support?view=tickets" onClick={onNavigate} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors", ticketsActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                        <Ticket className="size-3.5" weight="bold" /> Manage tickets
+                      </Link>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          );
+        }
         return (
           <Link
             key={item.href}

@@ -11,8 +11,13 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Support" };
 
-export default async function SupportPage() {
+type Props = { searchParams: Promise<{ view?: string | string[] }> };
+
+export default async function SupportPage({ searchParams }: Props) {
   const user = await requireUser();
+  const query = await searchParams;
+  const requestedView = Array.isArray(query.view) ? query.view[0] : query.view;
+  const creating = requestedView === "new";
   const tickets = await prisma.supportTicket.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
@@ -28,16 +33,19 @@ export default async function SupportPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Support</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {creating ? "Create new ticket" : "Manage tickets"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Open a ticket for catalog, billing, or account help. RDISTRO staff
-          reply here — you never need to contact the distributor directly.
+          {creating
+            ? "Open a ticket for catalog, billing, or account help."
+            : "Review your support requests and continue conversations with RDISTRO staff."}
         </p>
       </div>
 
-      <NewSupportTicketForm />
+      {creating ? <NewSupportTicketForm /> : null}
 
-      <section className="border border-border bg-card">
+      {!creating ? <section className="border border-border bg-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Your tickets</h2>
         </div>
@@ -75,7 +83,7 @@ export default async function SupportPage() {
             ))}
           </ul>
         )}
-      </section>
+      </section> : null}
     </div>
   );
 }
