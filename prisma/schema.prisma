@@ -239,14 +239,18 @@ model User {
   stripeSubscriptionId String?            @unique
   stripeStatus         SubscriptionStatus @default(none)
   stripePriceId        String?
-  /** Soft account flags for ops — never trust client alone. */
+  /**
+   * Soft account flags for ops — never trust client alone.
+   */
   suspended            Boolean            @default(false)
   suspendedAt          DateTime?
   suspendedReason      String?
   terminated           Boolean            @default(false)
   terminatedAt         DateTime?
   lastActiveAt         DateTime?
-  /** Extra profile/contact data, collected from Settings — all optional. */
+  /**
+   * Extra profile/contact data, collected from Settings — all optional.
+   */
   phone                String?
   addressLine1         String?
   addressLine2         String?
@@ -254,7 +258,9 @@ model User {
   region               String?
   postalCode           String?
   country              String?
-  /** Non-sensitive payout preferences. Provider account details are never stored here. */
+  /**
+   * Non-sensitive payout preferences. Provider account details are never stored here.
+   */
   payoutMethod         String?
   payoutEmail          String?
   payoutCurrency       String             @default("USD")
@@ -263,31 +269,33 @@ model User {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  artists          Artist[]
-  releases         Release[]
-  labels           Label[]
-  reviewedReleases Release[] @relation("ReleaseReviewer")
-  supportTickets   SupportTicket[]
-  supportMessages  SupportMessage[]
-  auditLogs        AuditLog[]            @relation("AuditActor")
-  impersonationsAsAdmin ImpersonationSession[] @relation("ImpersonationAdmin")
-  impersonationsAsTarget ImpersonationSession[] @relation("ImpersonationTarget")
-  internalNotesAuthored InternalNote[]   @relation("InternalNoteAuthor")
-  takedownsRequested TakedownRequest[]   @relation("TakedownRequester")
-  writerMappings   WriterMapping[]
-  publisherMappings PublisherMapping[]
-  passwordResetTokens PasswordResetToken[]
-  royaltyImportsUploaded RoyaltyImport[] @relation("RoyaltyImportUploader")
-  royaltyPeriodsPublished RoyaltyPeriod[] @relation("RoyaltyPeriodPublisher")
-  royaltyTransactions RoyaltyTransaction[]
-  royaltyStatements UserRoyaltyStatement[]
-  royaltyRules RoyaltyRule[]
-  royaltyAdjustments RoyaltyAdjustment[] @relation("RoyaltyAdjustmentUser")
-  royaltyAdjustmentsCreated RoyaltyAdjustment[] @relation("RoyaltyAdjustmentCreator")
-  royaltyManualMatches RoyaltyTransaction[] @relation("RoyaltyManualMatcher")
+  artists                   Artist[]
+  releases                  Release[]
+  labels                    Label[]
+  reviewedReleases          Release[]              @relation("ReleaseReviewer")
+  supportTickets            SupportTicket[]
+  supportMessages           SupportMessage[]
+  auditLogs                 AuditLog[]             @relation("AuditActor")
+  impersonationsAsAdmin     ImpersonationSession[] @relation("ImpersonationAdmin")
+  impersonationsAsTarget    ImpersonationSession[] @relation("ImpersonationTarget")
+  internalNotesAuthored     InternalNote[]         @relation("InternalNoteAuthor")
+  takedownsRequested        TakedownRequest[]      @relation("TakedownRequester")
+  writerMappings            WriterMapping[]
+  publisherMappings         PublisherMapping[]
+  passwordResetTokens       PasswordResetToken[]
+  royaltyImportsUploaded    RoyaltyImport[]        @relation("RoyaltyImportUploader")
+  royaltyPeriodsPublished   RoyaltyPeriod[]        @relation("RoyaltyPeriodPublisher")
+  royaltyTransactions       RoyaltyTransaction[]
+  royaltyStatements         UserRoyaltyStatement[]
+  royaltyRules              RoyaltyRule[]
+  royaltyAdjustments        RoyaltyAdjustment[]    @relation("RoyaltyAdjustmentUser")
+  royaltyAdjustmentsCreated RoyaltyAdjustment[]    @relation("RoyaltyAdjustmentCreator")
+  royaltyManualMatches      RoyaltyTransaction[]   @relation("RoyaltyManualMatcher")
 }
 
-/** Single-use, short-lived tokens for the forgot-password email flow. Only the hash is stored. */
+/**
+ * Single-use, short-lived tokens for the forgot-password email flow. Only the hash is stored.
+ */
 model PasswordResetToken {
   id        String    @id @default(cuid())
   userId    String
@@ -300,7 +308,9 @@ model PasswordResetToken {
   @@index([userId])
 }
 
-/** Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup. */
+/**
+ * Optional local imprint; LabelGrid uses shared RDISTRO label — do not create LG labels per signup.
+ */
 model Label {
   id          String   @id @default(cuid())
   userId      String
@@ -316,7 +326,7 @@ model Label {
 }
 
 model Artist {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   name          String
   fullName      String?
@@ -326,11 +336,13 @@ model Artist {
   spotifyUrl    String?
   appleMusicUrl String?
   labelgridId   String?
-  /** Locked after the artist is used on a submitted release — profile fields become read-only. */
-  locked        Boolean  @default(false)
+  /**
+   * Locked after the artist is used on a submitted release — profile fields become read-only.
+   */
+  locked        Boolean   @default(false)
   lockedAt      DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   releases Release[]
@@ -378,84 +390,110 @@ model PublisherMapping {
 }
 
 model Release {
-  id              String        @id @default(cuid())
-  userId          String
-  artistId        String?
-  labelId         String?
-  title           String
-  catalogNumber   String
-  upc             String?
-  releaseDate     DateTime?
-  /** LabelGrid ContentTypeEnum */
-  contentType     String        @default("Single")
-  /** LabelGrid AiUsageEnum for artwork */
-  artworkAiUsage  String        @default("none")
-  /** Local genre label until LabelGrid genre id is synced */
-  primaryGenre    String?
-  /** LabelGrid explicit: off | on | edited */
-  explicit        String        @default("off")
-  status          ReleaseStatus @default(draft)
+  id                      String        @id @default(cuid())
+  userId                  String
+  artistId                String?
+  labelId                 String?
+  title                   String
+  catalogNumber           String
+  upc                     String?
+  releaseDate             DateTime?
+  /**
+   * LabelGrid ContentTypeEnum
+   */
+  contentType             String        @default("Single")
+  /**
+   * LabelGrid AiUsageEnum for artwork
+   */
+  artworkAiUsage          String        @default("none")
+  /**
+   * Local genre label until LabelGrid genre id is synced
+   */
+  primaryGenre            String?
+  /**
+   * LabelGrid explicit: off | on | edited
+   */
+  explicit                String        @default("off")
+  status                  ReleaseStatus @default(draft)
   /**
    * Set once on first submit to RDISTRO internal review.
    * Free plan monthly quota uses this; resubmits must NOT overwrite.
    */
-  submittedAt     DateTime?
-  /** Pro plan: prioritize in RDISTRO moderation queue (not a LabelGrid API field). */
-  priorityReview  Boolean       @default(false)
-  /** Admin / internal review notes shown to the user. */
-  reviewNotes     String?
+  submittedAt             DateTime?
+  /**
+   * Pro plan: prioritize in RDISTRO moderation queue (not a LabelGrid API field).
+   */
+  priorityReview          Boolean       @default(false)
+  /**
+   * Admin / internal review notes shown to the user.
+   */
+  reviewNotes             String?
   internalRejectionReason String?
-  reviewedAt      DateTime?
-  reviewedById    String?
-  syncError       String?
-  /** Last successful LabelGrid status sync (webhook or reconciliation). */
-  lastSyncedAt    DateTime?
-  /** Cached LabelGrid ReviewStatus (draft|to_review|require_changes|rejected|approved|…). */
-  labelgridReviewStatus String?
-  /** Cached overall delivery state from GET /releases/{id}/delivery-status. */
-  deliveryState   String?
-  /** Full delivery-status payload JSON (outlets, currently_live, …). */
-  deliveryJson    String        @default("{}")
+  reviewedAt              DateTime?
+  reviewedById            String?
+  syncError               String?
+  /**
+   * Last successful LabelGrid status sync (webhook or reconciliation).
+   */
+  lastSyncedAt            DateTime?
+  /**
+   * Cached LabelGrid ReviewStatus (draft|to_review|require_changes|rejected|approved|…).
+   */
+  labelgridReviewStatus   String?
+  /**
+   * Cached overall delivery state from GET /releases/{id}/delivery-status.
+   */
+  deliveryState           String?
+  /**
+   * Full delivery-status payload JSON (outlets, currently_live, …).
+   */
+  deliveryJson            String        @default("{}")
   /**
    * Cached Preflight QC (GET /releases/{id}/quality-report).
    * Optional LabelGrid add-on — may be unavailable (qcEnabled=false).
    */
-  qcStatus        String?
-  qcReportJson    String        @default("{}")
-  qcFetchedAt     DateTime?
-  qcStale         Boolean       @default(false)
-  qcEnabled       Boolean       @default(true)
-  qcChecksInProgress Boolean    @default(false)
-  /** Internal hold — not a LabelGrid state. */
-  holdReason      String?
-  heldAt          DateTime?
-  heldById        String?
-  artworkUrl      String?
-  territoriesJson String        @default("[]")
-  storesJson      String        @default("[]")
-  /** Extra ReleaseCreateData fields (JSON) — mix version, ©/℗, store URLs, etc. */
-  metadataJson    String        @default("{}")
+  qcStatus                String?
+  qcReportJson            String        @default("{}")
+  qcFetchedAt             DateTime?
+  qcStale                 Boolean       @default(false)
+  qcEnabled               Boolean       @default(true)
+  qcChecksInProgress      Boolean       @default(false)
+  /**
+   * Internal hold — not a LabelGrid state.
+   */
+  holdReason              String?
+  heldAt                  DateTime?
+  heldById                String?
+  artworkUrl              String?
+  territoriesJson         String        @default("[]")
+  storesJson              String        @default("[]")
+  /**
+   * Extra ReleaseCreateData fields (JSON) — mix version, ©/℗, store URLs, etc.
+   */
+  metadataJson            String        @default("{}")
   /**
    * True after a final rejection (internal or LabelGrid) — no edit / resubmit.
    * Distinct from changes_required, which is editable and may re-enter review.
    */
-  permanentlyLocked Boolean     @default(false)
-  labelgridId     String?
-  /** Mutex for the Step-5 submission flow — prevents two concurrent runs (double-click, two tabs) from both creating a LabelGrid release/track. Reclaimable after staleness timeout. */
-  submissionLockedAt DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  permanentlyLocked       Boolean       @default(false)
+  labelgridId             String?
+  /**
+   * Mutex for the Step-5 submission flow — prevents two concurrent runs (double-click, two tabs) from both creating a LabelGrid release/track. Reclaimable after staleness timeout.
+   */
+  submissionLockedAt      DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
-  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy User?   @relation("ReleaseReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  artist     Artist? @relation(fields: [artistId], references: [id], onDelete: SetNull)
-  label      Label?  @relation(fields: [labelId], references: [id], onDelete: SetNull)
-  tracks     Track[]
-  reviewIssues ReleaseReviewIssue[]
-  activities   ReleaseActivity[]
-  documents    ReleaseDocument[]
-  webhookEvents ProviderWebhookEvent[]
-  takedowns    TakedownRequest[]
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy          User?                  @relation("ReleaseReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  artist              Artist?                @relation(fields: [artistId], references: [id], onDelete: SetNull)
+  label               Label?                 @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  tracks              Track[]
+  reviewIssues        ReleaseReviewIssue[]
+  activities          ReleaseActivity[]
+  documents           ReleaseDocument[]
+  webhookEvents       ProviderWebhookEvent[]
+  takedowns           TakedownRequest[]
   royaltyTransactions RoyaltyTransaction[]
 
   @@index([userId])
@@ -469,32 +507,34 @@ model Release {
   @@index([upc])
 }
 
-/** Review findings from RDISTRO admins or LabelGrid (synced). */
+/**
+ * Review findings from RDISTRO admins or LabelGrid (synced).
+ */
 model ReleaseReviewIssue {
-  id              String            @id @default(cuid())
-  releaseId       String
-  source          ReviewIssueSource
-  providerIssueId String?
-  code            String?
-  category        String?
-  title           String?
-  message         String
-  severity        String?
-  isBlocking      Boolean           @default(true)
-  requiresFeedback Boolean          @default(false)
-  requiresDocument Boolean          @default(false)
-  affectedTrackId String?
-  providerTrackId Int?
-  status          String            @default("open")
-  resolved        Boolean           @default(false)
-  resolvedAt      DateTime?
-  evidenceJson    String            @default("[]")
-  notesJson       String            @default("[]")
-  rawJson         String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id               String            @id @default(cuid())
+  releaseId        String
+  source           ReviewIssueSource
+  providerIssueId  String?
+  code             String?
+  category         String?
+  title            String?
+  message          String
+  severity         String?
+  isBlocking       Boolean           @default(true)
+  requiresFeedback Boolean           @default(false)
+  requiresDocument Boolean           @default(false)
+  affectedTrackId  String?
+  providerTrackId  Int?
+  status           String            @default("open")
+  resolved         Boolean           @default(false)
+  resolvedAt       DateTime?
+  evidenceJson     String            @default("[]")
+  notesJson        String            @default("[]")
+  rawJson          String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  release   Release            @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  release   Release           @relation(fields: [releaseId], references: [id], onDelete: Cascade)
   documents ReleaseDocument[]
 
   @@index([releaseId])
@@ -502,16 +542,18 @@ model ReleaseReviewIssue {
   @@index([resolved])
 }
 
-/** Append-only release timeline for support / compliance. */
+/**
+ * Append-only release timeline for support / compliance.
+ */
 model ReleaseActivity {
-  id          String              @id @default(cuid())
-  releaseId   String
-  type        ReleaseActivityType
-  title       String
-  description String?
-  actorUserId String?
-  metadataJson String             @default("{}")
-  createdAt   DateTime            @default(now())
+  id           String              @id @default(cuid())
+  releaseId    String
+  type         ReleaseActivityType
+  title        String
+  description  String?
+  actorUserId  String?
+  metadataJson String              @default("{}")
+  createdAt    DateTime            @default(now())
 
   release Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
 
@@ -524,21 +566,21 @@ model ReleaseActivity {
  * so files are stored locally; a note may be posted to LabelGrid when appropriate.
  */
 model ReleaseDocument {
-  id              String               @id @default(cuid())
-  releaseId       String
-  trackId         String?
-  issueId         String?
-  kind            String
-  filename        String
-  mimeType        String
-  url             String
-  uploadedById    String
-  reviewStatus    DocumentReviewStatus @default(pending)
-  reviewedById    String?
-  reviewedAt      DateTime?
-  reviewNote      String?
-  syncedNotePosted Boolean             @default(false)
-  createdAt       DateTime             @default(now())
+  id               String               @id @default(cuid())
+  releaseId        String
+  trackId          String?
+  issueId          String?
+  kind             String
+  filename         String
+  mimeType         String
+  url              String
+  uploadedById     String
+  reviewStatus     DocumentReviewStatus @default(pending)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  syncedNotePosted Boolean              @default(false)
+  createdAt        DateTime             @default(now())
 
   release Release             @relation(fields: [releaseId], references: [id], onDelete: Cascade)
   issue   ReleaseReviewIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
@@ -548,18 +590,20 @@ model ReleaseDocument {
   @@index([reviewStatus])
 }
 
-/** Raw LabelGrid (or other) webhook payloads for audit + idempotent processing. */
+/**
+ * Raw LabelGrid (or other) webhook payloads for audit + idempotent processing.
+ */
 model ProviderWebhookEvent {
-  id                String   @id @default(cuid())
-  provider          String   @default("labelgrid")
+  id                String    @id @default(cuid())
+  provider          String    @default("labelgrid")
   eventType         String
   providerReleaseId String?
   releaseId         String?
   payloadJson       String
-  processed         Boolean  @default(false)
+  processed         Boolean   @default(false)
   processedAt       DateTime?
   error             String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
 
   release Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
 
@@ -569,22 +613,24 @@ model ProviderWebhookEvent {
 }
 
 model Track {
-  id          String   @id @default(cuid())
-  userId      String
-  releaseId   String
-  title       String
-  isrc        String?
-  trackNumber Int      @default(1)
-  durationMs  Int?
-  audioUrl    String?
-  /** Extra TrackCreateData fields (JSON). */
-  metadataJson String  @default("{}")
-  labelgridId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  releaseId    String
+  title        String
+  isrc         String?
+  trackNumber  Int      @default(1)
+  durationMs   Int?
+  audioUrl     String?
+  /**
+   * Extra TrackCreateData fields (JSON).
+   */
+  metadataJson String   @default("{}")
+  labelgridId  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  release      Release            @relation(fields: [releaseId], references: [id], onDelete: Cascade)
-  contributors TrackContributor[]
+  release             Release              @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  contributors        TrackContributor[]
   royaltyTransactions RoyaltyTransaction[]
 
   @@index([releaseId])
@@ -618,26 +664,26 @@ model RoyaltyPeriod {
 }
 
 model RoyaltyImport {
-  id                     String              @id @default(cuid())
-  royaltyPeriodId        String
-  fileName               String
-  source                 String              @default("labelgrid")
-  checksum               String              @unique
-  uploadedById           String
-  importedAt             DateTime            @default(now())
-  payPeriod              String
-  rowCount               Int
-  malformedRowCount      Int                 @default(0)
-  totalSourceGross       Decimal             @db.Decimal(28, 12)
-  totalSourceFees        Decimal             @db.Decimal(28, 12)
-  totalSourceNet         Decimal             @db.Decimal(28, 12)
-  status                 RoyaltyImportStatus @default(imported)
-  errorSummary           Json?
-  headerMap              Json
-  createdAt              DateTime            @default(now())
+  id                String              @id @default(cuid())
+  royaltyPeriodId   String
+  fileName          String
+  source            String              @default("labelgrid")
+  checksum          String              @unique
+  uploadedById      String
+  importedAt        DateTime            @default(now())
+  payPeriod         String
+  rowCount          Int
+  malformedRowCount Int                 @default(0)
+  totalSourceGross  Decimal             @db.Decimal(28, 12)
+  totalSourceFees   Decimal             @db.Decimal(28, 12)
+  totalSourceNet    Decimal             @db.Decimal(28, 12)
+  status            RoyaltyImportStatus @default(imported)
+  errorSummary      Json?
+  headerMap         Json
+  createdAt         DateTime            @default(now())
 
-  royaltyPeriod RoyaltyPeriod       @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
-  uploadedBy    User                @relation("RoyaltyImportUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  royaltyPeriod RoyaltyPeriod        @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  uploadedBy    User                 @relation("RoyaltyImportUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
   transactions  RoyaltyTransaction[]
 
   @@index([royaltyPeriodId])
@@ -646,61 +692,61 @@ model RoyaltyImport {
 }
 
 model RoyaltyTransaction {
-  id                          String                   @id @default(cuid())
-  royaltyImportId             String
-  royaltyPeriodId             String
-  sourceRowNumber             Int
-  sourceFingerprint           String
-  payPeriod                   String
-  retailer                    String?
-  territory                   String?
-  upc                         String?
-  releaseTitle                String?
-  isrc                        String?
-  artistName                  String?
-  trackTitle                  String?
-  usageType                   String?
-  quantity                    Decimal                  @db.Decimal(28, 8)
-  sourceGrossUsd              Decimal                  @db.Decimal(28, 12)
-  sourceTotalLabelGridFee     Decimal                  @db.Decimal(28, 12)
-  sourceNetRevenueUsd         Decimal                  @db.Decimal(28, 12)
-  rawSourceData               Json
-  userId                      String?
-  releaseId                   String?
-  trackId                     String?
-  labelgridReleaseId          String?
-  labelgridTrackId            String?
-  matchStatus                 RoyaltyMatchStatus       @default(unmatched)
-  matchMethod                 String?
-  matchConfidence             Decimal?                 @db.Decimal(5, 4)
-  matchNotes                  String?
-  manuallyMatchedById         String?
-  manuallyMatchedAt           DateTime?
-  originalMatchState          Json?
-  calculationStatus           RoyaltyCalculationStatus @default(pending)
-  royaltyRuleId               String?
-  royaltyRuleVersion          Int?
-  appliedCommissionRate       Decimal?                 @db.Decimal(9, 6)
-  appliedRevenueShareRate     Decimal?                 @db.Decimal(9, 6)
-  rdistroCommissionUsd        Decimal                  @default(0) @db.Decimal(28, 12)
-  rdistroAdjustmentsUsd       Decimal                  @default(0) @db.Decimal(28, 12)
-  rdistroOtherDeductionsUsd   Decimal                  @default(0) @db.Decimal(28, 12)
-  userPayableUsd              Decimal                  @default(0) @db.Decimal(28, 12)
-  calculationTimestamp        DateTime?
-  calculationBreakdown        Json?
-  userStatementId             String?
-  createdAt                   DateTime                 @default(now())
-  updatedAt                   DateTime                 @updatedAt
+  id                        String                   @id @default(cuid())
+  royaltyImportId           String
+  royaltyPeriodId           String
+  sourceRowNumber           Int
+  sourceFingerprint         String
+  payPeriod                 String
+  retailer                  String?
+  territory                 String?
+  upc                       String?
+  releaseTitle              String?
+  isrc                      String?
+  artistName                String?
+  trackTitle                String?
+  usageType                 String?
+  quantity                  Decimal                  @db.Decimal(28, 8)
+  sourceGrossUsd            Decimal                  @db.Decimal(28, 12)
+  sourceTotalLabelGridFee   Decimal                  @db.Decimal(28, 12)
+  sourceNetRevenueUsd       Decimal                  @db.Decimal(28, 12)
+  rawSourceData             Json
+  userId                    String?
+  releaseId                 String?
+  trackId                   String?
+  labelgridReleaseId        String?
+  labelgridTrackId          String?
+  matchStatus               RoyaltyMatchStatus       @default(unmatched)
+  matchMethod               String?
+  matchConfidence           Decimal?                 @db.Decimal(5, 4)
+  matchNotes                String?
+  manuallyMatchedById       String?
+  manuallyMatchedAt         DateTime?
+  originalMatchState        Json?
+  calculationStatus         RoyaltyCalculationStatus @default(pending)
+  royaltyRuleId             String?
+  royaltyRuleVersion        Int?
+  appliedCommissionRate     Decimal?                 @db.Decimal(9, 6)
+  appliedRevenueShareRate   Decimal?                 @db.Decimal(9, 6)
+  rdistroCommissionUsd      Decimal                  @default(0) @db.Decimal(28, 12)
+  rdistroAdjustmentsUsd     Decimal                  @default(0) @db.Decimal(28, 12)
+  rdistroOtherDeductionsUsd Decimal                  @default(0) @db.Decimal(28, 12)
+  userPayableUsd            Decimal                  @default(0) @db.Decimal(28, 12)
+  calculationTimestamp      DateTime?
+  calculationBreakdown      Json?
+  userStatementId           String?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
-  royaltyImport   RoyaltyImport         @relation(fields: [royaltyImportId], references: [id], onDelete: Restrict)
-  royaltyPeriod   RoyaltyPeriod         @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
-  user            User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
-  release         Release?              @relation(fields: [releaseId], references: [id], onDelete: SetNull)
-  track           Track?                @relation(fields: [trackId], references: [id], onDelete: SetNull)
-  manuallyMatchedBy User?               @relation("RoyaltyManualMatcher", fields: [manuallyMatchedById], references: [id], onDelete: SetNull)
-  royaltyRule     RoyaltyRule?          @relation(fields: [royaltyRuleId], references: [id], onDelete: SetNull)
-  userStatement   UserRoyaltyStatement? @relation(fields: [userStatementId], references: [id], onDelete: SetNull)
-  adjustments     RoyaltyAdjustment[]
+  royaltyImport     RoyaltyImport         @relation(fields: [royaltyImportId], references: [id], onDelete: Restrict)
+  royaltyPeriod     RoyaltyPeriod         @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  release           Release?              @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  track             Track?                @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  manuallyMatchedBy User?                 @relation("RoyaltyManualMatcher", fields: [manuallyMatchedById], references: [id], onDelete: SetNull)
+  royaltyRule       RoyaltyRule?          @relation(fields: [royaltyRuleId], references: [id], onDelete: SetNull)
+  userStatement     UserRoyaltyStatement? @relation(fields: [userStatementId], references: [id], onDelete: SetNull)
+  adjustments       RoyaltyAdjustment[]
 
   @@unique([royaltyImportId, sourceRowNumber])
   @@index([sourceFingerprint])
@@ -716,22 +762,22 @@ model RoyaltyTransaction {
 }
 
 model RoyaltyRule {
-  id                   String           @id @default(cuid())
-  name                 String
-  scope                RoyaltyRuleScope
-  userId               String?
-  planId               PlanId?
-  commissionRate       Decimal?         @db.Decimal(9, 6)
-  revenueShareRate     Decimal?         @db.Decimal(9, 6)
-  fixedAdjustment      Decimal          @default(0) @db.Decimal(28, 12)
-  otherDeduction       Decimal          @default(0) @db.Decimal(28, 12)
-  effectiveFrom        DateTime
-  effectiveTo          DateTime?
-  version              Int
-  active               Boolean          @default(true)
-  createdById          String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  name             String
+  scope            RoyaltyRuleScope
+  userId           String?
+  planId           PlanId?
+  commissionRate   Decimal?         @db.Decimal(9, 6)
+  revenueShareRate Decimal?         @db.Decimal(9, 6)
+  fixedAdjustment  Decimal          @default(0) @db.Decimal(28, 12)
+  otherDeduction   Decimal          @default(0) @db.Decimal(28, 12)
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  version          Int
+  active           Boolean          @default(true)
+  createdById      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   user         User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions RoyaltyTransaction[]
@@ -743,23 +789,23 @@ model RoyaltyRule {
 }
 
 model UserRoyaltyStatement {
-  id                    String                 @id @default(cuid())
-  userId                String
-  royaltyPeriodId       String
-  sourceNetTotal        Decimal                @db.Decimal(28, 12)
-  totalDeductions       Decimal                @db.Decimal(28, 12)
-  userPayableTotal      Decimal                @db.Decimal(28, 12)
-  transactionCount      Int
-  status                RoyaltyStatementStatus @default(pending)
-  publishedAt           DateTime
-  availableAt           DateTime?
-  paidAt                DateTime?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  id               String                 @id @default(cuid())
+  userId           String
+  royaltyPeriodId  String
+  sourceNetTotal   Decimal                @db.Decimal(28, 12)
+  totalDeductions  Decimal                @db.Decimal(28, 12)
+  userPayableTotal Decimal                @db.Decimal(28, 12)
+  transactionCount Int
+  status           RoyaltyStatementStatus @default(pending)
+  publishedAt      DateTime
+  availableAt      DateTime?
+  paidAt           DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-  royaltyPeriod RoyaltyPeriod       @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
-  transactions RoyaltyTransaction[]
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  royaltyPeriod RoyaltyPeriod        @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  transactions  RoyaltyTransaction[]
 
   @@unique([userId, royaltyPeriodId])
   @@index([userId, status])
@@ -800,7 +846,9 @@ model TrackContributor {
   @@index([trackId])
 }
 
-/** Internal RDISTRO support — users open tickets; admins reply from /admin/support. */
+/**
+ * Internal RDISTRO support — users open tickets; admins reply from /admin/support.
+ */
 model SupportTicket {
   id        String                @id @default(cuid())
   userId    String
@@ -823,9 +871,13 @@ model SupportMessage {
   ticketId   String
   authorId   String
   body       String
-  /** true when the author is staff (admin reply). */
+  /**
+   * true when the author is staff (admin reply).
+   */
   isStaff    Boolean  @default(false)
-  /** Staff-only note — never shown to the user. */
+  /**
+   * Staff-only note — never shown to the user.
+   */
   isInternal Boolean  @default(false)
   createdAt  DateTime @default(now())
 
@@ -836,7 +888,9 @@ model SupportMessage {
   @@index([authorId])
 }
 
-/** Append-only staff audit trail — never editable/deletable via normal admin UI. */
+/**
+ * Append-only staff audit trail — never editable/deletable via normal admin UI.
+ */
 model AuditLog {
   id           String      @id @default(cuid())
   actorUserId  String?
@@ -857,14 +911,14 @@ model AuditLog {
 }
 
 model ImpersonationSession {
-  id            String    @id @default(cuid())
-  adminUserId   String
-  targetUserId  String
-  reason        String
-  startedAt     DateTime  @default(now())
-  endedAt       DateTime?
-  ip            String?
-  userAgent     String?
+  id           String    @id @default(cuid())
+  adminUserId  String
+  targetUserId String
+  reason       String
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+  ip           String?
+  userAgent    String?
 
   admin  User @relation("ImpersonationAdmin", fields: [adminUserId], references: [id], onDelete: Cascade)
   target User @relation("ImpersonationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
@@ -873,14 +927,16 @@ model ImpersonationSession {
   @@index([targetUserId])
 }
 
-/** Staff-only notes — never exposed on the user dashboard. */
+/**
+ * Staff-only notes — never exposed on the user dashboard.
+ */
 model InternalNote {
-  id          String            @id @default(cuid())
-  entityType  InternalNoteEntity
-  entityId    String
-  body        String
-  authorId    String
-  createdAt   DateTime          @default(now())
+  id         String             @id @default(cuid())
+  entityType InternalNoteEntity
+  entityId   String
+  body       String
+  authorId   String
+  createdAt  DateTime           @default(now())
 
   author User @relation("InternalNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
 

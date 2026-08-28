@@ -31,13 +31,15 @@ export async function importRoyaltyStatement(input: { buffer: Buffer; fileName: 
   }
   const byUpc = new Map(releases.map((release) => [release.upc, release]));
 
+  const existingPeriod = await prisma.royaltyPeriod.findUnique({ where: { period: bounds.key }, select: { status: true } });
+  if (existingPeriod?.status === "published") throw new Error("Published royalty periods are immutable.");
+
   return prisma.$transaction(async (tx) => {
     const period = await tx.royaltyPeriod.upsert({
       where: { period: bounds.key },
       update: { status: "matching", importedAt: new Date() },
       create: { period: bounds.key, startDate: bounds.start, endDate: bounds.end, status: "matching", importedAt: new Date() },
     });
-    if (period.status === "published") throw new Error("Published royalty periods are immutable.");
     const royaltyImport = await tx.royaltyImport.create({
       data: {
         royaltyPeriodId: period.id,
