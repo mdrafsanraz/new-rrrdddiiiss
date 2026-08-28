@@ -60,8 +60,8 @@ export async function POST(request: Request) {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: appUrl("/dashboard/subscription?checkout=success"),
-      cancel_url: appUrl("/dashboard/subscription?checkout=cancel"),
+      success_url: appUrl("/dashboard/settings/subscription?checkout=success"),
+      cancel_url: appUrl("/dashboard/settings/subscription?checkout=cancel"),
       client_reference_id: user.id,
       metadata: {
         rdistroUserId: user.id,

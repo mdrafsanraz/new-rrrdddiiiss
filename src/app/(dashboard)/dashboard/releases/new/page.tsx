@@ -71,7 +71,7 @@ export default async function NewReleasePage({ searchParams }: Props) {
                 Upgrade your plan to submit more releases this month.
               </p>
               <Link
-                href="/dashboard/subscription"
+                href="/dashboard/settings/subscription"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "mt-4 h-10 border-amber-900/20 bg-white px-4 text-amber-950 hover:bg-amber-100"

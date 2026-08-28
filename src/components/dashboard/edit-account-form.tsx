@@ -25,7 +25,7 @@ export function EditAccountForm({ account }: { account: AccountFields }) {
 
   return (
     <form
-      className="overflow-hidden border border-border bg-card"
+      className="overflow-hidden rounded-2xl border border-border bg-card"
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
@@ -46,13 +46,13 @@ export function EditAccountForm({ account }: { account: AccountFields }) {
       }}
     >
       <div className="flex items-center gap-3 border-b border-border px-5 py-5 sm:px-7">
-        <div className="flex size-9 items-center justify-center bg-primary/10 text-primary">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <UserCircle size={19} weight="duotone" />
         </div>
         <div>
-          <h2 className="font-semibold">Profile</h2>
+          <h2 className="font-semibold">Personal details</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Your name and contact details
+            Information connected to your RDISTRO account
           </p>
         </div>
       </div>

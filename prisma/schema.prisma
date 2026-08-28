@@ -107,6 +107,61 @@ enum SupportTicketCategory {
   technical
 }
 
+enum RoyaltyImportStatus {
+  imported
+  needs_review
+  calculated
+  published
+  failed
+}
+
+enum RoyaltyPeriodStatus {
+  draft
+  imported
+  matching
+  needs_review
+  calculated
+  ready_to_publish
+  published
+  corrected
+  superseded
+}
+
+enum RoyaltyMatchStatus {
+  matched
+  unmatched
+  conflict
+  manual_match
+  unallocated
+}
+
+enum RoyaltyCalculationStatus {
+  pending
+  calculated
+  excluded
+}
+
+enum RoyaltyStatementStatus {
+  pending
+  available
+  paid
+}
+
+enum RoyaltyRuleScope {
+  global
+  plan
+  user
+}
+
+enum RoyaltyAdjustmentType {
+  fixed
+  manual
+  tax_withholding
+  processing
+  correction
+  other
+}
+
 /**
  * Local release lifecycle (two review layers).
  * User-facing labels come from getUserFacingStatusLabel() — never expose raw values.
@@ -199,6 +254,12 @@ model User {
   region               String?
   postalCode           String?
   country              String?
+  /** Non-sensitive payout preferences. Provider account details are never stored here. */
+  payoutMethod         String?
+  payoutEmail          String?
+  payoutCurrency       String             @default("USD")
+  payoutThreshold      Int                @default(50)
+  payoutUpdatedAt      DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -216,6 +277,14 @@ model User {
   writerMappings   WriterMapping[]
   publisherMappings PublisherMapping[]
   passwordResetTokens PasswordResetToken[]
+  royaltyImportsUploaded RoyaltyImport[] @relation("RoyaltyImportUploader")
+  royaltyPeriodsPublished RoyaltyPeriod[] @relation("RoyaltyPeriodPublisher")
+  royaltyTransactions RoyaltyTransaction[]
+  royaltyStatements UserRoyaltyStatement[]
+  royaltyRules RoyaltyRule[]
+  royaltyAdjustments RoyaltyAdjustment[] @relation("RoyaltyAdjustmentUser")
+  royaltyAdjustmentsCreated RoyaltyAdjustment[] @relation("RoyaltyAdjustmentCreator")
+  royaltyManualMatches RoyaltyTransaction[] @relation("RoyaltyManualMatcher")
 }
 
 /** Single-use, short-lived tokens for the forgot-password email flow. Only the hash is stored. */
@@ -387,6 +456,7 @@ model Release {
   documents    ReleaseDocument[]
   webhookEvents ProviderWebhookEvent[]
   takedowns    TakedownRequest[]
+  royaltyTransactions RoyaltyTransaction[]
 
   @@index([userId])
   @@index([artistId])
@@ -515,10 +585,206 @@ model Track {
 
   release      Release            @relation(fields: [releaseId], references: [id], onDelete: Cascade)
   contributors TrackContributor[]
+  royaltyTransactions RoyaltyTransaction[]
 
   @@index([releaseId])
   @@index([userId])
   @@index([isrc])
+}
+
+model RoyaltyPeriod {
+  id                   String              @id @default(cuid())
+  period               String              @unique
+  startDate            DateTime
+  endDate              DateTime
+  status               RoyaltyPeriodStatus @default(draft)
+  importedAt           DateTime?
+  calculatedAt         DateTime?
+  publishedAt          DateTime?
+  publishedById        String?
+  unresolvedApprovedAt DateTime?
+  unresolvedApprovedBy String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  publishedBy  User?                  @relation("RoyaltyPeriodPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  imports      RoyaltyImport[]
+  transactions RoyaltyTransaction[]
+  statements   UserRoyaltyStatement[]
+  adjustments  RoyaltyAdjustment[]
+
+  @@index([status])
+  @@index([startDate])
+}
+
+model RoyaltyImport {
+  id                     String              @id @default(cuid())
+  royaltyPeriodId        String
+  fileName               String
+  source                 String              @default("labelgrid")
+  checksum               String              @unique
+  uploadedById           String
+  importedAt             DateTime            @default(now())
+  payPeriod              String
+  rowCount               Int
+  malformedRowCount      Int                 @default(0)
+  totalSourceGross       Decimal             @db.Decimal(28, 12)
+  totalSourceFees        Decimal             @db.Decimal(28, 12)
+  totalSourceNet         Decimal             @db.Decimal(28, 12)
+  status                 RoyaltyImportStatus @default(imported)
+  errorSummary           Json?
+  headerMap              Json
+  createdAt              DateTime            @default(now())
+
+  royaltyPeriod RoyaltyPeriod       @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  uploadedBy    User                @relation("RoyaltyImportUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  transactions  RoyaltyTransaction[]
+
+  @@index([royaltyPeriodId])
+  @@index([payPeriod])
+  @@index([uploadedById])
+}
+
+model RoyaltyTransaction {
+  id                          String                   @id @default(cuid())
+  royaltyImportId             String
+  royaltyPeriodId             String
+  sourceRowNumber             Int
+  sourceFingerprint           String
+  payPeriod                   String
+  retailer                    String?
+  territory                   String?
+  upc                         String?
+  releaseTitle                String?
+  isrc                        String?
+  artistName                  String?
+  trackTitle                  String?
+  usageType                   String?
+  quantity                    Decimal                  @db.Decimal(28, 8)
+  sourceGrossUsd              Decimal                  @db.Decimal(28, 12)
+  sourceTotalLabelGridFee     Decimal                  @db.Decimal(28, 12)
+  sourceNetRevenueUsd         Decimal                  @db.Decimal(28, 12)
+  rawSourceData               Json
+  userId                      String?
+  releaseId                   String?
+  trackId                     String?
+  labelgridReleaseId          String?
+  labelgridTrackId            String?
+  matchStatus                 RoyaltyMatchStatus       @default(unmatched)
+  matchMethod                 String?
+  matchConfidence             Decimal?                 @db.Decimal(5, 4)
+  matchNotes                  String?
+  manuallyMatchedById         String?
+  manuallyMatchedAt           DateTime?
+  originalMatchState          Json?
+  calculationStatus           RoyaltyCalculationStatus @default(pending)
+  royaltyRuleId               String?
+  royaltyRuleVersion          Int?
+  appliedCommissionRate       Decimal?                 @db.Decimal(9, 6)
+  appliedRevenueShareRate     Decimal?                 @db.Decimal(9, 6)
+  rdistroCommissionUsd        Decimal                  @default(0) @db.Decimal(28, 12)
+  rdistroAdjustmentsUsd       Decimal                  @default(0) @db.Decimal(28, 12)
+  rdistroOtherDeductionsUsd   Decimal                  @default(0) @db.Decimal(28, 12)
+  userPayableUsd              Decimal                  @default(0) @db.Decimal(28, 12)
+  calculationTimestamp        DateTime?
+  calculationBreakdown        Json?
+  userStatementId             String?
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+
+  royaltyImport   RoyaltyImport         @relation(fields: [royaltyImportId], references: [id], onDelete: Restrict)
+  royaltyPeriod   RoyaltyPeriod         @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  user            User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  release         Release?              @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  track           Track?                @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  manuallyMatchedBy User?               @relation("RoyaltyManualMatcher", fields: [manuallyMatchedById], references: [id], onDelete: SetNull)
+  royaltyRule     RoyaltyRule?          @relation(fields: [royaltyRuleId], references: [id], onDelete: SetNull)
+  userStatement   UserRoyaltyStatement? @relation(fields: [userStatementId], references: [id], onDelete: SetNull)
+  adjustments     RoyaltyAdjustment[]
+
+  @@unique([royaltyImportId, sourceRowNumber])
+  @@index([sourceFingerprint])
+  @@index([royaltyPeriodId, matchStatus])
+  @@index([userId, royaltyPeriodId])
+  @@index([releaseId])
+  @@index([trackId])
+  @@index([isrc])
+  @@index([upc])
+  @@index([retailer])
+  @@index([territory])
+  @@index([userStatementId])
+}
+
+model RoyaltyRule {
+  id                   String           @id @default(cuid())
+  name                 String
+  scope                RoyaltyRuleScope
+  userId               String?
+  planId               PlanId?
+  commissionRate       Decimal?         @db.Decimal(9, 6)
+  revenueShareRate     Decimal?         @db.Decimal(9, 6)
+  fixedAdjustment      Decimal          @default(0) @db.Decimal(28, 12)
+  otherDeduction       Decimal          @default(0) @db.Decimal(28, 12)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  version              Int
+  active               Boolean          @default(true)
+  createdById          String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  user         User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions RoyaltyTransaction[]
+
+  @@unique([name, version])
+  @@index([scope, active, effectiveFrom])
+  @@index([userId, active])
+  @@index([planId, active])
+}
+
+model UserRoyaltyStatement {
+  id                    String                 @id @default(cuid())
+  userId                String
+  royaltyPeriodId       String
+  sourceNetTotal        Decimal                @db.Decimal(28, 12)
+  totalDeductions       Decimal                @db.Decimal(28, 12)
+  userPayableTotal      Decimal                @db.Decimal(28, 12)
+  transactionCount      Int
+  status                RoyaltyStatementStatus @default(pending)
+  publishedAt           DateTime
+  availableAt           DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  royaltyPeriod RoyaltyPeriod       @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  transactions RoyaltyTransaction[]
+
+  @@unique([userId, royaltyPeriodId])
+  @@index([userId, status])
+  @@index([royaltyPeriodId])
+}
+
+model RoyaltyAdjustment {
+  id              String                @id @default(cuid())
+  userId          String
+  royaltyPeriodId String
+  transactionId   String?
+  type            RoyaltyAdjustmentType
+  amount          Decimal               @db.Decimal(28, 12)
+  reason          String
+  createdById     String
+  createdAt       DateTime              @default(now())
+
+  user          User                @relation("RoyaltyAdjustmentUser", fields: [userId], references: [id], onDelete: Restrict)
+  royaltyPeriod RoyaltyPeriod       @relation(fields: [royaltyPeriodId], references: [id], onDelete: Restrict)
+  transaction   RoyaltyTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdBy     User                @relation("RoyaltyAdjustmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([userId, royaltyPeriodId])
+  @@index([transactionId])
+  @@index([createdById])
 }
 
 model TrackContributor {

@@ -261,7 +261,7 @@ export default async function DashboardHomePage() {
           </div>
           {!usage.canCreateArtist || !usage.canCreateRelease ? (
             <Link
-              href="/dashboard/subscription"
+              href="/dashboard/settings/subscription"
               className="mt-4 inline-flex text-sm font-semibold text-primary underline-offset-4 hover:underline"
             >
               Upgrade plan
@@ -281,7 +281,7 @@ export default async function DashboardHomePage() {
             Billing: {user.stripeStatus === "none" ? "none" : user.stripeStatus}
           </p>
           <Link
-            href="/dashboard/subscription"
+            href="/dashboard/settings/subscription"
             className={cn(
               buttonVariants({ variant: "outline" }),
               "mt-5 h-9 px-4 text-sm"

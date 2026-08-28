@@ -40,7 +40,7 @@ export default async function ArtistsPage() {
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">Your sound starts with an identity.</h1>
             <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">Build artist profiles, connect releases, and keep every catalog identity organized in one place.</p>
           </div>
-          {usage.canCreateArtist ? <CreateArtistForm /> : <Link href="/dashboard/subscription" className={cn(buttonVariants(), "h-11 px-5")}>Upgrade to add artists <ArrowRight size={16} weight="bold" /></Link>}
+          {usage.canCreateArtist ? <CreateArtistForm /> : <Link href="/dashboard/settings/subscription" className={cn(buttonVariants(), "h-11 px-5")}>Upgrade to add artists <ArrowRight size={16} weight="bold" /></Link>}
         </div>
         <div className="relative mt-9 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
           <div className="bg-card px-5 py-4"><p className="text-xs text-muted-foreground">Artists</p><p className="mt-1 text-2xl font-semibold tabular-nums">{artists.length}</p></div>
@@ -49,7 +49,7 @@ export default async function ArtistsPage() {
         </div>
       </header>
 
-      {!usage.canCreateArtist ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.045] px-5 py-4"><div><p className="text-sm font-semibold">Your artist slots are full</p><p className="mt-0.5 text-xs text-muted-foreground">Upgrade your plan to expand this roster.</p></div><Link href="/dashboard/subscription" className="text-sm font-semibold text-primary hover:underline">Compare plans</Link></div> : null}
+      {!usage.canCreateArtist ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.045] px-5 py-4"><div><p className="text-sm font-semibold">Your artist slots are full</p><p className="mt-0.5 text-xs text-muted-foreground">Upgrade your plan to expand this roster.</p></div><Link href="/dashboard/settings/subscription" className="text-sm font-semibold text-primary hover:underline">Compare plans</Link></div> : null}
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="text-xl font-semibold tracking-tight">Roster</h2><p className="mt-1 text-sm text-muted-foreground">{lockedArtists ? `${lockedArtists} profile${lockedArtists === 1 ? " is" : "s are"} locked after submission.` : "Profiles remain editable until their first submission."}</p></div></div>

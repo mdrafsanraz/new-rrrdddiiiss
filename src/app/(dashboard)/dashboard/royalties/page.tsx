@@ -1,12 +1,16 @@
-import { SectionPlaceholder } from "@/components/dashboard/section-placeholder";
+import { ArrowDown, ArrowUpRight, Bank, ClockCountdown, Coins, Wallet } from "@phosphor-icons/react/dist/ssr";
+import { requireUser } from "@/lib/auth/session";
+import { PayoutSettingsForm } from "@/components/dashboard/payout-settings-form";
 
-export const metadata = { title: "Royalties" };
+export const metadata = { title: "Wallet" };
 
-export default function RoyaltiesPage() {
+export default async function WalletPage() {
+  const user = await requireUser();
   return (
-    <SectionPlaceholder
-      title="Royalties"
-      body="Earnings and statements will appear here once distribution royalties sync from our distributor account. Per-user ownership stays in RDISTRO — you only see your catalog."
-    />
+    <div className="mx-auto max-w-[1180px] space-y-7">
+      <header className="relative overflow-hidden rounded-2xl border border-border bg-foreground px-6 py-8 text-background sm:px-9 sm:py-10"><div className="absolute -right-20 -top-24 size-72 rounded-full border border-background/10" /><div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end"><div><div className="flex items-center gap-2 text-primary"><Wallet size={18} weight="duotone" /><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em]">RDISTRO Wallet</p></div><h1 className="mt-4 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">Your music earns. Your wallet keeps score.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-background/55">Track royalty balances, payout activity, and where your earnings should go.</p></div><div className="rounded-xl border border-background/15 bg-background/10 p-5"><p className="text-[10px] uppercase tracking-wider text-background/45">Available balance</p><p className="mt-2 text-4xl font-semibold tracking-tight">$0.00</p><p className="mt-3 flex items-center gap-2 text-xs text-background/50"><ClockCountdown size={14} /> Awaiting the first royalty statement</p></div></div></header>
+      <section className="grid overflow-hidden rounded-2xl border border-border bg-card md:grid-cols-3"><div className="flex items-center gap-4 p-5 sm:p-6"><div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><ArrowDown size={19} weight="bold" /></div><div><p className="text-xl font-semibold">$0.00</p><p className="text-xs text-muted-foreground">Lifetime earnings</p></div></div><div className="flex items-center gap-4 border-y border-border p-5 md:border-x md:border-y-0 sm:p-6"><div className="flex size-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><ClockCountdown size={19} weight="duotone" /></div><div><p className="text-xl font-semibold">$0.00</p><p className="text-xs text-muted-foreground">Pending clearance</p></div></div><div className="flex items-center gap-4 p-5 sm:p-6"><div className="flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground"><ArrowUpRight size={19} weight="bold" /></div><div><p className="text-xl font-semibold">$0.00</p><p className="text-xs text-muted-foreground">Paid out</p></div></div></section>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"><PayoutSettingsForm initial={{ method: user.payoutMethod, email: user.payoutEmail ?? user.email, currency: user.payoutCurrency, threshold: user.payoutThreshold }} /><aside className="space-y-4"><section className="rounded-2xl border border-border bg-card p-5"><Coins size={21} className="text-primary" weight="duotone" /><h2 className="mt-4 font-semibold">Royalty statements</h2><p className="mt-2 text-xs leading-5 text-muted-foreground">Earnings and statement rows will appear here when distributor royalty reporting is connected to your catalog.</p></section><section className="rounded-2xl border border-border bg-foreground p-5 text-background"><Bank size={21} className="text-primary" weight="duotone" /><h2 className="mt-4 font-semibold">Bank details stay private</h2><p className="mt-2 text-xs leading-5 text-background/55">RDISTRO stores only your payout preference. Account numbers and routing credentials belong in a secure provider onboarding flow.</p></section></aside></div>
+    </div>
   );
 }

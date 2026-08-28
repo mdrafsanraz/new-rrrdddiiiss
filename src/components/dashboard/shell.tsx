@@ -5,8 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CaretDown,
   ChartLineUp,
-  Coins,
-  CreditCard,
   Disc,
   Gear,
   Lifebuoy,
@@ -36,10 +34,8 @@ const NAV_ICONS: Record<string, PhosphorIcon> = {
   "/dashboard": SquaresFour,
   "/dashboard/releases": Disc,
   "/dashboard/artists": UsersThree,
-  "/dashboard/royalties": Coins,
+  "/dashboard/royalties": Wallet,
   "/dashboard/analytics": ChartLineUp,
-  "/dashboard/payments": CreditCard,
-  "/dashboard/subscription": Wallet,
   "/dashboard/support": Lifebuoy,
   "/dashboard/settings": Gear,
 };
@@ -56,6 +52,7 @@ function NavList({
   const searchParams = useSearchParams();
   const reduceMotion = useReducedMotion();
   const [supportOpen, setSupportOpen] = useState(pathname.startsWith("/dashboard/support"));
+  const [settingsOpen, setSettingsOpen] = useState(pathname.startsWith("/dashboard/settings"));
 
   return (
     <nav className="flex flex-col gap-1" aria-label="Dashboard">
@@ -103,6 +100,19 @@ function NavList({
                   </motion.div>
                 ) : null}
               </AnimatePresence>
+            </div>
+          );
+        }
+        if (item.href === "/dashboard/settings") {
+          const accountActive = pathname === item.href;
+          const subscriptionActive = pathname.startsWith(`${item.href}/subscription`);
+          const groupActive = accountActive || subscriptionActive;
+          return (
+            <div key={item.href}>
+              <button type="button" onClick={() => setSettingsOpen((value) => !value)} className={cn("group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-300", groupActive ? "bg-primary/12 text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground")} aria-expanded={settingsOpen}>
+                <Gear className={cn("size-4 shrink-0", groupActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} weight="bold" /><span className="flex-1 text-left">Settings</span><CaretDown className={cn("size-3.5 transition-transform duration-300", settingsOpen && "rotate-180")} weight="bold" />
+              </button>
+              <AnimatePresence initial={false}>{settingsOpen ? <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.22 }} className="overflow-hidden"><div className="ml-5 mt-1 space-y-1 border-l border-border pl-3"><Link href="/dashboard/settings" onClick={onNavigate} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors", accountActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Gear className="size-3.5" weight="bold" /> Account</Link><Link href="/dashboard/settings/subscription" onClick={onNavigate} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors", subscriptionActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Wallet className="size-3.5" weight="bold" /> Subscription</Link></div></motion.div> : null}</AnimatePresence>
             </div>
           );
         }

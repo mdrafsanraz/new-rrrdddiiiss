@@ -1,0 +1,6 @@
+ALTER TABLE "User"
+ADD COLUMN "payoutMethod" TEXT,
+ADD COLUMN "payoutEmail" TEXT,
+ADD COLUMN "payoutCurrency" TEXT NOT NULL DEFAULT 'USD',
+ADD COLUMN "payoutThreshold" INTEGER NOT NULL DEFAULT 50,
+ADD COLUMN "payoutUpdatedAt" TIMESTAMP(3);
