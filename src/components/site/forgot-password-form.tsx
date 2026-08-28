@@ -1,17 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 
-export function LoginForm() {
-  const router = useRouter();
+export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "sent">("idle");
+
+  if (status === "sent") {
+    return (
+      <div className="grid gap-4 rounded-2xl border border-border bg-card p-7 shadow-sm md:p-8">
+        <p className="text-sm leading-6 text-muted-foreground">
+          If an account exists for <strong className="text-foreground">{email}</strong>,
+          a reset link is on its way. Check your inbox.
+        </p>
+        <Link
+          href="/login"
+          className="text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+        >
+          Back to login
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <form
@@ -21,19 +35,18 @@ export function LoginForm() {
         setError("");
         setStatus("loading");
         try {
-          const res = await fetch("/api/auth/login", {
+          const res = await fetch("/api/auth/forgot-password", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email }),
           });
           const data = await res.json();
           if (!res.ok) {
-            setError(data.error ?? "Login failed");
+            setError(data.error ?? "Request failed");
             setStatus("idle");
             return;
           }
-          router.push(data.redirectTo ?? "/dashboard");
-          router.refresh();
+          setStatus("sent");
         } catch {
           setError("Network error. Try again.");
           setStatus("idle");
@@ -49,38 +62,20 @@ export function LoginForm() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <div className="grid gap-2">
-        <Field
-          id="password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <Link
-          href="/forgot-password"
-          className="justify-self-end text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          Forgot password?
-        </Link>
-      </div>
       {error ? (
         <p className="text-sm font-medium text-red-700" role="alert">
           {error}
         </p>
       ) : null}
-      <Button type="submit" className="h-12" disabled={status === "loading"}>
-        {status === "loading" ? "Signing in…" : "Login"}
+      <Button type="submit" className="h-12" loading={status === "loading"}>
+        {status === "loading" ? "Sending…" : "Send reset link"}
       </Button>
       <p className="text-sm text-muted-foreground">
-        New to RDISTRO?{" "}
         <Link
-          href="/signup"
+          href="/login"
           className="font-semibold text-foreground underline-offset-4 hover:underline"
         >
-          Sign up
+          Back to login
         </Link>
       </p>
     </form>
