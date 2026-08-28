@@ -43,6 +43,7 @@ export function ReleaseActions({
       {canEdit ? (
         <Link
           href={`/dashboard/releases/${releaseId}/edit`}
+          prefetch={false}
           className={cn(buttonVariants({ variant: "outline" }), "h-9 px-4")}
         >
           Edit Release

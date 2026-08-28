@@ -48,7 +48,7 @@ export function Field({
   return (
     <div className="grid gap-2">
       <label htmlFor={id} className="text-sm font-medium">
-        {label}
+        {label}{required ? <span className="ml-1 text-destructive" aria-hidden="true">*</span> : null}
       </label>
       {as === "textarea" ? (
         <textarea

@@ -18,6 +18,10 @@ import {
 
 type Props = { params: Promise<{ id: string }> };
 
+/** Always rebuild edit state from the latest DB row and live LabelGrid data. */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const r = await prisma.release.findUnique({

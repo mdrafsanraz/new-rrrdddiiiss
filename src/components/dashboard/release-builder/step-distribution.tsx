@@ -51,7 +51,7 @@ export function StepDistribution({
           />
           <span>
             <span className="block text-sm font-semibold">
-              All available stores
+              All available stores <span className="text-destructive" aria-hidden="true">*</span>
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
               Distribute to every outlet currently supported.
@@ -123,7 +123,7 @@ export function StepDistribution({
             }}
           />
           <span>
-            <span className="block text-sm font-semibold">Worldwide</span>
+            <span className="block text-sm font-semibold">Worldwide <span className="text-destructive" aria-hidden="true">*</span></span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
               Default — release in all territories.
             </span>

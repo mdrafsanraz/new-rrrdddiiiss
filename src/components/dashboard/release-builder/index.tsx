@@ -151,10 +151,19 @@ function validateStep(
   }
   if (step === STEP_TRACKS) {
     if (!state.tracks.length) return "Please add at least one track.";
+    if (state.contentType === "Single" && state.tracks.length !== 1) {
+      return "A single must contain exactly one track.";
+    }
     for (let i = 0; i < state.tracks.length; i++) {
       const t = state.tracks[i];
       if (!t.title.trim()) {
         return `Please enter a title for track ${i + 1}.`;
+      }
+      if (
+        state.contentType === "Single" &&
+        t.title.trim() !== state.title.trim()
+      ) {
+        return "For a single, the release title and track title must match exactly.";
       }
       if (t.audioProcessingError) {
         return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}” — please re-upload it.`;
@@ -588,7 +597,11 @@ export function ReleaseBuilder({
     setError("");
     // Nothing exists anywhere until Distribution completes — no row to save.
     if (state.releaseId) {
-      await saveDraft(stateRef.current);
+      const result = await saveDraft(stateRef.current);
+      if (!result.ok) {
+        setError(result.error ?? "Could not save your changes. Please try again.");
+        return;
+      }
     }
     router.push("/dashboard/releases");
   }
@@ -662,6 +675,7 @@ export function ReleaseBuilder({
                       ? "Contributors, publishing splits, publisher, and copyright."
                       : "Confirm everything looks right before sending to review."}
             </p>
+            <p className="mt-2 text-xs text-muted-foreground"><span className="font-semibold text-destructive">*</span> Required field</p>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {saveStatus === "saving" ? (

@@ -453,7 +453,7 @@ export function StepCredits({
         {state.contributors.map((c) => (
           <div key={c.id} className="space-y-4 border border-border p-4">
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Contributor</p>
+              <p className="text-sm font-medium">Contributor <span className="text-destructive" aria-hidden="true">*</span></p>
               <EntityPicker
                 endpoint="/api/labelgrid/writers"
                 spec={{ mode: "person" }}
@@ -488,7 +488,7 @@ export function StepCredits({
             </div>
 
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Roles</p>
+              <p className="text-sm font-medium">Roles <span className="text-destructive" aria-hidden="true">*</span></p>
               <div className="flex flex-wrap items-center gap-2">
                 {c.roles.map((role) => (
                   <SelectedRoleChip
@@ -533,6 +533,7 @@ export function StepCredits({
               id={`ai-${c.id}`}
               label="AI Contribution"
               as="select"
+              required
               value={c.aiContribution ?? "none"}
               onChange={(e) =>
                 setState((prev) => ({
@@ -609,7 +610,7 @@ export function StepCredits({
           <div key={w.id} className="space-y-4 border border-border p-4">
             <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
               <div className="grid gap-2">
-                <p className="text-sm font-medium">Writer</p>
+                <p className="text-sm font-medium">Writer <span className="text-destructive" aria-hidden="true">*</span></p>
                 <EntityPicker
                   endpoint="/api/labelgrid/writers"
                   spec={{ mode: "person" }}
@@ -646,6 +647,7 @@ export function StepCredits({
                 id={`share-${w.id}`}
                 label="Share %"
                 type="number"
+                required
                 inputMode="decimal"
                 value={String(w.share)}
                 onChange={(e) =>
@@ -662,7 +664,7 @@ export function StepCredits({
             </div>
 
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Role(s)</p>
+              <p className="text-sm font-medium">Role(s) <span className="text-destructive" aria-hidden="true">*</span></p>
               <RoleGroupPicker
                 catalog={{ ...contributorRoles, items: writerEligibleRoles }}
                 groups={writerGroups}
@@ -716,6 +718,7 @@ export function StepCredits({
 
         <YesNo
           label="Self-published (no publisher)?"
+          required
           value={state.selfPublished}
           onChange={(yes) =>
             patch({
@@ -755,7 +758,7 @@ export function StepCredits({
                 className="grid gap-4 border border-border p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end"
               >
                 <div className="grid gap-2">
-                  <p className="text-sm font-medium">Publisher</p>
+                  <p className="text-sm font-medium">Publisher <span className="text-destructive" aria-hidden="true">*</span></p>
                   <EntityPicker
                     endpoint="/api/labelgrid/publishers"
                     spec={{ mode: "name", placeholder: "Search publishers" }}
@@ -787,6 +790,7 @@ export function StepCredits({
                   id={`pshare-${p.id}`}
                   label="Share %"
                   type="number"
+                  required
                   inputMode="decimal"
                   value={String(p.share)}
                   onChange={(e) =>

@@ -61,12 +61,23 @@ export function validateReleaseForSubmit(
   if (release.tracks.length === 0) {
     errors.push("Please add at least one track.");
   }
+  if (release.contentType === "Single" && release.tracks.length !== 1) {
+    errors.push("A single must contain exactly one track.");
+  }
 
   let anyContributor = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
     if (!t.title.trim()) {
       errors.push(`Track ${t.trackNumber} is missing a title.`);
+    }
+    if (
+      release.contentType === "Single" &&
+      t.title.trim() !== release.title.trim()
+    ) {
+      errors.push(
+        "For a single, the release title and track title must match exactly."
+      );
     }
     if (tMeta.licenseType === "cover" && !tMeta.originalTrackLink?.trim()) {
       errors.push(

@@ -16,6 +16,14 @@ type ReleaseWithTracks = Release & {
   tracks: Track[];
 };
 
+function personName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return {
+    firstName: parts.shift() ?? "",
+    lastName: parts.join(" ") || "Unknown",
+  };
+}
+
 /**
  * Map a saved release into ReleaseBuilder initial state (edit / re-upload
  * flow). `live`, when supplied, is the just-fetched LabelGrid release —
@@ -42,13 +50,18 @@ export function wizardStateFromRelease(
           return newTrack({
             id: t.id,
             clientId: t.id,
-            title: t.title,
-            mixVersion: tMeta.mixVersion ?? "",
-            isrc: t.isrc ?? "",
+            title: liveTrack?.title ?? t.title,
+            mixVersion: liveTrack?.mixVersion ?? tMeta.mixVersion ?? "",
+            isrc: liveTrack?.isrc ?? t.isrc ?? "",
             compositionType:
               (tMeta.compositionType as WizardTrack["compositionType"]) ??
               "original_composition",
-            explicit: (tMeta.explicit as WizardTrack["explicit"]) ?? "off",
+            explicit:
+              liveTrack?.explicit === "on" ||
+              liveTrack?.explicit === "edited" ||
+              liveTrack?.explicit === "off"
+                ? liveTrack.explicit
+                : ((tMeta.explicit as WizardTrack["explicit"]) ?? "off"),
             audioAiUsage:
               (tMeta.audioAiUsage as WizardTrack["audioAiUsage"]) ?? "none",
             compositionAiUsage:
@@ -89,6 +102,18 @@ export function wizardStateFromRelease(
       }))
     : [newContributor()];
 
+  const liveContributors = live?.tracks[0]?.contributors?.length
+    ? live.tracks[0].contributors.map((contributor) => ({
+        id: crypto.randomUUID(),
+        writerId: contributor.id,
+        ...personName(contributor.name),
+        roles: contributor.roles,
+        aiContribution:
+          contributors.find((item) => item.writerId === contributor.id)
+            ?.aiContribution ?? ("none" as const),
+      }))
+    : contributors;
+
   const writerSplits = (rMeta.writerSplits ?? []).map((w) => ({
     id: crypto.randomUUID(),
     writerId: w.writerId ?? null,
@@ -105,6 +130,24 @@ export function wizardStateFromRelease(
     share: p.share,
   }));
 
+  const liveWriterSplits = live?.tracks[0]?.writers?.length
+    ? live.tracks[0].writers.map((writer) => ({
+        id: crypto.randomUUID(),
+        writerId: writer.id,
+        ...personName(writer.name),
+        roles: writer.roles,
+        share: writer.share ?? 0,
+      }))
+    : writerSplits;
+  const livePublisherSplits = live?.tracks[0]?.publishers?.length
+    ? live.tracks[0].publishers.map((publisher) => ({
+        id: crypto.randomUUID(),
+        publisherId: publisher.id,
+        name: publisher.name,
+        share: publisher.share ?? 0,
+      }))
+    : publisherSplits;
+
   const year = String(new Date().getFullYear());
   const artworkUrl = live?.coverUrl ?? release.artworkUrl;
 
@@ -115,34 +158,58 @@ export function wizardStateFromRelease(
     artworkUrl,
     artworkPreview: artworkUrl,
     artworkAiUsage:
-      (release.artworkAiUsage as WizardState["artworkAiUsage"]) ?? "none",
+      (live?.artworkAiUsage as WizardState["artworkAiUsage"]) ??
+      (release.artworkAiUsage as WizardState["artworkAiUsage"]) ??
+      "none",
     isTransfer: Boolean(rMeta.transferFromDistributor),
     transferFromDistributor: rMeta.transferFromDistributor ?? "",
     originalReleaseDate: rMeta.originalReleaseDate ?? "",
-    title: release.title === "Untitled release" ? "" : release.title,
+    title:
+      (live?.title ?? release.title) === "Untitled release"
+        ? ""
+        : (live?.title ?? release.title),
     artistId: release.artistId ?? "",
-    contentType: (release.contentType as WizardState["contentType"]) ?? "Single",
-    mixVersion: rMeta.mixVersion ?? "",
-    primaryGenreId: rMeta.primaryGenreId ?? null,
-    primaryGenreName: release.primaryGenre ?? "",
-    releaseDate: release.releaseDate
-      ? release.releaseDate.toISOString().slice(0, 10)
-      : "",
-    upc: release.upc ?? "",
-    preferredLocalization: rMeta.preferredLocalization ?? "en",
+    contentType:
+      live?.contentType === "Single" ||
+      live?.contentType === "EP" ||
+      live?.contentType === "Album"
+        ? live.contentType
+        : ((release.contentType as WizardState["contentType"]) ?? "Single"),
+    mixVersion: live?.mixVersion ?? rMeta.mixVersion ?? "",
+    primaryGenreId: live?.primaryGenreId ?? rMeta.primaryGenreId ?? null,
+    primaryGenreName: live?.primaryGenre ?? release.primaryGenre ?? "",
+    releaseDate:
+      live?.releaseDate?.slice(0, 10) ??
+      (release.releaseDate
+        ? release.releaseDate.toISOString().slice(0, 10)
+        : ""),
+    upc: live?.barcodeNumber ?? release.upc ?? "",
+    preferredLocalization:
+      live?.preferredLocalization ?? rMeta.preferredLocalization ?? "en",
     allStores: rMeta.allStores ?? true,
     selectedOutletKeys: rMeta.selectedOutletKeys ?? [],
     worldwide: rMeta.worldwide ?? true,
     territoryCodes: rMeta.territoryCodes ?? [],
     tracks,
-    contributors,
-    writerSplits,
-    publisherSplits,
-    selfPublished: rMeta.selfPublished ?? true,
-    clineYear: rMeta.clineYear ? String(rMeta.clineYear) : year,
-    clineName: rMeta.clineName ?? artistName,
-    plineYear: rMeta.plineYear ? String(rMeta.plineYear) : year,
-    plineName: rMeta.plineName ?? artistName,
+    contributors: liveContributors,
+    writerSplits: liveWriterSplits,
+    publisherSplits: livePublisherSplits,
+    selfPublished:
+      live?.tracks[0]?.publishers !== undefined
+        ? live.tracks[0].publishers.length === 0
+        : (rMeta.selfPublished ?? true),
+    clineYear: live?.clineYear
+      ? String(live.clineYear)
+      : rMeta.clineYear
+        ? String(rMeta.clineYear)
+        : year,
+    clineName: live?.clineName ?? rMeta.clineName ?? artistName,
+    plineYear: live?.plineYear
+      ? String(live.plineYear)
+      : rMeta.plineYear
+        ? String(rMeta.plineYear)
+        : year,
+    plineName: live?.plineName ?? rMeta.plineName ?? artistName,
     rightsConfirmed: false,
   };
 }

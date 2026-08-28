@@ -256,14 +256,16 @@ export function YesNo({
   label,
   value,
   onChange,
+  required = false,
 }: {
   label: string;
   value: boolean;
   onChange: (v: boolean) => void;
+  required?: boolean;
 }) {
   return (
     <div className="grid gap-2">
-      <p className="text-sm font-medium">{label}</p>
+      <p className="text-sm font-medium">{label}{required ? <span className="ml-1 text-destructive" aria-hidden="true">*</span> : null}</p>
       <div className="flex gap-2">
         {([true, false] as const).map((v) => (
           <button
@@ -335,6 +337,7 @@ export function MediaDropzone({
   helper,
   audioUrl,
   audioStatus,
+  required = false,
 }: {
   id: string;
   label: string;
@@ -347,6 +350,7 @@ export function MediaDropzone({
   audioUrl?: string | null;
   /** LabelGrid async processing state for the currently-stored audio file. */
   audioStatus?: "processing" | "failed" | null;
+  required?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -365,7 +369,7 @@ export function MediaDropzone({
   return (
     <div className="grid gap-2">
       <label htmlFor={id} className="text-sm font-medium">
-        {label}
+        {label}{required ? <span className="ml-1 text-destructive" aria-hidden="true">*</span> : null}
       </label>
       <div
         onDragEnter={(e) => {
@@ -381,6 +385,7 @@ export function MediaDropzone({
           setDragging(false);
         }}
         onDrop={onDrop}
+        aria-required={required}
         className={cn(
           "relative overflow-hidden border border-dashed transition-colors duration-200 ease-[var(--ease-rdistro)]",
           dragging

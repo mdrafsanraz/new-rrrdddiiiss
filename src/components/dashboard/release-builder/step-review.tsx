@@ -204,7 +204,7 @@ export function StepReview({
           <span className="text-sm leading-relaxed">
             I confirm I own or control the rights needed to distribute this
             release, including composition, recording, artwork, and any samples
-            or covers, and that the information provided is accurate.
+            or covers, and that the information provided is accurate. <span className="text-destructive" aria-hidden="true">*</span>
           </span>
         </label>
       </Panel>

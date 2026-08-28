@@ -70,6 +70,7 @@ function TrackAudioDropzone({
     <MediaDropzone
       id={`audio-${track.clientId}`}
       label="Audio"
+      required
       accept="audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,.wav,.flac"
       kind="audio"
       file={track.audioFile}
@@ -305,17 +306,26 @@ export function StepTracks({
                 />
 
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <Field
-                    id={`title-${t.clientId}`}
-                    label="Track title"
-                    required
-                    value={t.title}
-                    onChange={(e) =>
-                      updateTrack(t.clientId, { title: e.target.value })
-                    }
-                  />
+                  <div>
+                    <Field
+                      id={`title-${t.clientId}`}
+                      label="Track title"
+                      required
+                      value={t.title}
+                      onChange={(e) =>
+                        updateTrack(t.clientId, { title: e.target.value })
+                      }
+                    />
+                    {state.contentType === "Single" &&
+                    t.title.trim() &&
+                    t.title.trim() !== state.title.trim() ? (
+                      <p className="mt-2 text-xs font-medium text-destructive" role="alert">
+                        Must match the release title exactly: “{state.title.trim()}”
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="grid gap-2">
-                    <p className="text-sm font-medium">Primary artist</p>
+                    <p className="text-sm font-medium">Primary artist <span className="text-destructive" aria-hidden="true">*</span></p>
                     <p className="flex h-10 items-center border border-border bg-muted px-3 text-sm text-muted-foreground">
                       {primaryArtistName || "Release artist"}
                     </p>
@@ -365,6 +375,7 @@ export function StepTracks({
                     id={`lang-${t.clientId}`}
                     label="Audio language"
                     as="select"
+                    required
                     value={t.audioLanguage}
                     onChange={(e) =>
                       updateTrack(t.clientId, { audioLanguage: e.target.value })
@@ -379,7 +390,7 @@ export function StepTracks({
                 </div>
 
                 <div className="grid gap-2">
-                  <p className="text-sm font-medium">Explicit</p>
+                  <p className="text-sm font-medium">Explicit <span className="text-destructive" aria-hidden="true">*</span></p>
                   <ChipGroup
                     options={EXPLICIT_FRIENDLY}
                     value={t.explicit}
@@ -392,7 +403,7 @@ export function StepTracks({
                 </div>
 
                 <div className="grid gap-2">
-                  <p className="text-sm font-medium">Composition</p>
+                  <p className="text-sm font-medium">Composition <span className="text-destructive" aria-hidden="true">*</span></p>
                   <ChipGroup
                     options={COMPOSITION_TYPES.map((c) => ({
                       value: c.value,
@@ -422,6 +433,7 @@ export function StepTracks({
                     id={`audio-ai-${t.clientId}`}
                     label="Audio AI usage"
                     as="select"
+                    required
                     value={t.audioAiUsage}
                     onChange={(e) =>
                       updateTrack(t.clientId, {
@@ -440,6 +452,7 @@ export function StepTracks({
                     id={`comp-ai-${t.clientId}`}
                     label="Composition AI usage"
                     as="select"
+                    required
                     value={t.compositionAiUsage}
                     onChange={(e) =>
                       updateTrack(t.clientId, {
@@ -460,6 +473,7 @@ export function StepTracks({
                   id={`samples-${t.clientId}`}
                   label="Commercial samples"
                   as="select"
+                  required
                   value={t.commercialSamples}
                   onChange={(e) => {
                     const v = e.target

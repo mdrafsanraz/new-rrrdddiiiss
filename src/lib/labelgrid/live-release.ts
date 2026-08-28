@@ -62,6 +62,7 @@ export type LiveRelease = {
   artist: string | null;
   artists: LiveReleaseArtist[];
   mixVersion: string | null;
+  primaryGenreId: number | null;
   primaryGenre: string | null;
   contentType: string | null;
   releaseDate: string | null;
@@ -283,6 +284,7 @@ export async function fetchLiveRelease(
     artist: joinArtists(release.artists),
     artists: buildArtistRows(release.artists),
     mixVersion: release.mix_version?.trim() || release.mix_versions?.[0]?.text?.trim() || null,
+    primaryGenreId: release.primary_genre?.id ?? null,
     primaryGenre: release.primary_genre?.name ?? null,
     contentType: release.content_type ?? null,
     releaseDate: release.release_date ?? null,

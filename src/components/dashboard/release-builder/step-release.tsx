@@ -53,6 +53,7 @@ export function StepRelease({
         <MediaDropzone
           id="artwork"
           label="Cover artwork"
+          required
           accept="image/jpeg,image/png,image/webp"
           kind="image"
           file={state.artworkFile}
@@ -86,7 +87,7 @@ export function StepRelease({
         />
 
         <div className="grid gap-2">
-          <p className="text-sm font-medium">Artwork AI usage</p>
+          <p className="text-sm font-medium">Artwork AI usage <span className="text-destructive" aria-hidden="true">*</span></p>
           <ChipGroup
             options={AI_USAGE_LABELS}
             value={state.artworkAiUsage}
@@ -100,6 +101,7 @@ export function StepRelease({
       <Panel className="space-y-5">
         <YesNo
           label="Are you transferring this release from another distributor?"
+          required
           value={state.isTransfer}
           onChange={(yes) =>
             patch({
@@ -162,7 +164,7 @@ export function StepRelease({
           </Field>
 
           <div className="grid gap-2">
-            <p className="text-sm font-medium">Release type</p>
+            <p className="text-sm font-medium">Release type <span className="text-destructive" aria-hidden="true">*</span></p>
             <ChipGroup
               options={CONTENT_TYPE_OPTIONS}
               value={state.contentType}
@@ -239,6 +241,7 @@ export function StepRelease({
             id="language"
             label="Metadata language"
             as="select"
+            required
             value={state.preferredLocalization}
             onChange={(e) => patch({ preferredLocalization: e.target.value })}
           >
