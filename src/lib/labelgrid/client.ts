@@ -19,7 +19,10 @@ export class LabelGridApiError extends Error {
 type RequestOptions = {
   method?: string;
   body?: unknown;
-  searchParams?: Record<string, string | number | undefined>;
+  searchParams?: Record<
+    string,
+    string | number | undefined | readonly (string | number)[]
+  >;
 };
 
 /**
@@ -43,7 +46,9 @@ export async function labelgridFetchRaw<T>(
 
   if (options.searchParams) {
     for (const [key, value] of Object.entries(options.searchParams)) {
-      if (value !== undefined && value !== "") {
+      if (Array.isArray(value)) {
+        for (const item of value) url.searchParams.append(key, String(item));
+      } else if (value !== undefined && value !== "") {
         url.searchParams.set(key, String(value));
       }
     }
