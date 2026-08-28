@@ -48,22 +48,24 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (existing.locked) {
-    return NextResponse.json(
-      {
-        error:
-          "This artist is locked because they were used on a submitted release. Profile fields cannot be edited.",
-      },
-      { status: 403 }
-    );
-  }
-
   try {
     const body = patchSchema.parse(await request.json());
+    if (
+      existing.locked &&
+      body.name !== undefined &&
+      body.name.trim() !== existing.name
+    ) {
+      return NextResponse.json(
+        { error: "Artist names cannot be changed after submission." },
+        { status: 403 }
+      );
+    }
     const artist = await prisma.artist.update({
       where: { id: existing.id },
       data: {
-        ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+        ...(!existing.locked && body.name !== undefined
+          ? { name: body.name.trim() }
+          : {}),
         ...(body.fullName !== undefined
           ? { fullName: body.fullName?.trim() || null }
           : {}),

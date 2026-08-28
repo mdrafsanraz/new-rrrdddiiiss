@@ -8,6 +8,7 @@ import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
 import {
   supportCategoryLabel,
   supportStatusLabel,
+  supportTicketNumber,
 } from "@/lib/support";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ export default async function AdminSupportTicketPage({ params }: Props) {
             {ticket.subject}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
+            <span className="font-mono font-semibold text-foreground/70">{supportTicketNumber(ticket.id)}</span> ·{" "}
             {supportCategoryLabel(ticket.category)} ·{" "}
             {supportStatusLabel(ticket.status)}
           </p>

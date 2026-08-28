@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
+import { notifySupportUser } from "@/lib/email";
+import { supportStatusLabel, supportTicketNumber } from "@/lib/support";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -48,10 +50,28 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   try {
     const body = statusSchema.parse(await request.json());
+    const existing = await prisma.supportTicket.findUnique({
+      where: { id },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const ticket = await prisma.supportTicket.update({
       where: { id },
       data: { status: body.status },
     });
+    if (existing.status !== body.status) {
+      await notifySupportUser({
+        to: existing.user.email,
+        subject: `[${supportTicketNumber(id)}] Ticket status updated`,
+        preheader: `Your support ticket is now ${supportStatusLabel(body.status)}.`,
+        heading: `Status: ${supportStatusLabel(body.status)}`,
+        message: `Hi ${existing.user.name},\n\nThe status of your support request has changed from ${supportStatusLabel(existing.status)} to ${supportStatusLabel(body.status)}.`,
+        ticketNumber: supportTicketNumber(id),
+        ticketSubject: existing.subject,
+        actionUrl: `${new URL(request.url).origin}/dashboard/support/${id}`,
+        actionLabel: "View your ticket",
+      });
+    }
     return NextResponse.json({ ticket });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -74,7 +94,10 @@ export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   try {
     const body = replySchema.parse(await request.json());
-    const existing = await prisma.supportTicket.findUnique({ where: { id } });
+    const existing = await prisma.supportTicket.findUnique({
+      where: { id },
+      include: { user: { select: { email: true, name: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -95,6 +118,21 @@ export async function POST(request: Request, { params }: Params) {
         },
       }),
     ]);
+
+    const statusNote = existing.status !== nextStatus
+      ? `\n\nTicket status: ${supportStatusLabel(nextStatus)}`
+      : "";
+    await notifySupportUser({
+      to: existing.user.email,
+      subject: `[${supportTicketNumber(id)}] RDISTRO Support replied`,
+      preheader: `There is a new reply on ${existing.subject}.`,
+      heading: "A new reply from RDISTRO",
+      message: `Hi ${existing.user.name},\n\n${body.body.trim()}${statusNote}`,
+      ticketNumber: supportTicketNumber(id),
+      ticketSubject: existing.subject,
+      actionUrl: `${new URL(request.url).origin}/dashboard/support/${id}`,
+      actionLabel: "Read and reply",
+    });
 
     return NextResponse.json({ message, status: nextStatus }, { status: 201 });
   } catch (error) {

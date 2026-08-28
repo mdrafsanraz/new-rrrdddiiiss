@@ -11,7 +11,7 @@ import { getUserFacingReleaseStatus } from "@/lib/releases/status";
 import { cn } from "@/lib/utils";
 
 type Props = { params: Promise<{ id: string }> };
-function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
+function firstLetter(name: string) { return name.trim().charAt(0).toUpperCase() || "A"; }
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
@@ -29,21 +29,19 @@ export default async function ArtistDetailPage({ params }: Props) {
   if (!artist) notFound();
   const liveCount = artist.releases.filter((release) => getUserFacingReleaseStatus(release.status) === "live").length;
   const totalTracks = artist.releases.reduce((sum, release) => sum + release.tracks.length, 0);
-  const heroArtwork = artist.releases.find((release) => release.artworkUrl)?.artworkUrl;
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6">
       <Link href="/dashboard/artists" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft size={14} weight="bold" /> Artist roster</Link>
 
       <header className="relative overflow-hidden rounded-2xl border border-border bg-foreground text-background">
-        {heroArtwork ? <div className="absolute inset-0 opacity-20"><img src={heroArtwork} alt="" className="size-full object-cover blur-2xl scale-110" /></div> : null}
         <div className="absolute inset-0 bg-[linear-gradient(110deg,color-mix(in_oklch,var(--foreground)_98%,transparent)_20%,color-mix(in_oklch,var(--foreground)_76%,transparent))]" />
         <div className="relative grid gap-7 p-6 sm:p-9 lg:grid-cols-[auto_1fr_auto] lg:items-end">
-          <div className="flex size-24 items-center justify-center overflow-hidden rounded-2xl border border-background/15 bg-background/10 text-3xl font-semibold shadow-2xl sm:size-32">{heroArtwork ? <img src={heroArtwork} alt="" className="size-full object-cover" /> : initials(artist.name)}</div>
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Artist profile</p>{artist.locked ? <span className="flex items-center gap-1 rounded-full border border-background/15 bg-background/10 px-2.5 py-1 text-[10px] font-semibold text-background/70"><LockKey size={11} weight="bold" /> Catalog locked</span> : null}</div><h1 className="mt-3 truncate text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">{artist.name}</h1><div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-background/55">{artist.location ? <span className="flex items-center gap-1.5"><MapPin size={14} weight="bold" />{artist.location}</span> : null}<span>{artist.releases.length} release{artist.releases.length === 1 ? "" : "s"}</span><span>{totalTracks} track{totalTracks === 1 ? "" : "s"}</span></div></div>
+          <div className="flex size-24 items-center justify-center overflow-hidden rounded-2xl border border-background/15 bg-background/10 text-6xl font-semibold leading-none shadow-2xl sm:size-32 sm:text-8xl" aria-hidden="true">{firstLetter(artist.name)}</div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Artist profile</p>{artist.locked ? <span className="flex items-center gap-1 rounded-full border border-background/15 bg-background/10 px-2.5 py-1 text-[10px] font-semibold text-background/70"><LockKey size={11} weight="bold" /> Name protected</span> : null}</div><h1 className="mt-3 truncate text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">{artist.name}</h1><div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-background/55">{artist.location ? <span className="flex items-center gap-1.5"><MapPin size={14} weight="bold" />{artist.location}</span> : null}<span>{artist.releases.length} release{artist.releases.length === 1 ? "" : "s"}</span><span>{totalTracks} track{totalTracks === 1 ? "" : "s"}</span></div></div>
           <Link href={`/dashboard/releases/new?artistId=${artist.id}`} className={cn(buttonVariants(), "h-11 bg-background px-5 text-foreground hover:bg-background/90")}><Plus size={16} weight="bold" /> New release</Link>
         </div>
-        <div className="relative grid border-t border-background/10 sm:grid-cols-3"><div className="px-6 py-4 sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Releases</p><p className="mt-1 text-xl font-semibold">{artist.releases.length}</p></div><div className="border-background/10 px-6 py-4 sm:border-x sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Live catalog</p><p className="mt-1 text-xl font-semibold">{liveCount}</p></div><div className="px-6 py-4 sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Profile state</p><p className="mt-1 text-xl font-semibold">{artist.locked ? "Protected" : "Editable"}</p></div></div>
+        <div className="relative grid border-t border-background/10 sm:grid-cols-3"><div className="px-6 py-4 sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Releases</p><p className="mt-1 text-xl font-semibold">{artist.releases.length}</p></div><div className="border-background/10 px-6 py-4 sm:border-x sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Live catalog</p><p className="mt-1 text-xl font-semibold">{liveCount}</p></div><div className="px-6 py-4 sm:px-9"><p className="text-[10px] uppercase tracking-wider text-background/40">Profile state</p><p className="mt-1 text-xl font-semibold">{artist.locked ? "Name protected" : "Editable"}</p></div></div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]">

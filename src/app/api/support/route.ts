@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { notifySupportTeam } from "@/lib/email";
+import { supportCategoryLabel, supportTicketNumber } from "@/lib/support";
 
 const createSchema = z.object({
   subject: z.string().min(3).max(160),
@@ -60,6 +62,17 @@ export async function POST(request: Request) {
         },
       },
       include: { messages: true },
+    });
+    await notifySupportTeam({
+      subject: `[${supportTicketNumber(ticket.id)}] New support ticket: ${ticket.subject}`,
+      preheader: `${user.name} opened a new support ticket.`,
+      heading: "New support request",
+      message: `${body.body.trim()}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
+      ticketNumber: supportTicketNumber(ticket.id),
+      ticketSubject: ticket.subject,
+      actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
+      actionLabel: "Open in support inbox",
+      replyTo: user.email,
     });
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {

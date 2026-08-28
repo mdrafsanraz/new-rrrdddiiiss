@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import {
   supportCategoryLabel,
   supportStatusLabel,
+  supportTicketNumber,
 } from "@/lib/support";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
@@ -122,7 +123,7 @@ export default async function AdminSupportPage({ searchParams }: Props) {
                   <td className="px-4 py-3">
                     <p className="font-medium">{t.subject}</p>
                     <p className="text-xs text-muted-foreground">
-                      {supportCategoryLabel(t.category)} · {t._count.messages}{" "}
+                      <span className="font-mono font-semibold text-foreground/70">{supportTicketNumber(t.id)}</span> · {supportCategoryLabel(t.category)} · {t._count.messages}{" "}
                       msgs · {t.updatedAt.toLocaleString()}
                     </p>
                   </td>

@@ -29,13 +29,20 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
       className="overflow-hidden rounded-2xl border border-border bg-card"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (locked) return;
         setError("");
         setStatus("loading");
+        const editableFields = {
+          fullName: form.fullName,
+          email: form.email,
+          location: form.location,
+          bioShort: form.bioShort,
+        };
         const res = await fetch(`/api/artists/${artist.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(
+            locked ? editableFields : { ...editableFields, name: form.name }
+          ),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -54,8 +61,8 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
       <div className="grid gap-5 p-5 sm:p-7 md:grid-cols-2">
       {locked ? (
         <p className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-4 text-sm leading-6 text-muted-foreground md:col-span-2">
-          This artist was used on a submitted release, so profile fields are
-          read-only. You can still submit new releases under this name.
+          This artist name is protected because it has been used on a submitted
+          release. You can still update the profile details below.
         </p>
       ) : null}
       <Field
@@ -63,13 +70,13 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
         label="Artist name"
         required
         disabled={locked}
+        helper={locked ? "Artist names cannot be changed after submission." : undefined}
         value={form.name}
         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
       />
       <Field
         id="fullName"
         label="Legal name"
-        disabled={locked}
         value={form.fullName}
         onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
       />
@@ -77,14 +84,12 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
         id="email"
         label="Email"
         type="email"
-        disabled={locked}
         value={form.email}
         onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
       />
       <Field
         id="location"
         label="Location"
-        disabled={locked}
         value={form.location}
         onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
       />
@@ -93,7 +98,6 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           id="bioShort"
           label="Short bio"
           as="textarea"
-          disabled={locked}
           value={form.bioShort}
           onChange={(e) => setForm((f) => ({ ...f, bioShort: e.target.value }))}
         />
@@ -103,8 +107,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           {error}
         </p>
       ) : null}
-      {!locked ? (
-        <div className="flex items-center gap-3 border-t border-border pt-5 md:col-span-2">
+      <div className="flex items-center gap-3 border-t border-border pt-5 md:col-span-2">
           <Button
             type="submit"
             className="h-10 px-5"
@@ -115,8 +118,7 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           {status === "saved" ? (
             <span className="flex items-center gap-1.5 text-sm text-emerald-700"><CheckCircle size={15} weight="fill" />Saved</span>
           ) : null}
-        </div>
-      ) : null}
+      </div>
       </div>
     </form>
   );

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { notifySupportTeam } from "@/lib/email";
+import { supportTicketNumber } from "@/lib/support";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,6 +70,18 @@ export async function POST(request: Request, { params }: Params) {
         },
       }),
     ]);
+
+    await notifySupportTeam({
+      subject: `[${supportTicketNumber(ticket.id)}] Customer reply: ${ticket.subject}`,
+      preheader: `${user.name} replied to a support ticket.`,
+      heading: "New customer reply",
+      message: `${body.body.trim()}\n\nFrom: ${user.name} (${user.email})`,
+      ticketNumber: supportTicketNumber(ticket.id),
+      ticketSubject: ticket.subject,
+      actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
+      actionLabel: "Review reply",
+      replyTo: user.email,
+    });
 
     return NextResponse.json({ message }, { status: 201 });
   } catch (error) {

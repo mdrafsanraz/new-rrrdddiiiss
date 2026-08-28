@@ -2,11 +2,14 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
+import { EditArtistNameForm } from "@/components/admin/edit-artist-name-form";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Artists · Admin" };
 
 export default async function AdminArtistsPage() {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const canEditNames = hasPermission(admin.role, "users.write");
 
   const artists = await prisma.artist.findMany({
     orderBy: { createdAt: "desc" },
@@ -59,10 +62,10 @@ export default async function AdminArtistsPage() {
                 </td>
                 <td className="px-4 py-3 tabular-nums">{a._count.releases}</td>
                 <td className="px-4 py-3 text-right">
-                  <LoginAsUserButton
-                    userId={a.user.id}
-                    userName={a.user.name}
-                  />
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {canEditNames ? <EditArtistNameForm artistId={a.id} initialName={a.name} /> : null}
+                    <LoginAsUserButton userId={a.user.id} userName={a.user.name} />
+                  </div>
                 </td>
               </tr>
             ))}
