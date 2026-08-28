@@ -6,6 +6,8 @@ import {
   CaretRight,
   ChartLineUp,
   Check,
+  CheckCircle,
+  ClockCountdown,
   Disc,
   IdentificationCard,
   MusicNotesPlus,
@@ -13,6 +15,7 @@ import {
   TrendUp,
   UserCircle,
   Wallet,
+  WarningCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import { DashboardReveal } from "@/components/dashboard/dashboard-home-motion";
 import { PlatformSparkline } from "@/components/dashboard/platform-sparkline";
@@ -49,6 +52,8 @@ type DeliveryItem = {
   artworkUrl: string | null;
   outlet: string;
   state: string;
+  operation: string | null;
+  updatedAt: string | null;
 };
 
 function rows(value: unknown): UnknownRow[] {
@@ -131,8 +136,10 @@ function parseDeliveryItems(releases: Array<{
         artworkUrl: release.artworkUrl,
         outlet: titleCase(outletName),
         state: text(outlet, ["customer_state", "state", "operation"]) || "processing",
+        operation: text(outlet, ["operation"]) || null,
+        updatedAt: text(outlet, ["updated_at", "updatedAt"]) || null,
       });
-      if (items.length === 4) return items;
+      if (items.length === 5) return items;
     }
   }
   return items;
@@ -278,7 +285,7 @@ export default async function DashboardHomePage() {
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
 
   return (
-    <div className="mx-auto max-w-[1320px] space-y-10 pb-16">
+    <div className="mx-auto max-w-[1540px] space-y-10 pb-16">
       <DashboardReveal className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="text-sm text-muted-foreground">{planLabel(user.planId)} workspace</p>
@@ -387,19 +394,19 @@ export default async function DashboardHomePage() {
       <DashboardReveal delay={0.12}>
         <SectionHeading title="Releases" href="/dashboard/releases" action="View all" />
         {releases.length ? (
-          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {displayReleases.slice(0, 5).map((release) => (
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {displayReleases.slice(0, 10).map((release) => (
               <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group min-w-0">
-                <div className="aspect-square overflow-hidden rounded-2xl bg-muted shadow-[0_10px_28px_oklch(0.3_0.02_250/0.07)]">
+                <div className="aspect-square overflow-hidden rounded-[18px] bg-muted shadow-[0_10px_28px_oklch(0.3_0.02_250/0.07)]">
                   {release.artworkUrl ? (
                     <img src={release.artworkUrl} alt="" className="size-full object-cover transition-transform duration-700 ease-[var(--ease-rdistro)] group-hover:scale-[1.045]" />
                   ) : (
                     <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_55%)] text-muted-foreground"><Disc size={30} weight="duotone" /></div>
                   )}
                 </div>
-                <p className="mt-2.5 truncate text-sm font-semibold">{releaseTitleLabel(release.title)}</p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{release.artistName}</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2"><StatusBadge status={release.status} /><span className="text-[11px] text-muted-foreground">{release.contentType}</span></div>
+                <p className="mt-3 truncate text-[15px] font-semibold">{releaseTitleLabel(release.title)}</p>
+                <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{release.artistName}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={release.status} /><span className="text-xs text-muted-foreground">{release.contentType}</span></div>
               </Link>
             ))}
           </div>
@@ -412,16 +419,31 @@ export default async function DashboardHomePage() {
 
       <DashboardReveal delay={0.16}>
         <SectionHeading title="Delivery log" href="/dashboard/releases" action="Open releases" />
-        <section className="mt-4 overflow-hidden rounded-2xl border border-border/80 bg-card">
-          {deliveryItems.length ? deliveryItems.map((item, index) => (
-            <Link key={item.key} href={`/dashboard/releases/${item.releaseId}`} className={cn("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40 sm:px-5", index !== deliveryItems.length - 1 && "border-b border-border/60") }>
-              <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted">
-                {item.artworkUrl ? <img src={item.artworkUrl} alt="" className="size-full object-cover" /> : <div className="grid size-full place-items-center text-muted-foreground"><Disc size={18} /></div>}
+        <section className="mt-5 overflow-hidden rounded-[18px] border border-border/80 bg-card shadow-[0_12px_38px_oklch(0.3_0.02_250/0.045)]">
+          {deliveryItems.length ? (
+            <>
+              <div className="flex items-center justify-between gap-4 border-b border-border/60 bg-muted/25 px-4 py-3 sm:px-5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="grid size-7 place-items-center rounded-lg bg-card text-[#675bea] shadow-sm"><Disc size={14} weight="duotone" /></span>
+                  Latest outlet updates
+                </div>
+                <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">{deliveryItems.length} events</span>
               </div>
-              <div className="min-w-0 flex-1"><p className="truncate text-xs text-muted-foreground">{item.outlet}</p><p className="truncate text-sm font-semibold">{item.releaseTitle}</p></div>
-              <DeliveryBadge state={item.state} />
-            </Link>
-          )) : (
+              {deliveryItems.map((item, index) => (
+                <Link key={item.key} href={`/dashboard/releases/${item.releaseId}`} className={cn("group grid min-h-16 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[#f7f6ff] sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(8rem,auto)_auto] sm:px-5", index !== deliveryItems.length - 1 && "border-b border-border/60") }>
+                  <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted shadow-sm">
+                    {item.artworkUrl ? <img src={item.artworkUrl} alt="" className="size-full object-cover transition-transform duration-500 group-hover:scale-105" /> : <div className="grid size-full place-items-center text-muted-foreground"><Disc size={18} /></div>}
+                  </div>
+                  <div className="min-w-0"><p className="truncate text-xs font-medium text-muted-foreground">{item.outlet}</p><p className="truncate text-sm font-semibold">{item.releaseTitle}</p></div>
+                  <div className="hidden min-w-0 text-right sm:block">
+                    {item.operation ? <p className="truncate text-xs font-medium">{titleCase(item.operation)}</p> : null}
+                    {item.updatedAt ? <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDeliveryDate(item.updatedAt)}</p> : null}
+                  </div>
+                  <div className="flex items-center gap-2"><DeliveryBadge state={item.state} /><CaretRight size={14} className="hidden text-muted-foreground transition-transform group-hover:translate-x-0.5 md:block" /></div>
+                </Link>
+              ))}
+            </>
+          ) : (
             <div className="px-6 py-12 text-center"><Disc size={24} className="mx-auto text-muted-foreground" /><p className="mt-3 font-semibold">No delivery events yet</p><p className="mt-1 text-sm text-muted-foreground">Outlet delivery updates appear after a release is submitted for distribution.</p></div>
           )}
         </section>
@@ -474,5 +496,12 @@ function DeliveryBadge({ state }: { state: string }) {
   const normalized = state.toLowerCase();
   const complete = ["complete", "completed", "delivered", "live", "accepted", "success"].some((value) => normalized.includes(value));
   const failed = ["failed", "error", "rejected", "cancelled"].some((value) => normalized.includes(value));
-  return <span className={cn("shrink-0 rounded-full border px-3 py-1 text-xs font-semibold", complete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : failed ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700")}>{titleCase(state)}</span>;
+  const Icon = complete ? CheckCircle : failed ? WarningCircle : ClockCountdown;
+  return <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold", complete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : failed ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700")}><Icon size={12} weight="fill" />{titleCase(state)}</span>;
+}
+
+function formatDeliveryDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
