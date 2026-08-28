@@ -44,13 +44,11 @@ async function fetchLiveSummaries(
 
 /**
  * Same reconciliation the detail page runs on every visit, applied here so
- * status pills on the list are current too. `deep: false` skips the extra
- * delivery-status fetch per release (that page loads one release at a
- * time; this one loads N) — review-status reconciliation still happens for
- * every release that has passed internal review, which is what drives
- * status transitions. Best-effort: a slow/failed reconcile for one release
- * just leaves its last-synced status showing, same fallback as the live
- * overlay above.
+ * status pills on the list are current. This is the single page-visit
+ * trigger for user-facing status reconciliation. `deep: true` covers both
+ * review and delivery transitions, including Delivering, Live, takedown,
+ * and review issues. Best-effort: a slow or failed reconciliation for one
+ * release leaves its last persisted status showing.
  */
 async function reconcileStatuses(
   releases: { id: string; labelgridId: string | null }[]
@@ -63,7 +61,7 @@ async function reconcileStatuses(
   const results = await Promise.allSettled(
     targets.map((r) =>
       withTimeout(
-        reconcileLabelGridReleaseStatus(r.id, { deep: false }),
+        reconcileLabelGridReleaseStatus(r.id, { deep: true }),
         4000
       )
     )

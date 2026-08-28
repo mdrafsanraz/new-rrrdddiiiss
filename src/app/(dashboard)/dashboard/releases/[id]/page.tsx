@@ -17,7 +17,6 @@ import { ResubmitReleaseButton } from "@/components/dashboard/resubmit-release-b
 import { UploadReleaseDocumentForm } from "@/components/dashboard/upload-release-document-form";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
-import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import {
   fetchLiveRelease,
@@ -92,35 +91,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
     }
   }
   if (!release) notFound();
-
-  // ---------------------------------------------------------------------
-  // Refresh the persisted RDISTRO status from LabelGrid on every release-page
-  // request. lastSyncedAt is an audit timestamp, not a one-time sync flag.
-  // The reconciliation function owns all status mapping and protects local
-  // internal-review states from being overwritten by a LabelGrid draft.
-  if (isLabelGridLive() && release.labelgridId) {
-    try {
-      await reconcileLabelGridReleaseStatus(release.id, { deep: true });
-      release =
-        (await prisma.release.findFirst({
-          where: { id, userId: user.id },
-          include: {
-            artist: true,
-            tracks: {
-              orderBy: { trackNumber: "asc" },
-              include: { contributors: true },
-            },
-            reviewIssues: { orderBy: { createdAt: "desc" } },
-            activities: { orderBy: { createdAt: "desc" }, take: 40 },
-            documents: { orderBy: { createdAt: "desc" }, take: 20 },
-          },
-        })) ?? release;
-    } catch (error) {
-      console.error("[releases/detail] reconcile skipped", error);
-    }
-  }
-  // End status synchronization block.
-  // ---------------------------------------------------------------------
 
   const facing = getUserFacingReleaseStatus(release.status);
   const finalReject = isFinalRejection(release);
