@@ -433,7 +433,7 @@ export default async function DashboardHomePage() {
       <DashboardReveal delay={0.12}>
         <SectionHeading title="Releases" href="/dashboard/releases" action="View all" />
         {releases.length ? (
-          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {displayReleases.slice(0, 10).map((release) => (
               <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group min-w-0">
                 <div className="aspect-square overflow-hidden rounded-[18px] bg-muted shadow-[0_10px_28px_oklch(0.3_0.02_250/0.07)]">
