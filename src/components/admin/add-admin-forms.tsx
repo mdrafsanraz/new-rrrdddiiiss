@@ -8,9 +8,11 @@ import { Field } from "@/components/site/field";
 export function AddAdminForms() {
   const router = useRouter();
   const [promoteEmail, setPromoteEmail] = useState("");
+  const [promoteRole, setPromoteRole] = useState("reviewer");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [createRole, setCreateRole] = useState("reviewer");
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState<"promote" | "create" | null>(null);
@@ -24,7 +26,7 @@ export function AddAdminForms() {
       const res = await fetch("/api/admin/admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: promoteEmail }),
+        body: JSON.stringify({ email: promoteEmail, role: promoteRole }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -51,7 +53,7 @@ export function AddAdminForms() {
       const res = await fetch("/api/admin/admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, role: createRole }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -91,6 +93,7 @@ export function AddAdminForms() {
           value={promoteEmail}
           onChange={(e) => setPromoteEmail(e.target.value)}
         />
+        <Field id="promoteRole" label="Staff role" as="select" value={promoteRole} onChange={(event) => setPromoteRole(event.target.value)}><option value="reviewer">Release reviewer</option><option value="support">Support agent</option><option value="finance">Finance manager</option><option value="admin">Administrator</option><option value="super_admin">Super admin</option></Field>
         <Button
           type="submit"
           className="h-10 px-5"
@@ -117,6 +120,7 @@ export function AddAdminForms() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+        <Field id="createRole" label="Staff role" as="select" value={createRole} onChange={(event) => setCreateRole(event.target.value)}><option value="reviewer">Release reviewer</option><option value="support">Support agent</option><option value="finance">Finance manager</option><option value="admin">Administrator</option><option value="super_admin">Super admin</option></Field>
         <Field
           id="email"
           label="Email"

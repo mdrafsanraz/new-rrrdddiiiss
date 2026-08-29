@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="mx-auto max-w-[1480px] animate-pulse space-y-6"><div className="h-28 bg-muted" /><div className="grid gap-3 sm:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-28 bg-muted" />)}</div><div className="h-96 bg-muted" /><div className="h-[520px] bg-muted" /></div>; }

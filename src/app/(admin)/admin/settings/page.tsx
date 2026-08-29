@@ -1,66 +1,28 @@
-import { requirePermission } from "@/lib/auth/admin";
-import { adminEmailsFromEnv } from "@/lib/auth/admin";
 import Link from "next/link";
+import { ArrowRight, Bell, CreditCard, CurrencyDollar, Envelope, Gear, Globe, Key, ShieldCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { adminEmailsFromEnv, requirePermission } from "@/lib/auth/admin";
+import { prisma } from "@/lib/db";
+import { isEmailConfigured } from "@/lib/email";
+import { getLabelGridToken } from "@/lib/labelgrid/config";
+import { getPayoutPolicy } from "@/lib/payout-settings";
+import { getPlanCatalog } from "@/lib/plans";
+import { site } from "@/lib/site";
+import { isStripeConfigured } from "@/lib/stripe";
 
-export const metadata = { title: "Settings · Admin" };
-
+export const metadata = { title: "Settings | Admin" }; export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage() {
-  await requirePermission("settings.manage");
-  const envAdmins = adminEmailsFromEnv();
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Super-admin configuration. Staff roles are managed under Admins.
-        </p>
-      </div>
-
-      <section className="rounded-md border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Payouts</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Configure enabled methods, minimums, fees and processing guidance.</p>
-        <Link href="/admin/payout-settings" className="mt-2 inline-block text-sm font-medium text-primary underline-offset-2 hover:underline">Manage payout settings</Link>
-      </section>
-
-      <section className="rounded-md border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Environment admins</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Emails in <code>ADMIN_EMAILS</code> (plus defaults) are promoted to{" "}
-          <code>super_admin</code> on access.
-        </p>
-        <ul className="mt-3 space-y-1 text-sm">
-          {envAdmins.map((e) => (
-            <li key={e} className="font-mono text-xs">
-              {e}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-md border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Staff</h2>
-        <Link
-          href="/admin/admins"
-          className="mt-2 inline-block text-sm font-medium text-primary underline-offset-2 hover:underline"
-        >
-          Manage staff roles →
-        </Link>
-      </section>
-
-      <section className="rounded-md border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">LabelGrid</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Environment is sandbox-only for now. See{" "}
-          <Link
-            href="/admin/system"
-            className="underline-offset-2 hover:underline"
-          >
-            LabelGrid / System
-          </Link>
-          .
-        </p>
-      </section>
-    </div>
-  );
+  await requirePermission("settings.manage"); const [payouts, plans, activeRules, auditCount] = await Promise.all([getPayoutPolicy(), getPlanCatalog(), prisma.royaltyRule.count({ where: { active: true } }), prisma.auditLog.count({ where: { action: "settings_changed" } })]);
+  const labelgridConfigured = Boolean(getLabelGridToken()); const stripeConfigured = isStripeConfigured(); const emailConfigured = isEmailConfigured(); const envAdminCount = adminEmailsFromEnv().length;
+  return <div className="mx-auto max-w-[1400px] space-y-6"><header className="border-b border-border pb-6"><div className="flex items-center gap-2 text-primary"><Gear size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">System configuration</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Settings</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">A safe index of RDISTRO configuration. Sensitive environment values are never rendered, and each editable policy has one authoritative workspace.</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-4"><Health label="LabelGrid" ready={labelgridConfigured} /><Health label="Stripe" ready={stripeConfigured} /><Health label="Transactional email" ready={emailConfigured} /><Health label="Payout methods" ready={Object.values(payouts.methods).some((method) => method.enabled)} /></section>
+    <SettingsSection title="General" description="Public identity and platform-wide defaults" icon={<Globe />}><SettingRow title="Platform identity" detail={`${site.name} / ${site.email}`} state="Code configured" /><SettingRow title="Default financial currency" detail={`${payouts.currency} for configured withdrawals`} state="Policy configured" href="/admin/payout-settings" /><SettingRow title="Application timezone" detail="Financial calculations use UTC. Localized display follows each interface." state="UTC authoritative" /></SettingsSection>
+    <SettingsSection title="Release and distribution" description="Review workflow, submission limits and provider catalogs" icon={<Storefront />}><SettingRow title="Review operations" detail="Assignments, priority queue, QC and moderation decisions" state="Operational" href="/admin/review-queue" /><SettingRow title="Submission limits" detail="Artist slots, monthly release limits and priority review are owned by Plans" state={`${plans.filter((plan) => plan.active).length} active plans`} href="/admin/plans" /><SettingRow title="LabelGrid provider" detail="Credentials remain environment-backed. Store and territory catalogs are fetched from LabelGrid." state={labelgridConfigured ? "Configured" : "Missing"} href="/admin/system" danger={!labelgridConfigured} /><SettingRow title="Territory defaults" detail="New releases default to worldwide. Manual choices use the live LabelGrid territory catalog." state="Worldwide" /></SettingsSection>
+    <SettingsSection title="Royalties and payouts" description="Financial rules, publishing and withdrawal terms" icon={<CurrencyDollar />}><SettingRow title="Royalty rules" detail="Versioned global, plan and user commission rules with effective dates" state={`${activeRules} active rules`} href="/admin/royalty-rules" /><SettingRow title="Royalty publishing" detail="Periods require calculation and reconciliation before statements are published" state="Workflow enforced" href="/admin/royalties" /><SettingRow title="Payout methods" detail="Wise, PayPal and Payoneer availability, minimums, fees and instructions" state={`${Object.values(payouts.methods).filter((method) => method.enabled).length} enabled`} href="/admin/payout-settings" /><SettingRow title="Wallet corrections" detail="Balances cannot be overwritten. Corrections create auditable ledger adjustments." state="Ledger enforced" href="/admin/transactions" /></SettingsSection>
+    <SettingsSection title="Subscriptions" description="Plan catalog and Stripe billing authority" icon={<CreditCard />}><SettingRow title="Plan catalog" detail="Pricing, billing interval, entitlements, visibility and Stripe Price IDs" state={`${plans.length} plans`} href="/admin/plans" /><SettingRow title="Stripe connection" detail="The secret key remains environment-backed and is never displayed here." state={stripeConfigured ? "Configured" : "Missing"} href="/admin/subscriptions" danger={!stripeConfigured} /><SettingRow title="Billing mutations" detail="Subscription changes remain in Stripe and return through verified webhooks." state="Stripe authoritative" /></SettingsSection>
+    <SettingsSection title="Email and notifications" description="Delivery readiness and communication ownership" icon={<Envelope />}><SettingRow title="Email provider" detail="The provider API key and sender values remain environment-backed." state={emailConfigured ? "Configured" : "Missing"} danger={!emailConfigured} /><SettingRow title="Support notifications" detail="Replies and user-visible status changes send through the existing support email workflow." state="Enabled when configured" href="/admin/support" /><SettingRow title="Catalog notifications" detail="Release decisions and document requests use audited workflow messages." state="Workflow owned" href="/admin/review-queue" /><SettingRow title="Notification preferences" detail="Per-template toggles are not implemented, so no inactive controls are shown." state="Not configurable" icon={<Bell />} /></SettingsSection>
+    <SettingsSection title="Security" description="Staff access, sessions and audit controls" icon={<ShieldCheck />}><SettingRow title="Staff permissions" detail="Fixed least-privilege roles enforced in server routes and pages" state={`${envAdminCount} protected environment admins`} href="/admin/admins" /><SettingRow title="Session policy" detail="HTTP-only session cookies, secure in production, with explicit impersonation restore state" state="Code enforced" icon={<Key />} /><SettingRow title="Audit configuration" detail="Append-only administrative events with optional legitimate IP capture" state={`${auditCount} settings changes`} href="/admin/audit" /><SettingRow title="Secret handling" detail="LabelGrid, Stripe and email secrets are read from the environment and never returned to the browser." state="Protected" /></SettingsSection>
+  </div>;
 }
+function Health({ label, ready }: { label: string; ready: boolean }) { return <div className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className={`mt-2 text-lg font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? "Configured" : "Needs configuration"}</p></div>; }
+function SettingsSection({ title, description, icon, children }: { title: string; description: string; icon: React.ReactNode; children: React.ReactNode }) { return <section className="overflow-hidden border border-border bg-card"><div className="flex items-center gap-3 border-b border-border px-5 py-4"><span className="grid size-9 place-items-center bg-muted text-muted-foreground">{icon}</span><div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 text-[11px] text-muted-foreground">{description}</p></div></div><div className="divide-y divide-border">{children}</div></section>; }
+function SettingRow({ title, detail, state, href, danger = false, icon }: { title: string; detail: string; state: string; href?: string; danger?: boolean; icon?: React.ReactNode }) { const body = <><div className="min-w-0"><div className="flex items-center gap-2"><p className="text-sm font-semibold">{title}</p>{icon}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p></div><div className="flex shrink-0 items-center gap-3"><span className={`text-xs font-semibold ${danger ? "text-amber-700" : "text-muted-foreground"}`}>{state}</span>{href ? <ArrowRight className="text-muted-foreground" /> : null}</div></>; return href ? <Link href={href} className="grid gap-3 px-5 py-4 transition hover:bg-muted/30 sm:grid-cols-[1fr_auto] sm:items-center">{body}</Link> : <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">{body}</div>; }

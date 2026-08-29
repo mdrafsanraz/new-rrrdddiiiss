@@ -1,76 +1,25 @@
-import Link from "next/link";
-import { requirePermission } from "@/lib/auth/admin";
-import { STAFF_ROLES } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db";
+import { Key, ShieldCheck, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { AddAdminForms } from "@/components/admin/add-admin-forms";
 import { RemoveAdminButton } from "@/components/admin/remove-admin-button";
+import { StaffRoleForm } from "@/components/admin/staff-role-form";
+import { requirePermission } from "@/lib/auth/admin";
+import { permissionsForRole, STAFF_ROLES, type AdminPermission, type StaffRole } from "@/lib/auth/permissions";
+import { prisma } from "@/lib/db";
 
-export const metadata = { title: "Staff · Admin" };
+export const metadata = { title: "Staff and Permissions | Admin" }; export const dynamic = "force-dynamic";
+const roleNames: Record<StaffRole, string> = { super_admin: "Super admin", admin: "Administrator", reviewer: "Release reviewer", support: "Support agent", finance: "Finance manager" };
+const roleDescriptions: Record<StaffRole, string> = { super_admin: "Every platform and security capability.", admin: "Catalog, users, support, subscriptions and operational visibility.", reviewer: "Release moderation, QC, rights documents and catalog context.", support: "Customer support, account context and audited impersonation.", finance: "Subscriptions, royalties, wallets, withdrawals and financial audit." };
+const permissionLabels: Partial<Record<AdminPermission, string>> = { "releases.moderate": "Review releases", "releases.qc": "Run release QC", "releases.takedown": "Process takedowns", "documents.manage": "Review rights documents", "users.write": "Manage users", "users.impersonate": "Impersonate users", "support.manage": "Handle support", "subscriptions.manage": "View subscriptions", "royalties.read": "View financial data", "royalties.write": "Process royalties and payouts", "staff.manage": "Manage staff", "settings.manage": "Change system settings", "audit.read": "View audit log", "system.write": "Change provider settings" };
+const shownPermissions = Object.keys(permissionLabels) as AdminPermission[];
+const date = (value: Date | null) => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "No activity recorded";
 
-export default async function AdminAdminsPage() {
-  const me = await requirePermission("staff.manage");
-  const admins = await prisma.user.findMany({
-    where: { role: { in: [...STAFF_ROLES] } },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      createdAt: true,
-    },
-  });
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Staff</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Roles: super_admin, admin, reviewer, support, finance. Enforced
-          server-side.
-        </p>
-      </div>
-
-      <AddAdminForms />
-
-      <section className="overflow-hidden rounded-md border border-border bg-card">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Current staff</h2>
-        </div>
-        <ul className="divide-y divide-border">
-          {admins.map((a) => (
-            <li
-              key={a.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-            >
-              <div>
-                <p className="font-medium">
-                  {a.name}
-                  {a.id === me.id ? (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (you)
-                    </span>
-                  ) : null}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {a.email} · {a.role.replace("_", " ")} · since{" "}
-                  {a.createdAt.toLocaleDateString()}
-                </p>
-              </div>
-              {a.id !== me.id ? (
-                <RemoveAdminButton adminId={a.id} adminName={a.name} />
-              ) : (
-                <Link
-                  href="/admin/users"
-                  className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                >
-                  View users
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
-  );
+export default async function StaffPage() {
+  const me = await requirePermission("staff.manage"); const admins = await prisma.user.findMany({ where: { role: { in: [...STAFF_ROLES] } }, orderBy: [{ role: "asc" }, { name: "asc" }], select: { id: true, name: true, email: true, role: true, createdAt: true, lastActiveAt: true, suspended: true, _count: { select: { assignedSupportTickets: true } } } });
+  const counts = Object.fromEntries(STAFF_ROLES.map((role) => [role, admins.filter((admin) => admin.role === role).length]));
+  return <div className="mx-auto max-w-[1480px] space-y-6"><header className="border-b border-border pb-6"><div className="flex items-center gap-2 text-primary"><ShieldCheck size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Access control</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Staff and permissions</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Assign the smallest role needed for each employee. Capabilities are enforced server-side and every role change is audited.</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-5">{STAFF_ROLES.map((role) => <div key={role} className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{roleNames[role]}</p><p className="mt-2 text-2xl font-semibold">{counts[role]}</p><p className="mt-2 text-[10px] leading-4 text-muted-foreground">{roleDescriptions[role]}</p></div>)}</section>
+    <section className="overflow-hidden border border-border bg-card"><div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Current staff</h2><p className="mt-1 text-[11px] text-muted-foreground">Your own role cannot be changed here. The final super admin is protected.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[1150px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Staff member</th><th className="px-3 py-3">Role</th><th className="px-3 py-3">Last active</th><th className="px-3 py-3">Workload</th><th className="px-3 py-3">Security</th><th className="px-4 py-3 text-right">Remove access</th></tr></thead><tbody className="divide-y divide-border">{admins.map((admin) => <tr key={admin.id} className="align-top hover:bg-muted/20"><td className="px-4 py-4"><p className="font-semibold">{admin.name}{admin.id === me.id ? <span className="ml-2 text-[10px] text-primary">You</span> : null}</p><p className="mt-1 text-[10px] text-muted-foreground">{admin.email} / added {date(admin.createdAt)}</p></td><td className="px-3 py-4">{admin.id === me.id ? <span className="font-semibold">{roleNames[admin.role as StaffRole]}</span> : <StaffRoleForm id={admin.id} initial={admin.role} />}</td><td className="px-3 py-4">{date(admin.lastActiveAt)}</td><td className="px-3 py-4">{admin._count.assignedSupportTickets} assigned tickets</td><td className="px-3 py-4"><span className={`font-semibold ${admin.suspended ? "text-red-700" : "text-emerald-700"}`}>{admin.suspended ? "Suspended" : "Active"}</span></td><td className="px-4 py-4 text-right">{admin.id === me.id ? <span className="text-muted-foreground">Protected</span> : <RemoveAdminButton adminId={admin.id} adminName={admin.name} />}</td></tr>)}</tbody></table></div></section>
+    <section className="overflow-hidden border border-border bg-card"><div className="border-b border-border px-4 py-3"><div className="flex items-center gap-2"><Key /><h2 className="text-sm font-semibold">Capability matrix</h2></div><p className="mt-1 text-[11px] text-muted-foreground">A concise view of sensitive capabilities. Read-only access to basic admin navigation is omitted.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead className="border-b border-border bg-muted/40"><tr><th className="px-4 py-3 text-[10px] uppercase tracking-wide text-muted-foreground">Capability</th>{STAFF_ROLES.map((role) => <th key={role} className="px-3 py-3 text-center text-[10px] uppercase tracking-wide text-muted-foreground">{roleNames[role]}</th>)}</tr></thead><tbody className="divide-y divide-border">{shownPermissions.map((permission) => <tr key={permission}><td className="px-4 py-3 font-semibold">{permissionLabels[permission]}</td>{STAFF_ROLES.map((role) => <td key={role} className="px-3 py-3 text-center">{permissionsForRole(role).includes(permission) ? <span className="font-semibold text-emerald-700">Allowed</span> : <span className="text-muted-foreground">Not allowed</span>}</td>)}</tr>)}</tbody></table></div></section>
+    <section className="border border-border bg-card"><details><summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold"><span className="flex items-center gap-2"><UsersThree /> Add staff member</span></summary><div className="border-t border-border p-5"><AddAdminForms /></div></details></section>
+  </div>;
 }
