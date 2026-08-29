@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import type { PlanId } from "@prisma/client";
+import { getConfiguredPlan, getPlanCatalog } from "@/lib/plans";
 
 let stripeClient: Stripe | null = null;
 
@@ -20,21 +21,13 @@ export function isStripeConfigured() {
 }
 
 /** Map RDISTRO plan → Stripe Price ID (env-driven). */
-export function priceIdForPlan(planId: PlanId): string | null {
-  if (planId === "starter") {
-    return process.env.STRIPE_PRICE_STARTER?.trim() || null;
-  }
-  if (planId === "pro") {
-    return process.env.STRIPE_PRICE_PRO?.trim() || null;
-  }
-  return null;
+export async function priceIdForPlan(planId: PlanId): Promise<string | null> {
+  return (await getConfiguredPlan(planId)).stripePriceId;
 }
 
-export function planIdFromPriceId(priceId: string | null | undefined): PlanId {
+export async function planIdFromPriceId(priceId: string | null | undefined): Promise<PlanId> {
   if (!priceId) return "free";
-  if (priceId === process.env.STRIPE_PRICE_STARTER) return "starter";
-  if (priceId === process.env.STRIPE_PRICE_PRO) return "pro";
-  return "free";
+  return (await getPlanCatalog()).find((plan) => plan.stripePriceId === priceId)?.id ?? "free";
 }
 
 export function appUrl(path = "") {

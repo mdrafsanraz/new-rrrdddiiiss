@@ -38,7 +38,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
 
   if (!userId) {
     console.warn("[stripe/webhook] No user for subscription", sub.id);
-    return;
+    return null;
   }
 
   const priceId = sub.items.data[0]?.price?.id ?? null;
@@ -46,7 +46,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const planId =
     planFromMeta === "starter" || planFromMeta === "pro"
       ? planFromMeta
-      : planIdFromPriceId(priceId);
+      : await planIdFromPriceId(priceId);
 
   const stripeStatus = mapStatus(sub.status);
   const entitled =
@@ -59,8 +59,15 @@ async function syncSubscription(sub: Stripe.Subscription) {
       stripePriceId: priceId,
       stripeStatus,
       planId: entitled,
+      subscriptionCurrentPeriodEnd: sub.items.data.length ? new Date(Math.max(...sub.items.data.map((item) => item.current_period_end)) * 1000) : null,
+      subscriptionCancelAtPeriodEnd: sub.cancel_at_period_end,
     },
   });
+  return userId;
+}
+
+async function recordEvent(event: Stripe.Event, userId: string | null, details: { status?: string | null; amountDue?: number | null; currency?: string | null } = {}) {
+  await prisma.subscriptionEvent.upsert({ where: { stripeEventId: event.id }, create: { stripeEventId: event.id, userId, type: event.type, status: details.status ?? null, amountDue: details.amountDue == null ? null : details.amountDue / 100, currency: details.currency?.toUpperCase() ?? null, occurredAt: new Date(event.created * 1000) }, update: {} });
 }
 
 export async function POST(request: Request) {
@@ -97,13 +104,16 @@ export async function POST(request: Request) {
               ? session.subscription
               : session.subscription.id;
           const sub = await stripe.subscriptions.retrieve(subId);
-          await syncSubscription(sub);
+          const userId = await syncSubscription(sub);
+          await recordEvent(event, userId, { status: sub.status });
         }
         break;
       }
       case "customer.subscription.updated":
       case "customer.subscription.created": {
-        await syncSubscription(event.data.object as Stripe.Subscription);
+        const sub = event.data.object as Stripe.Subscription;
+        const userId = await syncSubscription(sub);
+        await recordEvent(event, userId, { status: sub.status });
         break;
       }
       case "customer.subscription.deleted": {
@@ -127,9 +137,20 @@ export async function POST(request: Request) {
               stripeStatus: "canceled",
               stripeSubscriptionId: null,
               stripePriceId: null,
+              subscriptionCurrentPeriodEnd: null,
+              subscriptionCancelAtPeriodEnd: false,
             },
           });
+          await recordEvent(event, user.id, { status: sub.status });
         }
+        break;
+      }
+      case "invoice.payment_failed":
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        const user = customerId ? await prisma.user.findFirst({ where: { stripeCustomerId: customerId }, select: { id: true } }) : null;
+        await recordEvent(event, user?.id ?? null, { status: invoice.status, amountDue: invoice.amount_due, currency: invoice.currency });
         break;
       }
       default:

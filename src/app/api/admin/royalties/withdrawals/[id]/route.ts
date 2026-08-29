@@ -8,6 +8,7 @@ const schema = z.object({
   status: z.enum(["processing", "paid", "declined"]),
   reference: z.string().trim().max(100).optional(),
   reason: z.string().trim().max(500).optional(),
+  note: z.string().trim().max(1000).optional(),
 });
 
 export async function PATCH(
@@ -31,6 +32,11 @@ export async function PATCH(
         { error: "Completed withdrawal decisions cannot be silently changed." },
         { status: 409 },
       );
+    const allowed = existing.status === "pending" ? ["processing", "declined"] : existing.status === "processing" ? ["paid", "declined"] : [];
+    if (!allowed.includes(input.status))
+      return NextResponse.json({ error: `A ${existing.status} withdrawal cannot be marked ${input.status}.` }, { status: 409 });
+    if (input.status === "declined" && !input.reason)
+      return NextResponse.json({ error: "A decline reason is required." }, { status: 400 });
     const processedAt = ["paid", "declined"].includes(input.status)
       ? new Date()
       : null;
@@ -65,6 +71,7 @@ export async function PATCH(
         previousStatus: existing.status,
         reference: withdrawal.reference,
         reason: input.reason,
+        note: input.note,
       },
     });
     return NextResponse.json({ ok: true, withdrawal });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
-import { getPlanLimits } from "@/lib/plans";
+import { getConfiguredPlan } from "@/lib/plans";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { isFinalRejection } from "@/lib/releases/status";
 import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
@@ -103,7 +103,7 @@ export async function POST(_request: Request, { params }: Params) {
       ...(isFirstSubmit
         ? {
             submittedAt: new Date(),
-            priorityReview: getPlanLimits(user.planId).priorityReview,
+            priorityReview: (await getConfiguredPlan(user.planId)).priorityReview,
           }
         : {}),
       syncError: null,

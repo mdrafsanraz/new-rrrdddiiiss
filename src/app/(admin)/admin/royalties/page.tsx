@@ -225,6 +225,7 @@ export default async function AdminRoyaltiesPage() {
                   <WithdrawalStatusForm
                     id={withdrawal.id}
                     current={withdrawal.status}
+                    reference={withdrawal.reference}
                   />
                 ) : (
                   <span className="text-xs capitalize text-muted-foreground">

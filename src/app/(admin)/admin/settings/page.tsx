@@ -18,6 +18,12 @@ export default async function AdminSettingsPage() {
       </div>
 
       <section className="rounded-md border border-border bg-card p-4">
+        <h2 className="text-sm font-semibold">Payouts</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Configure enabled methods, minimums, fees and processing guidance.</p>
+        <Link href="/admin/payout-settings" className="mt-2 inline-block text-sm font-medium text-primary underline-offset-2 hover:underline">Manage payout settings</Link>
+      </section>
+
+      <section className="rounded-md border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">Environment admins</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Emails in <code>ADMIN_EMAILS</code> (plus defaults) are promoted to{" "}

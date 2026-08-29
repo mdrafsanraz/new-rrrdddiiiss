@@ -7,15 +7,16 @@ import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
 
 const METHODS = [
-  { id: "bank_transfer", label: "Bank transfer", note: "Wire to your bank account", icon: Bank },
   { id: "paypal", label: "PayPal", note: "Send to your PayPal account", icon: PaypalLogo },
   { id: "wise", label: "Wise", note: "International payout via Wise", icon: CurrencyDollar },
+  { id: "payoneer", label: "Payoneer", note: "Send to your Payoneer account", icon: Bank },
 ] as const;
 
 export type PayoutInitial = {
   method: string | null;
   email: string;
   wiseAccount: string;
+  payoneerAccount: string;
   bankCurrency: string;
   bankName: string;
   bankAddress: string;
@@ -25,10 +26,12 @@ export type PayoutInitial = {
   swiftBic: string;
 };
 
-export function PayoutSettingsForm({ initial }: { initial: PayoutInitial }) {
-  const [method, setMethod] = useState(initial.method ?? "bank_transfer");
+export function PayoutSettingsForm({ initial, enabledMethods = ["wise", "paypal", "payoneer"], currency = "USD", minimums }: { initial: PayoutInitial; enabledMethods?: string[]; currency?: string; minimums?: Record<string, string> }) {
+  const availableMethods = METHODS.filter((item) => enabledMethods.includes(item.id));
+  const [method, setMethod] = useState(initial.method && enabledMethods.includes(initial.method) ? initial.method : availableMethods[0]?.id ?? "wise");
   const [email, setEmail] = useState(initial.email);
   const [wiseAccount, setWiseAccount] = useState(initial.wiseAccount);
+  const [payoneerAccount, setPayoneerAccount] = useState(initial.payoneerAccount);
   const [bankCurrency, setBankCurrency] = useState(initial.bankCurrency || "USD");
   const [bankName, setBankName] = useState(initial.bankName);
   const [bankAddress, setBankAddress] = useState(initial.bankAddress);
@@ -54,6 +57,8 @@ export function PayoutSettingsForm({ initial }: { initial: PayoutInitial }) {
             ? { method, wiseAccount, currentPassword }
             : method === "paypal"
               ? { method, email, currentPassword }
+              : method === "payoneer"
+                ? { method, email: payoneerAccount, currentPassword }
               : {
                   method,
                   bankCurrency,
@@ -88,7 +93,7 @@ export function PayoutSettingsForm({ initial }: { initial: PayoutInitial }) {
       <div className="border-b border-border px-5 py-5 sm:px-7">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Payout destination</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight">Where should earnings go?</h2>
-        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Payouts are sent in USD once your available balance reaches $50.</p>
+        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Choose an enabled payout method. Its configured minimum is enforced when you request a withdrawal.</p>
       </div>
       <div className="space-y-6 p-5 sm:p-7">
         <fieldset>
@@ -96,7 +101,7 @@ export function PayoutSettingsForm({ initial }: { initial: PayoutInitial }) {
             Payout method <span className="text-destructive">*</span>
           </legend>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            {METHODS.map((item) => {
+            {availableMethods.map((item) => {
               const Icon = item.icon;
               const active = method === item.id;
               return (
@@ -149,6 +154,10 @@ export function PayoutSettingsForm({ initial }: { initial: PayoutInitial }) {
             }}
             helper="Use the email connected to your PayPal account."
           />
+        ) : null}
+
+        {method === "payoneer" ? (
+          <Field id="payout-payoneer-email" label="Payoneer email" type="email" autoComplete="email" required value={payoneerAccount} onChange={(event) => { setPayoneerAccount(event.target.value); dirty(); }} helper={`Use the email connected to your Payoneer account. Minimum: ${currency} ${minimums?.payoneer ?? "50"}.`} />
         ) : null}
 
         {method === "bank_transfer" ? (

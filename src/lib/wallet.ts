@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma, type WalletTransactionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { describePayoutDestination, payoutMethodLabel } from "@/lib/payout-methods";
+import { getPayoutPolicy, PAYOUT_METHODS, type PayoutMethod } from "@/lib/payout-settings";
 
 const ZERO = new Prisma.Decimal(0);
 const RESERVED_DEBIT_STATUSES: WalletTransactionStatus[] = [
@@ -63,6 +64,7 @@ export async function requestWithdrawal(input: {
   userId: string;
   amount: Prisma.Decimal;
 }) {
+  const policy = await getPayoutPolicy();
   return prisma.$transaction(
     async (tx) => {
       const user = await tx.user.findUnique({
@@ -71,6 +73,7 @@ export async function requestWithdrawal(input: {
           payoutMethod: true,
           payoutEmail: true,
           payoutWiseAccount: true,
+          payoutPayoneerAccount: true,
           payoutBankName: true,
           payoutBankAccountNumber: true,
           payoutThreshold: true,
@@ -78,9 +81,14 @@ export async function requestWithdrawal(input: {
       });
       if (!user?.payoutMethod)
         throw new Error("Set a payout method before requesting a withdrawal.");
-      if (input.amount.lt(user.payoutThreshold))
+      if (!PAYOUT_METHODS.includes(user.payoutMethod as PayoutMethod))
+        throw new Error("Your saved payout method is no longer supported. Choose an available method.");
+      const methodPolicy = policy.methods[user.payoutMethod as PayoutMethod];
+      if (!methodPolicy.enabled)
+        throw new Error(`${payoutMethodLabel(user.payoutMethod)} withdrawals are currently unavailable.`);
+      if (input.amount.lt(methodPolicy.minimum))
         throw new Error(
-          `The minimum withdrawal is USD ${user.payoutThreshold}.`,
+          `The minimum ${payoutMethodLabel(user.payoutMethod)} withdrawal is ${policy.currency} ${methodPolicy.minimum}.`,
         );
       const groups = await tx.walletTransaction.groupBy({
         by: ["direction", "status"],
@@ -109,7 +117,7 @@ export async function requestWithdrawal(input: {
         data: {
           userId: input.userId,
           amount: input.amount,
-          currency: "USD",
+          currency: policy.currency,
           method: user.payoutMethod,
           destination,
           status: "pending",
@@ -121,7 +129,7 @@ export async function requestWithdrawal(input: {
           userId: input.userId,
           type: "withdrawal",
           amount: input.amount,
-          currency: "USD",
+          currency: policy.currency,
           direction: "debit",
           sourceType: "withdrawal",
           sourceId: withdrawal.id,

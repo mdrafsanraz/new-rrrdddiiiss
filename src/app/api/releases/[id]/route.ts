@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { logReleaseActivity } from "@/lib/releases/activity";
-import { getPlanLimits } from "@/lib/plans";
+import { getConfiguredPlan } from "@/lib/plans";
 import {
   canUserEditRelease,
   canUserSubmitRelease,
@@ -151,7 +151,7 @@ export async function POST(request: Request, { params }: Params) {
 
   try {
     await assertCanSubmitRelease(user.id, user.planId);
-    const priorityReview = getPlanLimits(user.planId).priorityReview;
+    const priorityReview = (await getConfiguredPlan(user.planId)).priorityReview;
 
     const release = await prisma.$transaction(async (tx) => {
       const lockedRelease = await tx.release.findFirst({

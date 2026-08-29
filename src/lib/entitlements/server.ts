@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { buildUsageSnapshot } from "@/lib/entitlements";
 import type { PlanId } from "@prisma/client";
+import { getConfiguredPlan } from "@/lib/plans";
 
 /** Free-plan release quota: only genuinely submitted releases this month. */
 export async function getUserUsage(userId: string, planId: PlanId) {
@@ -8,7 +9,7 @@ export async function getUserUsage(userId: string, planId: PlanId) {
   start.setUTCDate(1);
   start.setUTCHours(0, 0, 0, 0);
 
-  const [artistsUsed, releasesSubmittedThisMonth, totalReleases, totalTracks] =
+  const [artistsUsed, releasesSubmittedThisMonth, totalReleases, totalTracks, limits] =
     await Promise.all([
       prisma.artist.count({ where: { userId } }),
       prisma.release.count({
@@ -19,10 +20,11 @@ export async function getUserUsage(userId: string, planId: PlanId) {
       }),
       prisma.release.count({ where: { userId } }),
       prisma.track.count({ where: { userId } }),
+      getConfiguredPlan(planId),
     ]);
 
   return {
-    ...buildUsageSnapshot(planId, artistsUsed, releasesSubmittedThisMonth),
+    ...buildUsageSnapshot(planId, artistsUsed, releasesSubmittedThisMonth, limits),
     totalReleases,
     totalTracks,
   };

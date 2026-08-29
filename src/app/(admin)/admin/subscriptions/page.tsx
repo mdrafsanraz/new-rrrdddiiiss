@@ -1,106 +1,48 @@
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, CreditCard, Funnel, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { type PlanId, Prisma, type SubscriptionStatus } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { planLabel } from "@/lib/plans";
-import Link from "next/link";
 
-export const metadata = { title: "Subscriptions · Admin" };
+export const metadata = { title: "Subscriptions | Admin" };
+export const dynamic = "force-dynamic";
+type Props = { searchParams: Promise<{ q?: string; plan?: string; status?: string; page?: string }> };
+const plans: PlanId[] = ["free", "starter", "pro"];
+const statuses: SubscriptionStatus[] = ["none", "active", "trialing", "past_due", "canceled", "incomplete"];
+const take = 40;
+const date = (value: Date | null) => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "Not available";
+const eventLabel = (type: string) => type.replaceAll(".", " ").replaceAll("_", " ");
 
-export default async function AdminSubscriptionsPage() {
+export default async function AdminSubscriptionsPage({ searchParams }: Props) {
   await requirePermission("subscriptions.manage");
-
-  const [byPlan, pastDue, canceled, recent] = await Promise.all([
-    prisma.user.groupBy({
-      by: ["planId"],
-      _count: true,
-    }),
-    prisma.user.count({ where: { stripeStatus: "past_due" } }),
-    prisma.user.count({ where: { stripeStatus: "canceled" } }),
-    prisma.user.findMany({
-      where: { planId: { in: ["starter", "pro"] } },
-      orderBy: { updatedAt: "desc" },
-      take: 40,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        planId: true,
-        stripeStatus: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-      },
-    }),
+  const params = await searchParams;
+  const q = params.q?.trim() ?? "";
+  const plan = plans.includes(params.plan as PlanId) ? params.plan as PlanId : undefined;
+  const status = statuses.includes(params.status as SubscriptionStatus) ? params.status as SubscriptionStatus : undefined;
+  const page = Math.max(1, Number(params.page) || 1);
+  const where: Prisma.UserWhereInput = { role: "user", ...(plan ? { planId: plan } : {}), ...(status ? { stripeStatus: status } : {}), ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }, { stripeCustomerId: { contains: q, mode: "insensitive" } }, { stripeSubscriptionId: { contains: q, mode: "insensitive" } }] } : {}) };
+  const [rows, total, byPlan, byStatus, failureCount, history] = await Promise.all([
+    prisma.user.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (page - 1) * take, take, select: { id: true, name: true, email: true, planId: true, stripeStatus: true, stripeCustomerId: true, stripeSubscriptionId: true, stripePriceId: true, subscriptionCurrentPeriodEnd: true, subscriptionCancelAtPeriodEnd: true, updatedAt: true } }),
+    prisma.user.count({ where }),
+    prisma.user.groupBy({ by: ["planId"], where: { role: "user" }, _count: true }),
+    prisma.user.groupBy({ by: ["stripeStatus"], where: { role: "user" }, _count: true }),
+    prisma.subscriptionEvent.count({ where: { type: "invoice.payment_failed" } }),
+    prisma.subscriptionEvent.findMany({ orderBy: { occurredAt: "desc" }, take: 12, include: { user: { select: { id: true, name: true, email: true } } } }),
   ]);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Subscriptions</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Local plan state mirrored from Stripe. Manual Stripe mutations are not
-          performed here — open Stripe for billing changes.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {(["free", "starter", "pro"] as const).map((plan) => (
-          <div
-            key={plan}
-            className="rounded-md border border-border bg-card p-4"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {planLabel(plan)}
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">
-              {byPlan.find((p) => p.planId === plan)?._count ?? 0}
-            </p>
-          </div>
-        ))}
-        <div className="rounded-md border border-border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Past due
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{pastDue}</p>
-        </div>
-        <div className="rounded-md border border-border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Canceled
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{canceled}</p>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-md border border-border bg-card">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Plan</th>
-              <th className="px-3 py-2">Stripe status</th>
-              <th className="px-3 py-2">Customer</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {recent.map((u) => (
-              <tr key={u.id} className="hover:bg-muted/30">
-                <td className="px-3 py-2.5">
-                  <Link
-                    href={`/admin/users/${u.id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {u.name}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">{u.email}</p>
-                </td>
-                <td className="px-3 py-2.5">{planLabel(u.planId)}</td>
-                <td className="px-3 py-2.5 text-xs">{u.stripeStatus}</td>
-                <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
-                  {u.stripeCustomerId ?? "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  const planCount = (value: PlanId) => byPlan.find((item) => item.planId === value)?._count ?? 0;
+  const statusCount = (value: SubscriptionStatus) => byStatus.find((item) => item.stripeStatus === value)?._count ?? 0;
+  const active = statusCount("active") + statusCount("trialing");
+  const pages = Math.max(1, Math.ceil(total / take));
+  const pageHref = (next: number) => { const query = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]))); query.set("page", String(next)); return `/admin/subscriptions?${query}`; };
+  return <div className="mx-auto max-w-[1400px] space-y-6">
+    <header className="border-b border-border pb-6"><div className="flex items-center gap-2 text-primary"><CreditCard size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Billing operations</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Subscriptions</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Monitor the local subscription state synchronized by Stripe webhooks. Billing changes remain in Stripe so there is only one billing authority.</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-5"><Metric label="Active" value={active} href="/admin/subscriptions?status=active" /><Metric label="Free" value={planCount("free")} href="/admin/subscriptions?plan=free" /><Metric label="Starter" value={planCount("starter")} href="/admin/subscriptions?plan=starter" /><Metric label="Pro" value={planCount("pro")} href="/admin/subscriptions?plan=pro" /><Metric label="Payment failures" value={failureCount} href="#subscription-history" danger={failureCount > 0} /></section>
+    <section className="grid gap-3 border border-border bg-card p-4 lg:grid-cols-[1fr_auto]"><form className="grid gap-3 sm:grid-cols-[1fr_180px_180px_auto]"><input name="q" defaultValue={q} placeholder="User, email, Stripe ID" aria-label="Search subscriptions" className="h-10 border border-border bg-background px-3 text-sm" /><select name="plan" defaultValue={plan ?? ""} aria-label="Plan" className="h-10 border border-border bg-background px-3 text-xs"><option value="">All plans</option>{plans.map((item) => <option key={item} value={item}>{planLabel(item)}</option>)}</select><select name="status" defaultValue={status ?? ""} aria-label="Subscription status" className="h-10 border border-border bg-background px-3 text-xs"><option value="">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><button className="flex h-10 items-center justify-center gap-2 bg-foreground px-4 text-xs font-semibold text-background"><Funnel /> Apply</button></form>{Object.values(params).some(Boolean) ? <Link href="/admin/subscriptions" className="self-center text-xs font-semibold hover:underline">Clear filters</Link> : null}</section>
+    <section className="overflow-hidden border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold">Subscription accounts</h2><p className="mt-1 text-[11px] text-muted-foreground">{total.toLocaleString()} matching accounts</p></div><span className="text-xs text-muted-foreground">Webhook-synchronized</span></div><div className="overflow-x-auto"><table className="w-full min-w-[1250px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">User</th><th className="px-3 py-3">Plan</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Renewal</th><th className="px-3 py-3">Stripe customer</th><th className="px-3 py-3">Subscription</th><th className="px-4 py-3 text-right">Billing</th></tr></thead><tbody className="divide-y divide-border">{!rows.length ? <tr><td colSpan={7} className="px-4 py-16 text-center text-muted-foreground">No subscription accounts match these filters.</td></tr> : rows.map((user) => <tr key={user.id} className="hover:bg-muted/20"><td className="px-4 py-4"><Link href={`/admin/users/${user.id}`} className="font-semibold hover:underline">{user.name}</Link><p className="mt-1 text-[10px] text-muted-foreground">{user.email}</p></td><td className="px-3 py-4 font-semibold">{planLabel(user.planId)}</td><td className="px-3 py-4"><span className={`font-semibold capitalize ${user.stripeStatus === "past_due" || user.stripeStatus === "incomplete" ? "text-amber-700" : user.stripeStatus === "canceled" ? "text-red-700" : ""}`}>{user.stripeStatus.replaceAll("_", " ")}</span>{user.subscriptionCancelAtPeriodEnd ? <p className="mt-1 text-[10px] text-amber-700">Cancels at period end</p> : null}</td><td className="px-3 py-4">{date(user.subscriptionCurrentPeriodEnd)}</td><td className="px-3 py-4 font-mono text-[10px]">{user.stripeCustomerId ?? "Not assigned"}</td><td className="px-3 py-4 font-mono text-[10px]">{user.stripeSubscriptionId ?? "Not assigned"}</td><td className="px-4 py-4 text-right">{user.stripeCustomerId ? <a href={`https://dashboard.stripe.com/customers/${encodeURIComponent(user.stripeCustomerId)}`} target="_blank" rel="noreferrer" className="font-semibold hover:underline">Open in Stripe</a> : <span className="text-muted-foreground">No Stripe record</span>}</td></tr>)}</tbody></table></div><footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground"><span>Page {page} of {pages}</span><div className="flex gap-2">{page > 1 ? <Link href={pageHref(page - 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground"><ArrowLeft /> Previous</Link> : null}{page < pages ? <Link href={pageHref(page + 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground">Next <ArrowRight /></Link> : null}</div></footer></section>
+    <section id="subscription-history" className="overflow-hidden border border-border bg-card"><div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Subscription history</h2><p className="mt-1 text-[11px] text-muted-foreground">Recent subscription and invoice events received from Stripe.</p></div><div className="divide-y divide-border">{!history.length ? <p className="px-4 py-12 text-center text-sm text-muted-foreground">No Stripe subscription events have been recorded yet.</p> : history.map((event) => <div key={event.id} className="grid gap-3 px-4 py-4 md:grid-cols-[180px_1fr_180px_140px] md:items-center"><div><p className="text-xs font-semibold capitalize">{eventLabel(event.type)}</p><p className="mt-1 text-[10px] text-muted-foreground">{date(event.occurredAt)}</p></div><div>{event.user ? <Link href={`/admin/users/${event.user.id}`} className="font-semibold hover:underline">{event.user.name}</Link> : <span className="text-muted-foreground">Unmatched Stripe customer</span>}<p className="mt-1 text-[10px] text-muted-foreground">{event.user?.email ?? event.stripeEventId}</p></div><p className="text-xs capitalize text-muted-foreground">{event.status ?? "No status"}</p><p className={`text-right text-sm font-semibold tabular-nums ${event.type === "invoice.payment_failed" ? "text-red-700" : ""}`}>{event.amountDue && event.currency ? new Intl.NumberFormat("en-US", { style: "currency", currency: event.currency }).format(Number(event.amountDue)) : "No amount"}</p></div>)}</div></section>
+    <p className="flex items-center gap-2 text-xs text-muted-foreground"><WarningCircle /> Payment failures count recorded webhook events, not unique customers.</p>
+  </div>;
 }
+
+function Metric({ label, value, href, danger = false }: { label: string; value: number; href: string; danger?: boolean }) { return <Link href={href} className="border-b border-border p-4 transition hover:bg-muted/30 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className={`mt-2 text-2xl font-semibold tabular-nums ${danger ? "text-red-700" : ""}`}>{value.toLocaleString()}</p></Link>; }

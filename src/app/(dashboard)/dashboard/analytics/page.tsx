@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, Broadcast, ChartLineUp, Disc, Headphones, MapPin, MusicNotes, Users } from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { getPlanLimits } from "@/lib/plans";
+import { getConfiguredPlan } from "@/lib/plans";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { ANALYTICS_PLATFORMS, getReleaseAnalytics, type AnalyticsPlatform } from "@/lib/labelgrid/analytics";
 import { AnalyticsPerformanceChart, type AnalyticsPoint } from "@/components/dashboard/analytics-performance-chart";
@@ -69,7 +69,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     select: { id: true, title: true, labelgridId: true },
   });
 
-  if (!getPlanLimits(user.planId).analytics) {
+  if (!(await getConfiguredPlan(user.planId)).analytics) {
     return <div className="mx-auto max-w-4xl py-8"><div className="relative overflow-hidden rounded-2xl border border-border bg-card p-7 sm:p-10"><div className="absolute right-0 top-0 size-72 bg-[radial-gradient(circle_at_top_right,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_68%)]" /><ChartLineUp className="relative size-9 text-primary" weight="duotone" /><h1 className="relative mt-6 text-3xl font-semibold tracking-[-0.04em]">Know what is moving.</h1><p className="relative mt-3 max-w-xl text-sm leading-6 text-muted-foreground">Daily streams, listeners, saves, countries, placements, and track performance are available on Starter and Pro.</p><Link href="/dashboard/settings/subscription" className={cn(buttonVariants(), "relative mt-7 h-10 px-5")}>Unlock analytics <ArrowUpRight size={15} weight="bold" /></Link></div></div>;
   }
 

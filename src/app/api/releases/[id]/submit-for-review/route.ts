@@ -5,7 +5,7 @@ import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { syncReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
-import { getPlanLimits } from "@/lib/plans";
+import { getConfiguredPlan } from "@/lib/plans";
 import {
   canUserResubmitRelease,
   canUserSubmitRelease,
@@ -128,7 +128,7 @@ export async function POST(_request: Request, { params }: Params) {
       ...(isFirstSubmit
         ? {
             submittedAt: new Date(),
-            priorityReview: getPlanLimits(user.planId).priorityReview,
+            priorityReview: (await getConfiguredPlan(user.planId)).priorityReview,
           }
         : {}),
       syncError: null,

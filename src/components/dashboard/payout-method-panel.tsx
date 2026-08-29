@@ -17,10 +17,16 @@ export function PayoutMethodPanel({
   initial,
   accountName,
   destination,
+  enabledMethods,
+  currency,
+  minimums,
 }: {
   initial: PayoutInitial;
   accountName: string;
   destination: string | null;
+  enabledMethods: string[];
+  currency: string;
+  minimums: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -29,7 +35,7 @@ export function PayoutMethodPanel({
   const Icon =
     initial.method === "paypal"
       ? PaypalLogo
-      : initial.method === "wise"
+      : ["wise", "payoneer"].includes(initial.method ?? "")
         ? CurrencyDollar
         : Bank;
   useEffect(() => {
@@ -134,7 +140,7 @@ export function PayoutMethodPanel({
                 </button>
               </div>
               <div className="p-4 sm:p-6">
-                <PayoutSettingsForm initial={initial} />
+                <PayoutSettingsForm initial={initial} enabledMethods={enabledMethods} currency={currency} minimums={minimums} />
               </div>
             </motion.div>
           </motion.div>

@@ -267,6 +267,8 @@ model User {
   stripeSubscriptionId String?            @unique
   stripeStatus         SubscriptionStatus @default(none)
   stripePriceId        String?
+  subscriptionCurrentPeriodEnd DateTime?
+  subscriptionCancelAtPeriodEnd Boolean @default(false)
   /**
    * Soft account flags for ops — never trust client alone.
    */
@@ -301,6 +303,8 @@ model User {
   payoutEmail              String?
   /** wise — Wise tag or the email linked to the Wise account */
   payoutWiseAccount        String?
+  /** payoneer — email linked to the Payoneer account */
+  payoutPayoneerAccount    String?
   /** bank_transfer */
   payoutBankCurrency       String?
   payoutBankName           String?
@@ -336,6 +340,24 @@ model User {
   royaltyManualMatches      RoyaltyTransaction[]   @relation("RoyaltyManualMatcher")
   walletTransactions        WalletTransaction[]
   withdrawals               Withdrawal[]
+  subscriptionEvents        SubscriptionEvent[]
+}
+
+model SubscriptionEvent {
+  id              String   @id @default(cuid())
+  stripeEventId   String   @unique
+  userId          String?
+  type            String
+  status          String?
+  amountDue       Decimal? @db.Decimal(28, 12)
+  currency        String?
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, occurredAt])
+  @@index([type, occurredAt])
 }
 
 /**
@@ -921,6 +943,44 @@ model Withdrawal {
 
   @@index([userId, requestedAt])
   @@index([status])
+}
+
+model PayoutConfiguration {
+  id                String   @id @default("default")
+  currency          String   @default("USD")
+  availabilityRules String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PayoutMethodConfiguration {
+  method            String   @id
+  enabled           Boolean  @default(false)
+  minimum           Decimal  @db.Decimal(28, 12)
+  fixedFee          Decimal  @default(0) @db.Decimal(28, 12)
+  percentageFee     Decimal  @default(0) @db.Decimal(8, 4)
+  instructions      String?
+  processingText    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PlanConfiguration {
+  planId                    PlanId   @id
+  name                      String
+  price                     Decimal  @db.Decimal(12, 2)
+  billingInterval           String
+  artistLimit               Int?
+  monthlyReleaseLimit       Int?
+  featuresJson              String   @default("[]")
+  royaltyCommissionPercent  Decimal  @db.Decimal(8, 4)
+  analytics                 Boolean  @default(false)
+  priorityReview            Boolean  @default(false)
+  active                    Boolean  @default(true)
+  hidden                    Boolean  @default(false)
+  stripePriceId             String?  @unique
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 model TrackContributor {

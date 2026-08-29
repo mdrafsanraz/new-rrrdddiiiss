@@ -9,6 +9,7 @@ import {
   priceIdForPlan,
 } from "@/lib/stripe";
 import type { PlanId } from "@prisma/client";
+import { getConfiguredPlan } from "@/lib/plans";
 
 const schema = z.object({
   planId: z.enum(["starter", "pro"]),
@@ -33,7 +34,10 @@ export async function POST(request: Request) {
   try {
     const body = schema.parse(await request.json());
     const planId = body.planId as PlanId;
-    const priceId = priceIdForPlan(planId);
+    const configuredPlan = await getConfiguredPlan(planId);
+    if (!configuredPlan.active)
+      return NextResponse.json({ error: `${configuredPlan.name} is not currently available.` }, { status: 409 });
+    const priceId = await priceIdForPlan(planId);
     if (!priceId) {
       return NextResponse.json(
         { error: `Missing Stripe price for ${planId}.` },

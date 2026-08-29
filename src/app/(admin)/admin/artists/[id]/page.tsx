@@ -7,7 +7,7 @@ import { formatDistanceToNow, formatShortDate } from "@/lib/admin/format";
 import { requirePermission } from "@/lib/auth/admin";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { getPlanLimits, planLabel } from "@/lib/plans";
+import { getConfiguredPlan, planLabel } from "@/lib/plans";
 import { getArtist } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import type { ArtistData } from "@/lib/labelgrid/types";
@@ -35,7 +35,7 @@ export default async function AdminArtistDetailPage({ params }: Props) {
   }
   const tracks = artist.releases.reduce((sum, release) => sum + release._count.tracks, 0);
   const live = artist.releases.filter((release) => release.status === "live").length;
-  const limit = getPlanLimits(artist.user.planId).artists;
+  const limit = (await getConfiguredPlan(artist.user.planId)).artists;
   const activities = artist.releases.flatMap((release) => release.activities.map((activity) => ({ ...activity, releaseTitle: release.title }))).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 24);
   const canEdit = hasPermission(admin.role, "users.write");
   const canImpersonate = hasPermission(admin.role, "users.impersonate");

@@ -31,7 +31,7 @@ import {
   withTimeout,
   type LiveReleaseSummary,
 } from "@/lib/labelgrid/live-release";
-import { getPlanLimits, planLabel } from "@/lib/plans";
+import { getConfiguredPlan, planLabel } from "@/lib/plans";
 import { releaseTitleLabel } from "@/lib/releases/display";
 import { statusesForUserFacingFilter } from "@/lib/releases/status";
 import { cn } from "@/lib/utils";
@@ -195,7 +195,7 @@ function buildPlatformMetrics(streamRows: UnknownRow[]): PlatformMetric[] {
 
 export default async function DashboardHomePage() {
   const user = await requireUser();
-  const analyticsEnabled = getPlanLimits(user.planId).analytics;
+  const analyticsEnabled = (await getConfiguredPlan(user.planId)).analytics;
 
   const [initialReleases, artist, balances] = await Promise.all([
     prisma.release.findMany({

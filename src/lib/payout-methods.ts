@@ -2,6 +2,7 @@ export const PAYOUT_METHOD_LABELS: Record<string, string> = {
   bank_transfer: "Bank transfer",
   paypal: "PayPal",
   wise: "Wise",
+  payoneer: "Payoneer",
 };
 
 export function payoutMethodLabel(method: string | null) {
@@ -26,6 +27,7 @@ type PayoutUser = {
   payoutMethod: string | null;
   payoutEmail: string | null;
   payoutWiseAccount: string | null;
+  payoutPayoneerAccount: string | null;
   payoutBankName: string | null;
   payoutBankAccountNumber: string | null;
 };
@@ -41,6 +43,9 @@ export function describePayoutDestination(user: PayoutUser): string {
       ? maskEmail(user.payoutWiseAccount)
       : maskTail(user.payoutWiseAccount);
     return `${label} · ${value}`;
+  }
+  if (user.payoutMethod === "payoneer" && user.payoutPayoneerAccount) {
+    return `${label} · ${maskEmail(user.payoutPayoneerAccount)}`;
   }
   if (user.payoutMethod === "bank_transfer" && user.payoutBankAccountNumber) {
     const bank = user.payoutBankName ? `${user.payoutBankName} · ` : "";

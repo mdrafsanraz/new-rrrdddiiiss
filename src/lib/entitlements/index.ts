@@ -14,8 +14,8 @@ export type UsageSnapshot = {
   canCreateRelease: boolean;
 };
 
-export function getArtistUsage(planId: PlanId, artistsUsed: number) {
-  const limit = planLimits[planId].artists;
+export function getArtistUsage(planId: PlanId, artistsUsed: number, limits = planLimits[planId]) {
+  const limit = limits.artists;
   const remaining = limit === null ? null : Math.max(0, limit - artistsUsed);
   return {
     used: artistsUsed,
@@ -25,8 +25,8 @@ export function getArtistUsage(planId: PlanId, artistsUsed: number) {
   };
 }
 
-export function getReleaseUsage(planId: PlanId, releasesThisMonth: number) {
-  const limit = planLimits[planId].releasesPerMonth;
+export function getReleaseUsage(planId: PlanId, releasesThisMonth: number, limits = planLimits[planId]) {
+  const limit = limits.releasesPerMonth;
   const remaining =
     limit === null ? null : Math.max(0, limit - releasesThisMonth);
   return {
@@ -40,13 +40,14 @@ export function getReleaseUsage(planId: PlanId, releasesThisMonth: number) {
 export function buildUsageSnapshot(
   planId: PlanId,
   artistsUsed: number,
-  releasesThisMonth: number
+  releasesThisMonth: number,
+  limits = planLimits[planId],
 ): UsageSnapshot {
-  const artists = getArtistUsage(planId, artistsUsed);
-  const releases = getReleaseUsage(planId, releasesThisMonth);
+  const artists = getArtistUsage(planId, artistsUsed, limits);
+  const releases = getReleaseUsage(planId, releasesThisMonth, limits);
   return {
     planId,
-    limits: planLimits[planId],
+    limits,
     artistsUsed: artists.used,
     artistsLimit: artists.limit,
     artistsRemaining: artists.remaining,

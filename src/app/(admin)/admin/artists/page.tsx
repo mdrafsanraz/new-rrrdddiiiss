@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatShortDate } from "@/lib/admin/format";
-import { getPlanLimits, planLabel } from "@/lib/plans";
+import { getPlanCatalog, planLabel } from "@/lib/plans";
 
 export const metadata = { title: "Artists | Admin" };
 type Props = { searchParams: Promise<{ q?: string; state?: string; page?: string }> };
@@ -18,12 +18,13 @@ export default async function AdminArtistsPage({ searchParams }: Props) {
     ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { fullName: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }, { labelgridId: { contains: q, mode: "insensitive" as const } }, { user: { name: { contains: q, mode: "insensitive" as const } } }, { user: { email: { contains: q, mode: "insensitive" as const } } }] } : {}),
     ...(state === "all" ? {} : { locked: state === "locked" }),
   };
-  const [total, artists] = await Promise.all([
+  const [total, artists, planCatalog] = await Promise.all([
     prisma.artist.count({ where }),
     prisma.artist.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize, include: {
       user: { select: { id: true, name: true, email: true, planId: true, _count: { select: { artists: true } } } },
       releases: { select: { status: true, _count: { select: { tracks: true } } } },
     } }),
+    getPlanCatalog(),
   ]);
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const query = new URLSearchParams({ ...(q ? { q } : {}), ...(state !== "all" ? { state } : {}) });
@@ -37,7 +38,7 @@ export default async function AdminArtistsPage({ searchParams }: Props) {
       {!artists.length ? <tr><td colSpan={7} className="px-4 py-16 text-center"><p className="font-medium">No artists match these filters</p><p className="mt-1 text-xs text-muted-foreground">Try another artist, owner, email, or provider identifier.</p></td></tr> : artists.map((artist) => {
         const tracks = artist.releases.reduce((sum, release) => sum + release._count.tracks, 0);
         const live = artist.releases.filter((release) => release.status === "live").length;
-        const limit = getPlanLimits(artist.user.planId).artists;
+        const limit = planCatalog.find((plan) => plan.id === artist.user.planId)?.artists ?? 0;
         return <tr key={artist.id} className="align-top hover:bg-muted/25"><td className="px-4 py-3"><Link href={`/admin/artists/${artist.id}`} className="font-semibold hover:underline">{artist.name}</Link><p className="mt-1 text-[10px] text-muted-foreground">{artist.locked ? "Name protected" : "Editable"}{artist.location ? ` / ${artist.location}` : ""}</p></td><td className="px-3 py-3"><Link href={`/admin/users/${artist.user.id}`} className="block max-w-48 truncate text-xs font-medium hover:underline">{artist.user.name}</Link><p className="max-w-48 truncate text-[10px] text-muted-foreground">{artist.user.email}</p></td><td className="px-3 py-3 text-xs"><p className="font-medium">{planLabel(artist.user.planId)}</p><p className="mt-1 text-[10px] text-muted-foreground">{artist.user._count.artists} of {limit ?? "Unlimited"} artists</p></td><td className="px-3 py-3 text-xs"><p>{artist.releases.length} releases / {tracks} tracks</p><p className="mt-1 text-[10px] text-muted-foreground">{live} live releases</p></td><td className="px-3 py-3 text-xs"><p className="font-mono text-[10px]">{artist.labelgridId ? `LG ${artist.labelgridId}` : "Not synced"}</p><p className="mt-1 text-[10px] text-muted-foreground">{artist.labelgridId ? "Profiles sourced from LabelGrid" : "Local draft identity"}</p></td><td className="px-3 py-3 text-xs text-muted-foreground">{formatShortDate(artist.createdAt)}</td><td className="px-4 py-3 text-right"><Link href={`/admin/artists/${artist.id}`} className="inline-flex h-8 items-center border border-border px-3 text-[11px] font-semibold hover:border-foreground hover:bg-foreground hover:text-background">View artist</Link></td></tr>;
       })}
     </tbody></table></div></section>

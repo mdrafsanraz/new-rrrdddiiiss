@@ -3,6 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { getPayoutPolicy } from "@/lib/payout-settings";
 
 const currentPassword = z.string().min(1).max(200);
 
@@ -14,6 +15,12 @@ const wiseSchema = z.object({
 
 const paypalSchema = z.object({
   method: z.literal("paypal"),
+  email: z.string().trim().email().max(120),
+  currentPassword,
+});
+
+const payoneerSchema = z.object({
+  method: z.literal("payoneer"),
   email: z.string().trim().email().max(120),
   currentPassword,
 });
@@ -30,13 +37,14 @@ const bankSchema = z.object({
   currentPassword,
 });
 
-const schema = z.discriminatedUnion("method", [wiseSchema, paypalSchema, bankSchema]);
+const schema = z.discriminatedUnion("method", [wiseSchema, paypalSchema, payoneerSchema, bankSchema]);
 
 /** Payout fields not owned by the saved method are cleared so stale destination data never lingers. */
 function payoutData(body: z.infer<typeof schema>) {
   const cleared = {
     payoutEmail: null,
     payoutWiseAccount: null,
+    payoutPayoneerAccount: null,
     payoutBankCurrency: null,
     payoutBankName: null,
     payoutBankAddress: null,
@@ -51,6 +59,9 @@ function payoutData(body: z.infer<typeof schema>) {
   }
   if (body.method === "paypal") {
     return { ...cleared, payoutEmail: body.email };
+  }
+  if (body.method === "payoneer") {
+    return { ...cleared, payoutPayoneerAccount: body.email };
   }
   return {
     ...cleared,
@@ -70,6 +81,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = schema.parse(await request.json());
+    const policy = await getPayoutPolicy();
+    if (body.method === "bank_transfer")
+      return NextResponse.json({ error: "Bank transfer is no longer available for new payout destinations." }, { status: 400 });
+    if (!policy.methods[body.method].enabled)
+      return NextResponse.json({ error: `${body.method} payouts are currently unavailable.` }, { status: 409 });
     const existing = await prisma.user.findUnique({
       where: { id: sessionUser.id },
       select: { passwordHash: true, payoutMethod: true },
@@ -88,8 +104,8 @@ export async function PATCH(request: Request) {
         data: {
           payoutMethod: body.method,
           // Fixed for every account — not user-editable.
-          payoutCurrency: "USD",
-          payoutThreshold: 50,
+          payoutCurrency: policy.currency,
+          payoutThreshold: Math.ceil(Number(policy.methods[body.method].minimum)),
           payoutUpdatedAt: new Date(),
           ...payoutData(body),
         },

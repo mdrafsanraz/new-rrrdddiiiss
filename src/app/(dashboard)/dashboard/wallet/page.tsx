@@ -17,6 +17,7 @@ import { WalletWithdraw } from "@/components/dashboard/wallet-withdraw";
 import { AnimatedMoney } from "@/components/dashboard/animated-money";
 import { PayoutMethodPanel } from "@/components/dashboard/payout-method-panel";
 import { describePayoutDestination } from "@/lib/payout-methods";
+import { getPayoutPolicy, PAYOUT_METHODS } from "@/lib/payout-settings";
 
 export const metadata = { title: "Wallet" };
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ export default async function WalletPage({
         : sort === "lowest"
           ? [{ amount: "asc" }, { createdAt: "desc" }]
           : [{ createdAt: "desc" }];
-  const [balances, transactions, total] = await Promise.all([
+  const [balances, transactions, total, payoutPolicy] = await Promise.all([
     getWalletBalances(user.id),
     prisma.walletTransaction.findMany({
       where,
@@ -79,6 +80,7 @@ export default async function WalletPage({
       take: 20,
     }),
     prisma.walletTransaction.count({ where }),
+    getPayoutPolicy(),
   ]);
   const items: WalletFeedItem[] = transactions.map((transaction) => ({
     id: transaction.id,
@@ -93,6 +95,7 @@ export default async function WalletPage({
     createdAt: transaction.createdAt.toISOString(),
   }));
   const payoutDestination = describePayoutDestination(user);
+  const savedMethodEnabled = Boolean(user.payoutMethod && user.payoutMethod in payoutPolicy.methods && payoutPolicy.methods[user.payoutMethod as keyof typeof payoutPolicy.methods].enabled);
   const href = (changes: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
     const merged = {
@@ -145,8 +148,8 @@ export default async function WalletPage({
               <WalletWithdraw
                 available={balances.available.toString()}
                 currency="USD"
-                threshold={user.payoutThreshold}
-                hasPayoutMethod={Boolean(user.payoutMethod)}
+                threshold={Number(user.payoutMethod && user.payoutMethod in payoutPolicy.methods ? payoutPolicy.methods[user.payoutMethod as keyof typeof payoutPolicy.methods].minimum : 0)}
+                hasPayoutMethod={savedMethodEnabled}
                 payoutDestination={payoutDestination}
               />
             </div>
@@ -158,6 +161,7 @@ export default async function WalletPage({
               method: user.payoutMethod,
               email: user.payoutEmail ?? "",
               wiseAccount: user.payoutWiseAccount ?? "",
+              payoneerAccount: user.payoutPayoneerAccount ?? "",
               bankCurrency: user.payoutBankCurrency ?? "USD",
               bankName: user.payoutBankName ?? "",
               bankAddress: user.payoutBankAddress ?? "",
@@ -168,6 +172,9 @@ export default async function WalletPage({
             }}
             accountName={user.payoutBankAccountHolder ?? user.name}
             destination={user.payoutMethod ? payoutDestination : null}
+            enabledMethods={PAYOUT_METHODS.filter((method) => payoutPolicy.methods[method].enabled)}
+            currency={payoutPolicy.currency}
+            minimums={Object.fromEntries(PAYOUT_METHODS.map((method) => [method, payoutPolicy.methods[method].minimum]))}
           />
         </div>
         <section className="grid overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-3 lg:col-start-1">
