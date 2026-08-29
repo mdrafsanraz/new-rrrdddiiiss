@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element -- release artwork may use provider-managed remote URLs */
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,6 +12,7 @@ import { requirePermission } from "@/lib/auth/admin";
 import { getAdminHomeSnapshot } from "@/lib/admin/home";
 import { formatDistanceToNow } from "@/lib/admin/format";
 import { AdminStatusBadge } from "@/components/admin/status-badges";
+import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { planLabel } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
@@ -234,7 +234,7 @@ export default async function AdminHomePage() {
                 <li key={release.id}>
                   <Link href={`/admin/releases/${release.id}`} className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/40">
                     <div className="size-11 shrink-0 overflow-hidden border border-border bg-muted">
-                      {release.artworkUrl ? <img src={release.artworkUrl} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Disc size={17} className="text-muted-foreground" aria-hidden /></div>}
+                      {release.labelgridId ? <ProviderArtwork releaseId={release.id} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Disc size={17} className="text-muted-foreground" aria-hidden /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{release.title}</p>

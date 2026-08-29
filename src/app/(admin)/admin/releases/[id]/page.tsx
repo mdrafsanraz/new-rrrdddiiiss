@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/admin";
@@ -22,6 +21,8 @@ import {
   isLabelGridDraftMediaReady,
 } from "@/lib/labelgrid/catalog";
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
+import { ProviderArtwork } from "@/components/admin/provider-artwork";
+import { ProviderAudioPlayer } from "@/components/admin/provider-audio-player";
 
 type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
@@ -154,9 +155,9 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start gap-5 border-b border-border pb-5">
-        {release.artworkUrl ? (
-          <img
-            src={release.artworkUrl}
+        {release.labelgridId ? (
+          <ProviderArtwork
+            releaseId={release.id}
             alt=""
             className="size-24 border border-border object-cover sm:size-28"
           />
@@ -427,13 +428,8 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                         ))}
                       </ul>
                     ) : null}
-                    {t.audioUrl ? (
-                      <audio
-                        controls
-                        preload="none"
-                        src={t.audioUrl}
-                        className="mt-3 w-full max-w-lg"
-                      />
+                    {t.labelgridId ? (
+                      <ProviderAudioPlayer releaseId={release.id} trackId={t.id} />
                     ) : (
                       <p className="mt-2 text-xs text-muted-foreground">
                         No audio uploaded
@@ -459,7 +455,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
 
           <Section id="artwork" title="Artwork" description="The release cover currently stored for this catalog record.">
             <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
-              {release.artworkUrl ? <img src={release.artworkUrl} alt={`${release.title} artwork`} className="aspect-square w-full border border-border object-cover" /> : <div className="grid aspect-square w-full place-items-center border border-dashed border-border bg-muted text-xs text-muted-foreground">No artwork available</div>}
+              {release.labelgridId ? <ProviderArtwork releaseId={release.id} alt={`${release.title} artwork`} className="aspect-square w-full object-cover" /> : <div className="grid aspect-square w-full place-items-center border border-dashed border-border bg-muted text-xs text-muted-foreground">No artwork available</div>}
               <dl className="space-y-2 text-sm">
                 <Row label="Artwork available" value={artworkOnDisk ? "Yes" : "No"} />
                 <Row label="LabelGrid media ready" value={mediaReadyForLg ? "Yes" : "No"} />

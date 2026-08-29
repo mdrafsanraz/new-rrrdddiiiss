@@ -1,6 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { AdminStatusBadge, QcBadge } from "@/components/admin/status-badges";
+import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { adminReleaseWhere, ADMIN_RELEASE_FILTERS, type AdminReleaseFilter } from "@/lib/admin/release-filters";
 import { formatShortDate } from "@/lib/admin/format";
 import { requirePermission } from "@/lib/auth/admin";
@@ -118,7 +118,7 @@ export default async function AdminReleasesPage({ searchParams }: Props) {
             const blocking = release.reviewIssues.filter((issue) => issue.isBlocking).length;
             return <tr key={release.id} className="group align-top transition-colors hover:bg-muted/25">
               <td className="px-4 py-3"><div className="flex items-center gap-3">
-                {release.artworkUrl ? <img src={release.artworkUrl} alt="" className="size-11 shrink-0 border border-border object-cover" /> : <div className="grid size-11 shrink-0 place-items-center border border-border bg-muted text-[9px] font-semibold text-muted-foreground">NO ART</div>}
+                {release.labelgridId ? <ProviderArtwork releaseId={release.id} className="size-11 shrink-0 object-cover" /> : <div className="grid size-11 shrink-0 place-items-center border border-border bg-muted text-[9px] font-semibold text-muted-foreground">NO ART</div>}
                 <div className="min-w-0"><Link href={`/admin/releases/${release.id}`} className="block truncate font-semibold underline-offset-4 group-hover:underline">{release.title}</Link><p className="mt-0.5 truncate text-xs text-muted-foreground">{release.artist?.name ?? "Artist not set"} / {release.contentType} / {release._count.tracks} track{release._count.tracks === 1 ? "" : "s"}</p><div className="mt-1 flex flex-wrap gap-1">{release.priorityReview ? <span className="bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-900">Priority</span> : null}{release.label?.name ? <span className="border border-border px-1.5 py-0.5 text-[9px] text-muted-foreground">{release.label.name}</span> : null}</div></div>
               </div></td>
               <td className="px-3 py-3"><Link href={`/admin/users/${release.user.id}`} className="block max-w-44 truncate text-xs font-medium hover:underline">{release.user.name}</Link><p className="mt-0.5 max-w-44 truncate text-[10px] text-muted-foreground">{release.user.email}</p></td>

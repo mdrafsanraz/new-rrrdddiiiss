@@ -112,6 +112,7 @@ export async function getAdminHomeSnapshot() {
         status: true,
         contentType: true,
         artworkUrl: true,
+        labelgridId: true,
         createdAt: true,
         artist: { select: { name: true } },
         user: { select: { name: true, email: true } },

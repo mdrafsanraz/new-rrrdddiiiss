@@ -1,7 +1,7 @@
-/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { AssignReleaseButton } from "@/components/admin/assign-release-button";
 import { AdminStatusBadge, QcBadge } from "@/components/admin/status-badges";
+import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { formatDistanceToNow, formatShortDate } from "@/lib/admin/format";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
@@ -48,7 +48,7 @@ export default async function ReviewQueuePage() {
         const blocking = release.reviewIssues.filter((issue) => issue.isBlocking).length;
         return <tr key={release.id} className="align-top hover:bg-muted/25">
           <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</td>
-          <td className="px-3 py-3"><div className="flex gap-3">{release.artworkUrl ? <img src={release.artworkUrl} alt="" className="size-11 border border-border object-cover" /> : <div className="grid size-11 place-items-center border border-border bg-muted text-[9px] text-muted-foreground">NO ART</div>}<div className="min-w-0"><Link href={`/admin/releases/${release.id}?queue=pending`} className="block max-w-64 truncate font-semibold hover:underline">{release.title}</Link><p className="mt-0.5 max-w-64 truncate text-xs text-muted-foreground">{release.artist?.name ?? "Artist not set"} / {release._count.tracks} track{release._count.tracks === 1 ? "" : "s"}</p>{release.priorityReview ? <span className="mt-1 inline-block bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">Priority</span> : null}</div></div></td>
+          <td className="px-3 py-3"><div className="flex gap-3">{release.labelgridId ? <ProviderArtwork releaseId={release.id} className="size-11 shrink-0 object-cover" /> : <div className="grid size-11 place-items-center border border-border bg-muted text-[9px] text-muted-foreground">NO ART</div>}<div className="min-w-0"><Link href={`/admin/releases/${release.id}?queue=pending`} className="block max-w-64 truncate font-semibold hover:underline">{release.title}</Link><p className="mt-0.5 max-w-64 truncate text-xs text-muted-foreground">{release.artist?.name ?? "Artist not set"} / {release._count.tracks} track{release._count.tracks === 1 ? "" : "s"}</p>{release.priorityReview ? <span className="mt-1 inline-block bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">Priority</span> : null}</div></div></td>
           <td className="px-3 py-3"><Link href={`/admin/users/${release.user.id}`} className="block max-w-44 truncate text-xs font-medium hover:underline">{release.user.name}</Link><p className="max-w-44 truncate text-[10px] text-muted-foreground">{release.user.email}</p></td>
           <td className="px-3 py-3"><p className="text-xs font-semibold">{formatDistanceToNow(waitingSince)}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Submitted {formatShortDate(release.submittedAt)}</p></td>
           <td className="px-3 py-3"><div className="flex gap-1"><AdminStatusBadge status={release.status} /><QcBadge status={release.qcStatus} /></div><p className="mt-1.5 text-[10px] text-muted-foreground">{blocking} blocking / {release.documents.length} docs pending</p></td>
