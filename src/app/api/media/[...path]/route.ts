@@ -5,7 +5,8 @@ import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
-import { resolveUploadPath } from "@/lib/uploads/store";
+import { resolveUploadPath, storedPathUsesBucket } from "@/lib/uploads/store";
+import { getObject, isS3Configured } from "@/lib/uploads/s3";
 
 type Params = { params: Promise<{ path: string[] }> };
 
@@ -37,6 +38,21 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const relative = segments.join("/");
+
+  if (storedPathUsesBucket(relative) && isS3Configured()) {
+    const object = await getObject(relative);
+    if (!object) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return new NextResponse(new Uint8Array(object.buffer), {
+      headers: {
+        "Content-Type": object.contentType || contentTypeFor(relative),
+        "Content-Length": String(object.buffer.length),
+        "Cache-Control": "private, max-age=3600",
+      },
+    });
+  }
+
   const abs = resolveUploadPath(relative);
   if (!abs) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

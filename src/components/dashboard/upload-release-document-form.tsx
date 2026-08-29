@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 
 const KINDS = [
@@ -30,19 +29,15 @@ export function UploadReleaseDocumentForm({
   const router = useRouter();
   const [kind, setKind] = useState<string>("proof_of_rights");
   const [note, setNote] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState("");
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function uploadFile(file: File) {
     setError("");
     setOk("");
-    if (!file) {
-      setError("Choose a file to upload.");
-      return;
-    }
+    setFileName(file.name);
     setStatus("loading");
     try {
       const fd = new FormData();
@@ -62,7 +57,6 @@ export function UploadReleaseDocumentForm({
         return;
       }
       setOk("Document uploaded.");
-      setFile(null);
       setNote("");
       setStatus("idle");
       router.refresh();
@@ -73,12 +67,13 @@ export function UploadReleaseDocumentForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid gap-3 border border-border bg-background p-4">
+    <div className="mt-4 grid gap-3 border border-border bg-background p-4">
       <Field
         id={`doc-kind-${issueId ?? "release"}`}
         label="Document type"
         as="select"
         value={kind}
+        disabled={status === "loading"}
         onChange={(e) => setKind(e.target.value)}
       >
         {KINDS.map((k) => (
@@ -87,6 +82,15 @@ export function UploadReleaseDocumentForm({
           </option>
         ))}
       </Field>
+      <Field
+        id={`doc-note-${issueId ?? "release"}`}
+        label="Note (optional)"
+        as="textarea"
+        value={note}
+        disabled={status === "loading"}
+        onChange={(e) => setNote(e.target.value)}
+        helper="Set the type and note before choosing a file — it uploads as soon as you pick one."
+      />
       <div className="grid gap-2">
         <label
           htmlFor={`doc-file-${issueId ?? "release"}`}
@@ -98,18 +102,20 @@ export function UploadReleaseDocumentForm({
           id={`doc-file-${issueId ?? "release"}`}
           type="file"
           accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp"
-          className="block w-full text-sm text-muted-foreground file:mr-3 file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          disabled={status === "loading"}
+          className="block w-full text-sm text-muted-foreground file:mr-3 file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground disabled:opacity-60"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void uploadFile(file);
+          }}
         />
       </div>
-      <Field
-        id={`doc-note-${issueId ?? "release"}`}
-        label="Note (optional)"
-        as="textarea"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        helper="If this issue came from distribution review, a note may be posted with your upload."
-      />
+      {status === "loading" ? (
+        <p className="text-sm font-medium text-muted-foreground" role="status">
+          Uploading {fileName}…
+        </p>
+      ) : null}
       {error ? (
         <p className="text-sm font-medium text-destructive" role="alert">
           {error}
@@ -120,13 +126,6 @@ export function UploadReleaseDocumentForm({
           {ok}
         </p>
       ) : null}
-      <Button
-        type="submit"
-        className="h-10 w-fit px-4"
-        disabled={status === "loading"}
-      >
-        {status === "loading" ? "Uploading…" : "Upload document"}
-      </Button>
-    </form>
+    </div>
   );
 }

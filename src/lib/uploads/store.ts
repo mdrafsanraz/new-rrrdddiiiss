@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { readImageDimensions } from "@/lib/uploads/image-dimensions";
+import { getObject, isS3Configured, putObject } from "@/lib/uploads/s3";
 
 /** LabelGrid cover art requirement — exact square, no exceptions. */
 export const REQUIRED_ARTWORK_SIZE = 3000;
@@ -79,6 +80,19 @@ function extFor(mime: string, originalName: string): string {
   return ".bin";
 }
 
+/** Fallback MIME guess from a filename's extension, for objects/files whose content-type wasn't stored. */
+function mimeFromExt(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".wav") return "audio/wav";
+  if (ext === ".flac") return "audio/flac";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".pdf") return "application/pdf";
+  return "application/octet-stream";
+}
+
 /**
  * Validate an artwork or audio file and return its bytes in memory — never
  * written to our disk. LabelGrid is the storage for these assets; the
@@ -146,7 +160,38 @@ const DOCUMENT_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
-/** Supporting docs for review issues (stored locally; LG has notes-only API). */
+/**
+ * Only review-issue documents ("documents" kind — proof of rights, etc.)
+ * use the bucket: LabelGrid has no upload endpoint for these, so RDISTRO
+ * is their permanent home. Track licenses ("license" kind) still transit
+ * straight to LabelGrid (see syncTrackLicense in sync-submit.ts) — this is
+ * just a brief local cache until that one-time sync runs, so it has no
+ * need for durable bucket storage. The filename's `{kind}-` prefix (baked
+ * in below) is how the read-back paths (loadStoredUpload, /api/media)
+ * know which backend to check.
+ */
+function usesBucket(kind: string): boolean {
+  return kind === "documents";
+}
+
+/** Recovers the `{kind}-{token}{ext}` prefix baked into a stored filename by saveGenericUpload. */
+function kindFromRelativePath(relativePath: string): string {
+  const filename = path.basename(relativePath);
+  const idx = filename.indexOf("-");
+  return idx === -1 ? filename : filename.slice(0, idx);
+}
+
+/** Whether the object at this stored path should be looked up in the bucket (vs. local disk). */
+export function storedPathUsesBucket(relativePath: string): boolean {
+  return usesBucket(kindFromRelativePath(relativePath));
+}
+
+/**
+ * Supporting docs for review issues (proof of rights, track licenses,
+ * etc.). "documents"-kind uploads go to the S3-compatible bucket (e.g.
+ * Railway's Bucket service) when S3_* env vars are configured; everything
+ * else, and any upload when S3 isn't configured, falls back to local disk.
+ */
 export async function saveGenericUpload(
   userId: string,
   file: File,
@@ -161,16 +206,22 @@ export async function saveGenericUpload(
   const buf = Buffer.from(await file.arrayBuffer());
   const token = randomBytes(8).toString("hex");
   const filename = `${kind}-${token}${extFor(file.type, file.name)}`;
-  const dir = path.join(ROOT, userId);
-  await mkdir(dir, { recursive: true });
-  const abs = path.join(dir, filename);
-  await writeFile(abs, buf);
   const relativePath = path.posix.join(userId, filename);
+  const contentType = file.type || "application/octet-stream";
+
+  if (usesBucket(kind) && isS3Configured()) {
+    await putObject(relativePath, buf, contentType);
+  } else {
+    const dir = path.join(ROOT, userId);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(ROOT, relativePath), buf);
+  }
+
   return {
     relativePath,
     publicUrl: `/api/media/${relativePath}`,
     filename: file.name || filename,
-    mimeType: file.type || "application/octet-stream",
+    mimeType: contentType,
     size: buf.length,
     buffer: buf,
   };
@@ -193,31 +244,37 @@ export function relativePathFromPublicUrl(publicUrl: string | null | undefined):
   return publicUrl.slice(idx + prefix.length).split("?")[0] || null;
 }
 
-/** Reload a saved local document (e.g. a track license) from disk. */
+/** Reload a saved document (e.g. a track license) from the bucket, or local disk if S3 isn't configured or this kind doesn't use it. */
 export async function loadStoredUpload(
   publicUrl: string | null | undefined
 ): Promise<StoredUpload | null> {
   const relative = relativePathFromPublicUrl(publicUrl);
   if (!relative) return null;
+  const filename = path.basename(relative);
+
+  if (storedPathUsesBucket(relative) && isS3Configured()) {
+    const object = await getObject(relative);
+    if (!object) return null;
+    return {
+      relativePath: relative,
+      publicUrl: `/api/media/${relative}`,
+      filename,
+      mimeType: object.contentType || mimeFromExt(filename),
+      size: object.buffer.length,
+      buffer: object.buffer,
+    };
+  }
+
   const abs = resolveUploadPath(relative);
   if (!abs) return null;
   try {
     const { readFile } = await import("node:fs/promises");
     const buffer = await readFile(abs);
-    const filename = path.basename(abs);
-    const ext = path.extname(filename).toLowerCase();
-    let mimeType = "application/octet-stream";
-    if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg";
-    else if (ext === ".png") mimeType = "image/png";
-    else if (ext === ".webp") mimeType = "image/webp";
-    else if (ext === ".wav") mimeType = "audio/wav";
-    else if (ext === ".flac") mimeType = "audio/flac";
-    else if (ext === ".mp3") mimeType = "audio/mpeg";
     return {
       relativePath: relative,
       publicUrl: `/api/media/${relative}`,
       filename,
-      mimeType,
+      mimeType: mimeFromExt(filename),
       size: buffer.length,
       buffer,
     };

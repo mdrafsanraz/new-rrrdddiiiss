@@ -50,17 +50,21 @@ If your Postgres service has a different name, pick that service’s `DATABASE_U
 | `NEXT_PUBLIC_APP_URL` | `https://new-rrrdddiiiss-production.up.railway.app` |
 | `HOSTNAME` | `0.0.0.0` |
 | `LABELGRID_ENV` | `sandbox` |
-| `UPLOADS_DIR` | `/data/uploads` (see volume below) |
+| `S3_ENDPOINT` | from your Bucket service's **Connect** panel |
+| `S3_BUCKET` | from your Bucket service's **Connect** panel |
+| `S3_ACCESS_KEY_ID` | from your Bucket service's **Connect** panel |
+| `S3_SECRET_ACCESS_KEY` | from your Bucket service's **Connect** panel |
 
-5. **Persistent uploads (required for Approve → LabelGrid)**
+5. **Document storage (required for review-issue uploads)**
 
-Cover art and audio are stored on disk. Without a volume they vanish on every redeploy, and Approve fails with “artwork/audio files are missing”.
+Cover art and audio go straight to LabelGrid and never touch this app's storage. What *does* need persistent storage: release documents (proof of rights, track licenses, etc.) uploaded when a release is in "Changes Required" — LabelGrid has no upload endpoint for these, so RDISTRO stores them itself.
 
-1. Web service → **Settings → Volumes** → add a volume mounted at `/data`
-2. Variables → set `UPLOADS_DIR=/data/uploads`
-3. Redeploy
+1. New service → **Bucket** (Railway's S3-compatible object storage template)
+2. Bucket service → **Connect** tab → copy the endpoint, bucket name, access key, and secret key
+3. Web service → Variables → set `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+4. Redeploy
 
-You can re-upload missing media from the release detail page (user or admin), then Approve again.
+Without these set, document uploads fall back to local disk, which does **not** survive a redeploy unless you separately mount a volume and set `UPLOADS_DIR`.
 
 6. **Redeploy** the web service
 

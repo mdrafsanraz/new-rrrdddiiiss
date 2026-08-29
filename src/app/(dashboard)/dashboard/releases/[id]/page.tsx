@@ -97,17 +97,22 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
-  // A release held on a document request gets no edit/delete, and no
-  // resubmit until every requested document has actually been uploaded —
-  // the only action available before then is the upload card itself.
+  // "Changes required" and "document requested" are two different asks:
+  //  - changes required → the user must edit and resubmit through the
+  //    builder. Only Edit Release is offered; no standalone Resubmit (that
+  //    only makes sense once the edit is actually done) and no Delete.
+  //  - document requested → no metadata edit needed, just the upload card.
+  //    No Edit, no Delete, and no Resubmit until every requested document
+  //    has actually been uploaded — then Resubmit is the only action.
   const documentRequiredIssues = openIssues.filter((i) => i.requiresDocument);
   const documentRequested = documentRequiredIssues.length > 0;
   const documentProvided = documentRequiredIssues.every(
     (i) => ("documents" in i ? i.documents.length : 0) > 0
   );
   const canSubmit = canUserSubmitRelease(release);
-  const canResubmit =
-    canUserResubmitRelease(release) && (!documentRequested || documentProvided);
+  const canResubmit = documentRequested
+    ? documentProvided && canUserResubmitRelease(release)
+    : !needsChanges && canUserResubmitRelease(release);
   const canEdit = canUserEditRelease(release) && !documentRequested;
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
@@ -192,7 +197,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
       isInReview: facing === "in_review",
       isApproved: facing === "approved",
     });
-  const canDelete = canDeleteLifecycle && !documentRequested;
+  const canDelete = canDeleteLifecycle && !documentRequested && !needsChanges;
 
   const trackDurationsByLgId: Record<number, number | null> = {};
   for (const t of tracks) {
