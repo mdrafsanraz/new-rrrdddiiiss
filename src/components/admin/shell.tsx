@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import AnimatedBrandLogo from "@/components/site/logo";
-import { adminNav } from "@/lib/admin-nav";
+import { adminNavGroups } from "@/lib/admin-nav";
 import { hasPermission, type AdminPermission } from "@/lib/auth/permissions";
 import { NAV_PERMISSION } from "@/lib/auth/permissions";
 import type { UserRole } from "@prisma/client";
@@ -32,11 +32,16 @@ export function AdminShell({
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  const visibleNav = adminNav.filter((item) => {
-    const perm = NAV_PERMISSION[item.href] as AdminPermission | undefined;
-    if (!perm) return true;
-    return hasPermission(adminRole, perm);
-  });
+  const visibleNavGroups = adminNavGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        const perm = NAV_PERMISSION[item.href] as AdminPermission | undefined;
+        if (!perm) return true;
+        return hasPermission(adminRole, perm);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -57,35 +62,45 @@ export function AdminShell({
   }
 
   const nav = (
-    <nav className="flex flex-col gap-0.5" aria-label="Admin">
-      {visibleNav.map((item) => {
-        const active =
-          "exact" in item && item.exact
-            ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setOpen(false)}
-            className={cn(
-              "rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors",
-              active
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
+    <nav className="space-y-5" aria-label="Admin">
+      {visibleNavGroups.map((group) => (
+        <div key={group.label}>
+          <p className="mb-1.5 px-2.5 font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+            {group.label}
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {group.items.map((item) => {
+              const active =
+                "exact" in item && item.exact
+                  ? pathname === item.href
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors",
+                    active
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 
   return (
     <div className="min-h-dvh bg-[oklch(0.965_0.004_250)] text-foreground">
       <div className="mx-auto flex min-h-dvh max-w-[1600px]">
-        <aside className="hidden w-52 shrink-0 flex-col border-r border-border/80 bg-card px-3 py-5 lg:flex">
+        <aside className="hidden w-56 shrink-0 flex-col border-r border-border/80 bg-card px-3 py-5 lg:flex">
           <div className="px-1">
             <AnimatedBrandLogo
               className="h-8 w-auto"
@@ -95,7 +110,7 @@ export function AdminShell({
               Operations
             </p>
           </div>
-          <div className="mt-6 flex-1 overflow-y-auto">{nav}</div>
+          <div className="mt-6 flex-1 overflow-y-auto pb-5">{nav}</div>
           <div className="border-t border-border/80 pt-4">
             <p className="truncate px-1 text-xs font-medium">{adminName}</p>
             <p className="mt-0.5 px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -157,7 +172,7 @@ export function AdminShell({
           </header>
 
           {open ? (
-            <div className="border-b border-border bg-card px-3 py-3 lg:hidden">
+            <div className="max-h-[calc(100dvh-3rem)] overflow-y-auto border-b border-border bg-card px-3 py-4 lg:hidden">
               {nav}
             </div>
           ) : null}
