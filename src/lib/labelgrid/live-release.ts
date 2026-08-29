@@ -169,7 +169,13 @@ function unwrapFile(raw: unknown): FileData | null {
   return obj.data ?? obj;
 }
 
-/** GET /tracks/{trackId}/files/stereo — null when no file has been uploaded yet. */
+/**
+ * GET /tracks/{trackId}/files/stereo — null when no file has been uploaded
+ * yet. Never throws: a single track's file lookup failing (rate limit,
+ * transient 5xx, etc.) must not take down the whole release's live fetch
+ * — that would replace the entire tabs view (metadata, credits, everything)
+ * with just an error banner over one track's audio status.
+ */
 async function fetchTrackAudio(trackId: number): Promise<LiveAudioFile | null> {
   try {
     const file = unwrapFile(await getTrackFile(trackId, "stereo"));
@@ -182,7 +188,8 @@ async function fetchTrackAudio(trackId: number): Promise<LiveAudioFile | null> {
     };
   } catch (error) {
     if (error instanceof LabelGridApiError && error.status === 404) return null;
-    throw error;
+    console.error(`[live-release] track ${trackId} audio lookup failed`, error);
+    return null;
   }
 }
 

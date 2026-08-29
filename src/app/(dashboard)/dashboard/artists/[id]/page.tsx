@@ -9,9 +9,30 @@ import { EditArtistForm } from "@/components/dashboard/edit-artist-form";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { getUserFacingReleaseStatus } from "@/lib/releases/status";
 import { cn } from "@/lib/utils";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
+import {
+  fetchLiveReleaseSummary,
+  withTimeout,
+  type LiveReleaseSummary,
+} from "@/lib/labelgrid/live-release";
 
 type Props = { params: Promise<{ id: string }> };
 function firstLetter(name: string) { return name.trim().charAt(0).toUpperCase() || "A"; }
+
+/** Same live-artwork overlay used on the releases list and dashboard home — LabelGrid is the source of truth for cover art. */
+async function fetchLiveArtwork(
+  labelgridIds: string[]
+): Promise<Map<string, LiveReleaseSummary>> {
+  if (!isLabelGridLive() || labelgridIds.length === 0) return new Map();
+  const results = await Promise.allSettled(
+    labelgridIds.map((id) => withTimeout(fetchLiveReleaseSummary(Number(id)), 4000))
+  );
+  const map = new Map<string, LiveReleaseSummary>();
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") map.set(labelgridIds[i], r.value);
+  });
+  return map;
+}
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
@@ -29,6 +50,11 @@ export default async function ArtistDetailPage({ params }: Props) {
   if (!artist) notFound();
   const liveCount = artist.releases.filter((release) => getUserFacingReleaseStatus(release.status) === "live").length;
   const totalTracks = artist.releases.reduce((sum, release) => sum + release.tracks.length, 0);
+  const liveArtworkByLabelgridId = await fetchLiveArtwork(
+    artist.releases
+      .map((release) => release.labelgridId)
+      .filter((id): id is string => Boolean(id))
+  );
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6">
@@ -51,7 +77,7 @@ export default async function ArtistDetailPage({ params }: Props) {
 
       <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
         <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Discography</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Release catalog</h2></div><Link href={`/dashboard/releases/new?artistId=${artist.id}`} className={cn(buttonVariants({ variant: "outline" }), "h-9 px-4")}><Plus size={14} weight="bold" /> Add release</Link></div>
-        {artist.releases.length === 0 ? <div className="mt-6 rounded-xl border border-dashed border-border px-6 py-12 text-center"><div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground"><Disc size={22} weight="duotone" /></div><p className="mt-4 font-semibold">No releases yet</p><p className="mt-2 text-sm text-muted-foreground">Start this artist&apos;s catalog with a new release.</p></div> : <div className="mt-6 grid gap-3 md:grid-cols-2">{artist.releases.map((release) => <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group flex items-center gap-4 rounded-xl border border-border p-3 transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/30"><div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground">{release.artworkUrl ? <img src={release.artworkUrl} alt="" className="size-full object-cover" /> : <Disc size={20} weight="duotone" />}</div><div className="min-w-0 flex-1"><p className="truncate font-semibold">{release.title}</p><div className="mt-1 flex items-center gap-2"><StatusBadge status={release.status} /><span className="text-xs text-muted-foreground">{release.tracks.length} track{release.tracks.length === 1 ? "" : "s"}</span></div></div><ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" weight="bold" /></Link>)}</div>}
+        {artist.releases.length === 0 ? <div className="mt-6 rounded-xl border border-dashed border-border px-6 py-12 text-center"><div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground"><Disc size={22} weight="duotone" /></div><p className="mt-4 font-semibold">No releases yet</p><p className="mt-2 text-sm text-muted-foreground">Start this artist&apos;s catalog with a new release.</p></div> : <div className="mt-6 grid gap-3 md:grid-cols-2">{artist.releases.map((release) => { const artworkUrl = (release.labelgridId ? liveArtworkByLabelgridId.get(release.labelgridId)?.coverUrl : undefined) ?? release.artworkUrl; return <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group flex items-center gap-4 rounded-xl border border-border p-3 transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/30"><div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground">{artworkUrl ? <img src={artworkUrl} alt="" className="size-full object-cover" /> : <Disc size={20} weight="duotone" />}</div><div className="min-w-0 flex-1"><p className="truncate font-semibold">{release.title}</p><div className="mt-1 flex items-center gap-2"><StatusBadge status={release.status} /><span className="text-xs text-muted-foreground">{release.tracks.length} track{release.tracks.length === 1 ? "" : "s"}</span></div></div><ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" weight="bold" /></Link>; })}</div>}
       </section>
     </div>
   );

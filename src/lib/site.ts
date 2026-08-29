@@ -51,6 +51,7 @@ export const plans = [
       "1 artist",
       "Unlimited releases",
       "100% royalties",
+      "Analytics",
       "Spotify and YouTube support",
     ],
     paid: true,

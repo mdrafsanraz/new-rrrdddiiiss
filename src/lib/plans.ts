@@ -22,7 +22,7 @@ export const planLimits: Record<PlanId, PlanLimits> = {
     artists: 1,
     releasesPerMonth: null,
     royaltyKeepPercent: 100,
-    analytics: false,
+    analytics: true,
     priorityReview: false,
   },
   pro: {
