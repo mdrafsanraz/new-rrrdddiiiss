@@ -7,6 +7,7 @@ import type {
   ArtistData,
   FileData,
   GenreData,
+  LabelData,
   Paginated,
   ReleaseData,
   TrackData,
@@ -150,7 +151,7 @@ export function listDistroOutlets() {
 }
 
 export function listLabels(page = 1, perPage = 50) {
-  return labelgridFetch<Paginated<{ id: number; name?: string }>>("/labels", {
+  return labelgridFetch<Paginated<LabelData>>("/labels", {
     searchParams: { page, per_page: perPage },
   });
 }
@@ -613,4 +614,3 @@ export function takedownReleaseAll(
 export function getRateLimit() {
   return labelgridFetch<unknown>("/rate-limit");
 }
-

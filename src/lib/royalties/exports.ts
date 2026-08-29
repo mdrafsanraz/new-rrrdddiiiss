@@ -12,6 +12,17 @@ export async function getOwnedPublishedStatement(statementId: string, userId: st
   });
 }
 
+export async function getStatementForAdmin(statementId: string) {
+  return prisma.userRoyaltyStatement.findUnique({
+    where: { id: statementId },
+    include: {
+      user: { select: { name: true, email: true } },
+      royaltyPeriod: true,
+      transactions: { orderBy: { sourceRowNumber: "asc" }, select: { retailer: true, territory: true, upc: true, releaseTitle: true, isrc: true, artistName: true, trackTitle: true, usageType: true, quantity: true, sourceNetRevenueUsd: true, rdistroCommissionUsd: true, rdistroAdjustmentsUsd: true, rdistroOtherDeductionsUsd: true, userPayableUsd: true } },
+    },
+  });
+}
+
 function exportRows(statement: NonNullable<Awaited<ReturnType<typeof getOwnedPublishedStatement>>>) {
   return statement.transactions.map((row) => ({
     "Statement Period": statement.royaltyPeriod.period,

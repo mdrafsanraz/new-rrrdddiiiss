@@ -1,0 +1,3 @@
+export default function RoyaltyPeriodLoading() {
+  return <div className="animate-pulse space-y-5" aria-label="Loading royalty period"><div className="h-28 border-b border-border bg-muted/30" /><div className="grid border border-border sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-20 border-r border-border bg-muted/40 last:border-r-0" />)}</div><div className="h-24 bg-muted/70" /><div className="grid gap-5 xl:grid-cols-2"><div className="h-64 border border-border bg-muted/30" /><div className="h-64 border border-border bg-muted/30" /></div><div className="h-10 border-y border-border bg-muted/30" /><div className="h-96 border border-border bg-muted/30" /></div>;
+}

@@ -40,6 +40,24 @@ export type ArtistData = {
   apple_artist_id?: string | null;
 };
 
+/** LabelGrid LabelData subset used by admin catalog views; see document.json. */
+export type LabelData = {
+  id: number;
+  slug?: string | null;
+  name: string;
+  active?: boolean;
+  default_email?: string;
+  support_email?: string | null;
+  isrc_base?: string | null;
+  beatport_enabled?: boolean | null;
+  youtubemusic_enabled?: boolean | null;
+  youtube_monetization_enabled?: boolean | null;
+  soundcloud_monetization_enabled?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  analytics_readiness?: string;
+};
+
 /** Per document.json — release-title localization row. */
 export type ReleaseTitleLocalizationData = {
   iso_code?: string | null;

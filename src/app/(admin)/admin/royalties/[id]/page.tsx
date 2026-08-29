@@ -13,6 +13,7 @@ import { RoyaltyPeriodActions } from "@/components/admin/royalty-workflow-action
 import { RoyaltyAdjustmentForm } from "@/components/admin/royalty-adjustment-form";
 import { RoyaltyManualMatch } from "@/components/admin/royalty-manual-match";
 import { hasPermission } from "@/lib/auth/permissions";
+import { formatDistanceToNow } from "@/lib/admin/format";
 
 export const dynamic = "force-dynamic";
 const money = (value: { toString(): string }) =>
@@ -53,7 +54,10 @@ export default async function RoyaltyPeriodPage({
   const period = await prisma.royaltyPeriod.findUnique({
     where: { id },
     include: {
-      imports: true,
+      imports: { orderBy: { importedAt: "desc" }, include: { uploadedBy: { select: { name: true, email: true } } } },
+      statements: { orderBy: { userPayableTotal: "desc" }, include: { user: { select: { id: true, name: true, email: true } } } },
+      adjustments: { orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, name: true } }, createdBy: { select: { name: true } } } },
+      publishedBy: { select: { name: true } },
       _count: { select: { transactions: true, statements: true } },
     },
   });
@@ -71,7 +75,7 @@ export default async function RoyaltyPeriodPage({
         }
       : {}),
   };
-  const [groups, rows, filteredCount, reconciliation] = await Promise.all([
+  const [groups, rows, filteredCount, reconciliation, auditEvents] = await Promise.all([
     prisma.royaltyTransaction.groupBy({
       by: ["matchStatus"],
       where: { royaltyPeriodId: id },
@@ -103,6 +107,7 @@ export default async function RoyaltyPeriodPage({
     }),
     prisma.royaltyTransaction.count({ where }),
     getReconciliation(id),
+    prisma.auditLog.findMany({ where: { OR: [{ targetType: "royalty_period", targetId: id }, { targetType: "royalty_import", targetId: { in: period.imports.map((item) => item.id) } }] }, orderBy: { createdAt: "desc" }, take: 30, include: { actor: { select: { name: true } } } }),
   ]);
   const count = (statuses: string[]) =>
     groups
@@ -182,6 +187,16 @@ export default async function RoyaltyPeriodPage({
           </div>
         </div>
       </section>
+      <section className="grid gap-5 xl:grid-cols-2">
+        <div className="border border-border bg-card">
+          <div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Import history</h2><p className="mt-1 text-[11px] text-muted-foreground">Checksums enforce duplicate-file protection during import.</p></div>
+          {!period.imports.length ? <p className="p-4 text-sm text-muted-foreground">No imports recorded.</p> : <div className="divide-y divide-border">{period.imports.map((item) => <div key={item.id} className="p-4"><div className="flex flex-wrap justify-between gap-2"><div><p className="text-sm font-semibold">{item.fileName}</p><p className="mt-1 text-[10px] text-muted-foreground">Uploaded by {item.uploadedBy.name} / {formatDistanceToNow(item.importedAt)}</p></div><span className="text-[10px] font-semibold uppercase">{item.status.replaceAll("_", " ")}</span></div><dl className="mt-3 grid grid-cols-3 gap-3 text-xs"><div><dt className="text-muted-foreground">Rows</dt><dd className="font-semibold">{item.rowCount.toLocaleString()}</dd></div><div><dt className="text-muted-foreground">Malformed</dt><dd className={item.malformedRowCount ? "font-semibold text-red-700" : "font-semibold"}>{item.malformedRowCount.toLocaleString()}</dd></div><div><dt className="text-muted-foreground">Source net</dt><dd className="font-semibold">{money(item.totalSourceNet)}</dd></div></dl>{item.errorSummary ? <pre className="mt-3 max-h-28 overflow-auto border border-red-200 bg-red-50 p-2 text-[10px] text-red-800">{JSON.stringify(item.errorSummary, null, 2)}</pre> : null}<p className="mt-2 truncate font-mono text-[9px] text-muted-foreground">Checksum {item.checksum}</p></div>)}</div>}
+        </div>
+        <div className="border border-border bg-card">
+          <div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Period audit</h2><p className="mt-1 text-[11px] text-muted-foreground">Import, calculation, and publication events for this period.</p></div>
+          {!auditEvents.length ? <p className="p-4 text-sm text-muted-foreground">No period audit events recorded.</p> : <ol className="divide-y divide-border">{auditEvents.map((event) => <li key={event.id} className="grid gap-1 p-4 sm:grid-cols-[130px_1fr]"><time className="text-[10px] text-muted-foreground">{formatDistanceToNow(event.createdAt)}</time><div><p className="text-xs font-semibold">{event.summary}</p><p className="mt-1 text-[10px] text-muted-foreground">{event.actor?.name ?? "System"}</p></div></li>)}</ol>}
+        </div>
+      </section>
       <nav className="flex flex-wrap gap-2">
         <Filter
           href={statusHref()}
@@ -214,6 +229,11 @@ export default async function RoyaltyPeriodPage({
       {canWrite && period.status !== "published" ? (
         <RoyaltyAdjustmentForm periodId={id} />
       ) : null}
+      <section className="border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold">User statements</h2><p className="mt-1 text-[11px] text-muted-foreground">Generated statement totals and permission-gated exports.</p></div><span className="text-xs text-muted-foreground">{period.statements.length.toLocaleString()} statements</span></div>
+        {!period.statements.length ? <p className="p-6 text-center text-sm text-muted-foreground">Statements are generated when this period is published.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">User</th><th className="px-3 py-3">Transactions</th><th className="px-3 py-3 text-right">Source net</th><th className="px-3 py-3 text-right">Deductions</th><th className="px-3 py-3 text-right">Payable</th><th className="px-3 py-3">Status</th><th className="px-4 py-3 text-right">Export</th></tr></thead><tbody className="divide-y divide-border">{period.statements.map((statement) => <tr key={statement.id}><td className="px-4 py-3"><Link href={`/admin/users/${statement.user.id}`} className="font-semibold hover:underline">{statement.user.name}</Link><p className="mt-1 text-[10px] text-muted-foreground">{statement.user.email}</p></td><td className="px-3 py-3 tabular-nums">{statement.transactionCount.toLocaleString()}</td><td className="px-3 py-3 text-right tabular-nums">{money(statement.sourceNetTotal)}</td><td className="px-3 py-3 text-right tabular-nums">{money(statement.totalDeductions)}</td><td className="px-3 py-3 text-right font-semibold tabular-nums">{money(statement.userPayableTotal)}</td><td className="px-3 py-3 uppercase">{statement.status}</td><td className="px-4 py-3 text-right"><a href={`/api/admin/royalties/statements/${statement.id}/export?format=csv`} className="font-semibold hover:underline">CSV</a><a href={`/api/admin/royalties/statements/${statement.id}/export?format=xlsx`} className="ml-3 font-semibold hover:underline">XLSX</a></td></tr>)}</tbody></table></div>}
+      </section>
+      {period.adjustments.length ? <section className="border border-border bg-card"><div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Adjustment history</h2></div><div className="divide-y divide-border">{period.adjustments.map((adjustment) => <div key={adjustment.id} className="grid gap-2 px-4 py-3 text-xs sm:grid-cols-[1fr_auto_auto]"><div><p className="font-semibold">{adjustment.user.name} / {adjustment.type.replaceAll("_", " ")}</p><p className="mt-1 text-muted-foreground">{adjustment.reason}</p></div><p className="font-semibold tabular-nums">{money(adjustment.amount)}</p><p className="text-muted-foreground">{adjustment.createdBy.name} / {formatDistanceToNow(adjustment.createdAt)}</p></div>)}</div></section> : null}
       <section className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-left text-xs">
