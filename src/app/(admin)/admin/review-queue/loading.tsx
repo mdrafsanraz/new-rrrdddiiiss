@@ -1,0 +1,3 @@
+export default function ReviewQueueLoading() {
+  return <div className="animate-pulse space-y-5" aria-label="Loading review queue"><div className="h-24 border-b border-border bg-muted/30" /><div className="grid border border-border sm:grid-cols-5">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-16 border-r border-border bg-muted/40 last:border-r-0" />)}</div><div className="h-10 border-y border-border bg-muted/30" /><div className="border border-border"><div className="h-10 bg-muted/60" />{Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-20 border-t border-border bg-muted/20" />)}</div></div>;
+}

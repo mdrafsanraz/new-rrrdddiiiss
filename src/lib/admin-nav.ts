@@ -1,6 +1,7 @@
 export const adminNav = [
   { href: "/admin", label: "Home", exact: true },
   { href: "/admin/releases", label: "Releases" },
+  { href: "/admin/review-queue", label: "Review Queue" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/artists", label: "Artists" },
   { href: "/admin/documents", label: "Rights & Documents" },

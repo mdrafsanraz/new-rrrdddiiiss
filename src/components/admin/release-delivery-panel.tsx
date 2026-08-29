@@ -57,12 +57,12 @@ export function ReleaseDeliveryPanel({
   }
 
   return (
-    <section className="rounded-md border border-border bg-card">
+    <section className="border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div>
           <h2 className="text-sm font-semibold">Delivery</h2>
           <p className="text-[11px] text-muted-foreground">
-            From LabelGrid delivery-status · Delivered ≠ Live
+            LabelGrid delivery status. Delivered and live are separate states.
           </p>
         </div>
         {canSync ? (
@@ -73,7 +73,7 @@ export function ReleaseDeliveryPanel({
             disabled={busy}
             onClick={sync}
           >
-            {busy ? "Syncing…" : "Refresh status"}
+            {busy ? "Syncing..." : "Refresh status"}
           </Button>
         ) : null}
       </div>
@@ -90,7 +90,7 @@ export function ReleaseDeliveryPanel({
             <dd className="font-medium tabular-nums">
               {outlets.length
                 ? `${delivered} of ${outlets.length} delivered`
-                : "—"}
+                : "Not available"}
             </dd>
           </div>
           <div>
@@ -108,8 +108,8 @@ export function ReleaseDeliveryPanel({
               >
                 <span className="font-medium">{o.outlet ?? "Outlet"}</span>
                 <span className="text-xs capitalize text-muted-foreground">
-                  {o.state?.replace(/_/g, " ") ?? "—"}
-                  {o.operation ? ` · ${o.operation}` : ""}
+                  {o.state?.replace(/_/g, " ") ?? "Not available"}
+                  {o.operation ? ` / ${o.operation}` : ""}
                 </span>
               </li>
             ))}

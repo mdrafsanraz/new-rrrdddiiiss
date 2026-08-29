@@ -27,6 +27,7 @@ const schema = z.discriminatedUnion("action", [
     action: z.literal("send_back_to_draft"),
     notes: z.string().max(2000).optional(),
   }),
+  z.object({ action: z.literal("assign_to_me") }),
 ]);
 
 type Params = { params: Promise<{ id: string }> };
@@ -50,6 +51,16 @@ export async function POST(request: Request, { params }: Params) {
         { error: "Release is permanently locked." },
         { status: 400 }
       );
+    }
+
+    if (body.action === "assign_to_me") {
+      if (!["pending_internal_review", "submitted", "in_review"].includes(release.status)) {
+        return NextResponse.json({ error: "Only releases waiting for RDISTRO review can be assigned." }, { status: 400 });
+      }
+      const fresh = await prisma.release.update({ where: { id }, data: { reviewedById: gate.admin.id } });
+      await logReleaseActivity({ releaseId: id, type: "edited", title: "Reviewer assigned", description: `Assigned to ${gate.admin.name}`, actorUserId: gate.admin.id });
+      await writeAuditLog({ actorUserId: gate.admin.id, action: "other", targetType: "release", targetId: id, summary: `Assigned ${release.title} to ${gate.admin.name}`, metadata: { kind: "release_reviewer_assigned" } });
+      return NextResponse.json({ release: fresh });
     }
 
     if (body.action === "hold") {

@@ -2,6 +2,7 @@ import type { Prisma, ReleaseStatus } from "@prisma/client";
 
 export type AdminReleaseFilter =
   | "all"
+  | "draft"
   | "pending_review"
   | "priority"
   | "qc_flagged"
@@ -13,6 +14,9 @@ export type AdminReleaseFilter =
   | "live"
   | "rejected"
   | "takedown"
+  | "takedown_pending"
+  | "taken_down"
+  | "action_required"
   | "sync_issues"
   | "on_hold";
 
@@ -20,18 +24,21 @@ export const ADMIN_RELEASE_FILTERS: {
   value: AdminReleaseFilter;
   label: string;
 }[] = [
-  { value: "all", label: "All" },
-  { value: "pending_review", label: "Pending Review" },
+  { value: "all", label: "All Releases" },
+  { value: "draft", label: "Draft" },
+  { value: "pending_review", label: "In RDISTRO Review" },
   { value: "priority", label: "Priority" },
   { value: "qc_flagged", label: "QC Flagged" },
   { value: "documents_required", label: "Documents Required" },
   { value: "changes_required", label: "Changes Required" },
   { value: "labelgrid_review", label: "LabelGrid Review" },
+  { value: "action_required", label: "Action Required" },
   { value: "approved", label: "Approved" },
   { value: "delivering", label: "Delivering" },
   { value: "live", label: "Live" },
   { value: "rejected", label: "Rejected" },
-  { value: "takedown", label: "Takedown" },
+  { value: "takedown_pending", label: "Takedown Pending" },
+  { value: "taken_down", label: "Taken Down" },
   { value: "sync_issues", label: "Sync Issues" },
   { value: "on_hold", label: "On Hold" },
 ];
@@ -63,7 +70,19 @@ const SYNC: ReleaseStatus[] = ["sync_error", "error"];
 
 export function adminReleaseWhere(
   filter: AdminReleaseFilter,
-  q?: string
+  q?: string,
+  advanced: {
+    user?: string;
+    artist?: string;
+    label?: string;
+    upc?: string;
+    isrc?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    dspStatus?: string;
+    qc?: "yes" | "no";
+    docs?: "yes" | "no";
+  } = {}
 ): Prisma.ReleaseWhereInput {
   const search = q?.trim();
   const searchClause: Prisma.ReleaseWhereInput | undefined = search
@@ -88,6 +107,11 @@ export function adminReleaseWhere(
 
   let filterClause: Prisma.ReleaseWhereInput = {};
   switch (filter) {
+    case "draft":
+      filterClause = {
+        status: { in: ["draft", "incomplete", "ready_to_submit"] },
+      };
+      break;
     case "pending_review":
       filterClause = { status: { in: PENDING } };
       break;
@@ -141,6 +165,22 @@ export function adminReleaseWhere(
     case "takedown":
       filterClause = { status: { in: TAKEDOWN } };
       break;
+    case "takedown_pending":
+      filterClause = { status: "takedown_pending" };
+      break;
+    case "taken_down":
+      filterClause = { status: "taken_down" };
+      break;
+    case "action_required":
+      filterClause = {
+        OR: [
+          { status: { in: [...CHANGES, ...SYNC] } },
+          { qcStatus: { in: ["warning", "review_required", "failed"] } },
+          { reviewIssues: { some: { resolved: false, isBlocking: true } } },
+          { documents: { some: { reviewStatus: "pending" } } },
+        ],
+      };
+      break;
     case "sync_issues":
       filterClause = { status: { in: SYNC } };
       break;
@@ -152,15 +192,79 @@ export function adminReleaseWhere(
       filterClause = {};
   }
 
-  if (!searchClause) return filterClause;
-  return { AND: [filterClause, searchClause] };
+  const advancedClauses: Prisma.ReleaseWhereInput[] = [];
+  if (advanced.user) {
+    advancedClauses.push({
+      user: {
+        OR: [
+          { name: { contains: advanced.user, mode: "insensitive" } },
+          { email: { contains: advanced.user, mode: "insensitive" } },
+        ],
+      },
+    });
+  }
+  if (advanced.artist) {
+    advancedClauses.push({
+      artist: { name: { contains: advanced.artist, mode: "insensitive" } },
+    });
+  }
+  if (advanced.label) {
+    advancedClauses.push({
+      label: { name: { contains: advanced.label, mode: "insensitive" } },
+    });
+  }
+  if (advanced.upc) {
+    advancedClauses.push({ upc: { contains: advanced.upc, mode: "insensitive" } });
+  }
+  if (advanced.isrc) {
+    advancedClauses.push({
+      tracks: { some: { isrc: { contains: advanced.isrc, mode: "insensitive" } } },
+    });
+  }
+  if (advanced.dateFrom || advanced.dateTo) {
+    advancedClauses.push({
+      releaseDate: {
+        ...(advanced.dateFrom ? { gte: advanced.dateFrom } : {}),
+        ...(advanced.dateTo ? { lte: advanced.dateTo } : {}),
+      },
+    });
+  }
+  if (advanced.dspStatus) {
+    advancedClauses.push({ deliveryState: advanced.dspStatus });
+  }
+  if (advanced.qc === "yes") {
+    advancedClauses.push({
+      qcStatus: { in: ["warning", "review_required", "failed"] },
+    });
+  } else if (advanced.qc === "no") {
+    advancedClauses.push({
+      OR: [
+        { qcStatus: null },
+        { qcStatus: { in: ["passed", "not_run", "not_enabled"] } },
+      ],
+    });
+  }
+  if (advanced.docs === "yes") {
+    advancedClauses.push({
+      OR: [
+        { documents: { some: { reviewStatus: "pending" } } },
+        { reviewIssues: { some: { requiresDocument: true, resolved: false } } },
+      ],
+    });
+  } else if (advanced.docs === "no") {
+    advancedClauses.push({ documents: { none: { reviewStatus: "pending" } } });
+  }
+
+  return {
+    AND: [filterClause, ...(searchClause ? [searchClause] : []), ...advancedClauses],
+  };
 }
 
 export const PIPELINE_STAGES = [
   {
     key: "draft",
     label: "Draft",
-    href: "/admin/releases?filter=all&stage=draft",
+    href: "/admin/releases?filter=draft",
     statuses: ["draft", "incomplete", "ready_to_submit"] as ReleaseStatus[],
   },
   {

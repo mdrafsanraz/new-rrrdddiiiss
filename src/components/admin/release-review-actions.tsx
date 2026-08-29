@@ -82,7 +82,7 @@ export function ReleaseReviewActions({
     }
     if (outcome === "rejected") {
       const ok = window.confirm(
-        "Permanently reject this release? It cannot be edited or resubmitted. This is a final policy decision — not the same as Changes Required."
+        "Permanently reject this release? It cannot be edited or resubmitted. This is a final policy decision, not the same as Changes Required."
       );
       if (!ok) return;
     }
@@ -224,8 +224,8 @@ export function ReleaseReviewActions({
 
   if (permanentlyLocked) {
     return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-950">
-        Permanently rejected — moderation actions are disabled.
+      <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-950">
+        Permanently rejected. Moderation actions are disabled.
         {canDelete ? (
           <Button
             type="button"
@@ -234,7 +234,7 @@ export function ReleaseReviewActions({
             disabled={statusBusy !== "idle"}
             onClick={deleteRelease}
           >
-            {statusBusy === "deleting" ? "Deleting…" : "Delete release"}
+            {statusBusy === "deleting" ? "Deleting..." : "Delete release"}
           </Button>
         ) : null}
       </div>
@@ -242,15 +242,15 @@ export function ReleaseReviewActions({
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-card p-4">
+    <div className="space-y-3 border border-border bg-card p-4">
       <div>
         <h2 className="text-sm font-semibold">Internal moderation</h2>
         <p className="mt-1 text-[11px] text-muted-foreground">
           Approve submits the existing LabelGrid draft for review. Send back to
           draft lets the user re-upload in the builder. Status: {status}
-          {hasLabelgridId ? "" : " · LG draft not created yet"}
+          {hasLabelgridId ? "" : ". LG draft not created yet"}
           {!mediaReady
-            ? " · Cover/audio missing on LabelGrid — send back to draft or re-upload"
+            ? ". Cover or audio is missing on LabelGrid; send back to draft or re-upload"
             : ""}
         </p>
       </div>
@@ -271,7 +271,7 @@ export function ReleaseReviewActions({
             </p>
           ) : null}
           {!mediaReady ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
               Cover and/or audio are not on LabelGrid yet. Use{" "}
               <strong>Send back to draft</strong> so the user can re-upload in
               the release builder (uploads go to LabelGrid API), then approve.
@@ -286,8 +286,8 @@ export function ReleaseReviewActions({
                 onClick={approve}
               >
                 {statusBusy === "approving"
-                  ? "Submitting to LabelGrid…"
-                  : "Approve → LabelGrid review"}
+                  ? "Submitting to LabelGrid..."
+                  : "Approve and submit to LabelGrid review"}
               </Button>
             ) : null}
             {canSendBackToDraft ? (
@@ -298,7 +298,7 @@ export function ReleaseReviewActions({
                 disabled={statusBusy !== "idle"}
                 onClick={sendBackToDraft}
               >
-                {statusBusy === "draft" ? "Sending…" : "Send back to draft"}
+                {statusBusy === "draft" ? "Sending..." : "Send back to draft"}
               </Button>
             ) : null}
             <Button
@@ -308,7 +308,7 @@ export function ReleaseReviewActions({
               disabled={statusBusy !== "idle"}
               onClick={() => decide("changes_required")}
             >
-              {statusBusy === "changes" ? "Sending…" : "Request changes"}
+              {statusBusy === "changes" ? "Sending..." : "Request changes"}
             </Button>
             <Button
               type="button"
@@ -336,7 +336,7 @@ export function ReleaseReviewActions({
               onClick={() => decide("rejected")}
             >
               {statusBusy === "rejecting"
-                ? "Rejecting…"
+                ? "Rejecting..."
                 : "Reject internally (final)"}
             </Button>
             {canDelete ? (
@@ -347,7 +347,7 @@ export function ReleaseReviewActions({
                 disabled={statusBusy !== "idle"}
                 onClick={deleteRelease}
               >
-                {statusBusy === "deleting" ? "Deleting…" : "Delete release"}
+                {statusBusy === "deleting" ? "Deleting..." : "Delete release"}
               </Button>
             ) : null}
           </div>
@@ -359,7 +359,7 @@ export function ReleaseReviewActions({
           <label className="block text-xs font-medium">
             Document type
             <select
-              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+              className="mt-1 h-9 w-full border border-border bg-background px-2 text-sm"
               value={docKind}
               onChange={(e) => setDocKind(e.target.value)}
             >
@@ -389,7 +389,7 @@ export function ReleaseReviewActions({
               disabled={statusBusy !== "idle"}
               onClick={requestDocument}
             >
-              {statusBusy === "document" ? "Sending…" : "Send request"}
+              {statusBusy === "document" ? "Sending..." : "Send request"}
             </Button>
             <Button
               type="button"
@@ -425,7 +425,7 @@ export function ReleaseReviewActions({
               disabled={statusBusy !== "idle"}
               onClick={hold}
             >
-              {statusBusy === "hold" ? "Holding…" : "Place on hold"}
+              {statusBusy === "hold" ? "Holding..." : "Place on hold"}
             </Button>
             <Button
               type="button"

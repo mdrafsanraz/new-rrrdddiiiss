@@ -3,6 +3,8 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
+import { updateArtist } from "@/lib/labelgrid";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
 
 type Params = { params: Promise<{ id: string }> };
 const patchSchema = z.object({ name: z.string().trim().min(2).max(64) });
@@ -14,9 +16,13 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   try {
     const body = patchSchema.parse(await request.json());
-    const existing = await prisma.artist.findUnique({ where: { id }, select: { id: true, name: true, locked: true } });
+    const existing = await prisma.artist.findUnique({ where: { id }, select: { id: true, name: true, locked: true, labelgridId: true } });
     if (!existing) return NextResponse.json({ error: "Artist not found" }, { status: 404 });
 
+    if (existing.labelgridId && isLabelGridLive()) {
+      try { await updateArtist(existing.labelgridId, { artist_name: body.name }); }
+      catch (error) { console.error("[admin/artists/patch] LabelGrid update failed", error); return NextResponse.json({ error: "LabelGrid artist update failed. Local data was not changed." }, { status: 502 }); }
+    }
     const artist = await prisma.artist.update({ where: { id }, data: { name: body.name } });
     await writeAuditLog({
       actorUserId: gate.admin.id,

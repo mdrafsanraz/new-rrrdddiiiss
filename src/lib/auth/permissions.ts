@@ -133,6 +133,7 @@ export function hasAnyPermission(
 export const NAV_PERMISSION: Record<string, AdminPermission> = {
   "/admin": "admin.access",
   "/admin/releases": "releases.read",
+  "/admin/review-queue": "releases.read",
   "/admin/users": "users.read",
   "/admin/artists": "artists.read",
   "/admin/documents": "documents.manage",

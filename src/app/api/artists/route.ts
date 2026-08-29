@@ -6,6 +6,8 @@ import {
   assertCanCreateArtist,
   getUserUsage,
 } from "@/lib/entitlements/server";
+import { createArtist } from "@/lib/labelgrid";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
 
 const createSchema = z.object({
   name: z.string().min(2).max(64),
@@ -43,6 +45,18 @@ export async function POST(request: Request) {
     const body = createSchema.parse(await request.json());
     await assertCanCreateArtist(user.id, user.planId);
 
+    let labelgridId: string | null = null;
+    if (isLabelGridLive()) {
+      const provider = await createArtist({
+        artist_name: body.name.trim(),
+        ...(body.fullName?.trim() ? { full_name: body.fullName.trim() } : {}),
+        ...(body.email?.trim() ? { email: body.email.trim() } : {}),
+        ...(body.location?.trim() ? { location: body.location.trim() } : {}),
+        ...(body.bioShort?.trim() ? { bio_short: body.bioShort.trim() } : {}),
+      });
+      labelgridId = String(provider.data.id);
+    }
+
     const artist = await prisma.artist.create({
       data: {
         userId: user.id,
@@ -51,10 +65,9 @@ export async function POST(request: Request) {
         email: body.email?.trim() || null,
         location: body.location?.trim() || null,
         bioShort: body.bioShort?.trim() || null,
+        labelgridId,
       },
     });
-
-    // LabelGrid sync is deferred until sandbox token + explicit submit path.
     return NextResponse.json({ artist }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

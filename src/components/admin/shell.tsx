@@ -149,7 +149,7 @@ export function AdminShell({
             </button>
 
             <Link
-              href="/admin/releases?filter=pending_review"
+              href="/admin/review-queue"
               className={cn(buttonVariants(), "h-8 shrink-0 px-3 text-xs")}
             >
               Review queue

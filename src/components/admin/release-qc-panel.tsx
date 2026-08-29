@@ -56,12 +56,12 @@ export function ReleaseQcPanel({
   }
 
   return (
-    <section className="rounded-md border border-border bg-card">
+    <section className="border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div>
           <h2 className="text-sm font-semibold">Preflight QC</h2>
           <p className="text-[11px] text-muted-foreground">
-            LabelGrid quality-report · informs review, does not auto-decide
+            LabelGrid quality report informs review but never decides automatically.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -75,7 +75,7 @@ export function ReleaseQcPanel({
                 disabled={busy !== "idle"}
                 onClick={() => run("sync")}
               >
-                {busy === "sync" ? "Fetching…" : "Fetch report"}
+                {busy === "sync" ? "Fetching..." : "Fetch report"}
               </Button>
               {qcEnabled ? (
                 <Button
@@ -85,7 +85,7 @@ export function ReleaseQcPanel({
                   disabled={busy !== "idle"}
                   onClick={() => run("refresh")}
                 >
-                  {busy === "refresh" ? "Refreshing…" : "Re-run analysis"}
+                  {busy === "refresh" ? "Refreshing..." : "Re-run analysis"}
                 </Button>
               ) : null}
             </>
@@ -109,7 +109,7 @@ export function ReleaseQcPanel({
               <div>
                 <dt className="text-muted-foreground">Overall</dt>
                 <dd className="font-medium capitalize">
-                  {qcStatus?.replace("_", " ") ?? "—"}
+                  {qcStatus?.replace("_", " ") ?? "Not available"}
                 </dd>
               </div>
               <div>
@@ -127,7 +127,7 @@ export function ReleaseQcPanel({
             </dl>
             {qcChecksInProgress ? (
               <p className="mt-3 text-xs text-amber-900">
-                Checks in progress — refresh again when complete.
+                Checks are in progress. Refresh again when they complete.
               </p>
             ) : null}
             {report?.issues?.length ? (
@@ -135,7 +135,7 @@ export function ReleaseQcPanel({
                 {report.issues.map((issue) => (
                   <li
                     key={issue.id}
-                    className="rounded-md border border-border px-3 py-2"
+                    className="border border-border px-3 py-2"
                   >
                     <button
                       type="button"
@@ -146,7 +146,7 @@ export function ReleaseQcPanel({
                     >
                       <div>
                         <p className="text-sm font-medium">
-                          {issue.isBlocking ? "● " : "⚠ "}
+                          {issue.isBlocking ? "Blocking: " : "Review: "}
                           {issue.title ?? issue.code}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -155,7 +155,7 @@ export function ReleaseQcPanel({
                                 .map((t) => t.title)
                                 .join(", ")
                             : "Release-level"}{" "}
-                          · {issue.severity}
+                          / {issue.severity}
                         </p>
                       </div>
                       <span className="text-[10px] uppercase text-muted-foreground">
@@ -179,7 +179,7 @@ export function ReleaseQcPanel({
               <p className="mt-3 text-sm text-muted-foreground">
                 {qcStatus === "passed"
                   ? "No issues reported."
-                  : "No cached report yet — fetch to load findings."}
+                  : "No cached report yet. Fetch the report to load findings."}
               </p>
             )}
           </>

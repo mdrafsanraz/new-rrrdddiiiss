@@ -8,8 +8,36 @@ export type ArtistData = {
   email?: string | null;
   location?: string | null;
   bio_short?: string | null;
+  bio_full?: string | null;
+  website?: string | null;
+  isni?: string | null;
+  facebook_url?: string | null;
+  twitter_url?: string | null;
+  instagram_url?: string | null;
+  soundcloud_url?: string | null;
+  youtube_url?: string | null;
+  youtubemusic_url?: string | null;
   spotify_url?: string | null;
+  beatport_url?: string | null;
+  juno_url?: string | null;
+  bandcamp_url?: string | null;
   applemusic_url?: string | null;
+  amazon_url?: string | null;
+  deezer_url?: string | null;
+  tidal_url?: string | null;
+  pandora_url?: string | null;
+  anghami_url?: string | null;
+  boomplay_url?: string | null;
+  iheartradio_url?: string | null;
+  jiosaavn_url?: string | null;
+  awa_url?: string | null;
+  netease_url?: string | null;
+  tencentku_url?: string | null;
+  tencentqq_url?: string | null;
+  yandex_url?: string | null;
+  preferred_url?: string | null;
+  spotify_artist_id?: string | null;
+  apple_artist_id?: string | null;
 };
 
 /** Per document.json — release-title localization row. */

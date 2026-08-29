@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/admin";
@@ -22,7 +23,7 @@ import {
 } from "@/lib/labelgrid/catalog";
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
@@ -30,10 +31,10 @@ export async function generateMetadata({ params }: Props) {
     where: { id },
     select: { title: true },
   });
-  return { title: r ? `${r.title} · Admin` : "Release · Admin" };
+  return { title: r ? `${r.title} | Admin` : "Release | Admin" };
 }
 
-export default async function AdminReleaseDetailPage({ params }: Props) {
+export default async function AdminReleaseDetailPage({ params, searchParams }: Props) {
   const admin = await requirePermission("releases.read");
   const { id } = await params;
 
@@ -78,6 +79,20 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
   }
   if (!release) notFound();
 
+  const fromQueue = (await searchParams)?.queue === "pending";
+  let previousQueueId: string | undefined;
+  let nextQueueId: string | undefined;
+  if (fromQueue) {
+    const queue = await prisma.release.findMany({
+      where: { status: { in: ["pending_internal_review", "submitted", "in_review"] } },
+      orderBy: [{ priorityReview: "desc" }, { submittedAt: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+    const queueIndex = queue.findIndex((item) => item.id === release.id);
+    previousQueueId = queueIndex > 0 ? queue[queueIndex - 1]?.id : undefined;
+    nextQueueId = queueIndex >= 0 ? queue[queueIndex + 1]?.id : undefined;
+  }
+
   const meta = parseJsonObject(release.metadataJson) as Record<string, unknown>;
   const qc = parseCachedQcReport(release.qcReportJson);
   const stores = safeJsonArray(release.storesJson);
@@ -107,7 +122,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
 
   const canImpersonate = hasPermission(admin.role, "users.impersonate");
 
-  // Artwork/audio live only on LabelGrid now — a set URL means it's there.
+  // Artwork/audio live only on LabelGrid now; a set URL means it is there.
   const artworkOnDisk = Boolean(release.artworkUrl);
   const trackMedia = release.tracks.map((t) => ({
     id: t.id,
@@ -132,27 +147,28 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
     hasPermission(admin.role, "releases.moderate") &&
     !release.permanentlyLocked &&
     (needsArtwork || needsAudio || !release.labelgridId);
+  const unresolvedIssues = release.reviewIssues.filter((issue) => !issue.resolved);
+  const blockingIssues = unresolvedIssues.filter((issue) => issue.isBlocking);
+  const pendingDocuments = release.documents.filter((document) => document.reviewStatus === "pending");
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start gap-4 border-b border-border pb-5">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start gap-5 border-b border-border pb-5">
         {release.artworkUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={release.artworkUrl}
             alt=""
-            className="size-20 rounded-md object-cover sm:size-24"
+            className="size-24 border border-border object-cover sm:size-28"
           />
         ) : (
-          <div className="size-20 rounded-md bg-muted sm:size-24" />
+          <div className="grid size-24 place-items-center border border-border bg-muted text-[10px] font-semibold text-muted-foreground sm:size-28">NO ARTWORK</div>
         )}
         <div className="min-w-0 flex-1">
           <Link
-            href="/admin/releases?filter=pending_review"
+            href={fromQueue ? "/admin/review-queue" : "/admin/releases?filter=pending_review"}
             className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
           >
-            ← Releases
+            {fromQueue ? "Back to review queue" : "Back to releases"}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">
@@ -167,7 +183,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             <QcBadge status={release.qcStatus} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {release.artist?.name ?? "No artist"} · {release.contentType} ·{" "}
+            {release.artist?.name ?? "No artist"} / {release.contentType} /{" "}
             {formatShortDate(release.releaseDate)}
           </p>
           <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
@@ -185,7 +201,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                   href={`/admin/users/${release.user.id}`}
                   className="hover:underline"
                 >
-                  {release.user.name} · {planLabel(release.user.planId)}
+                  {release.user.name} / {planLabel(release.user.planId)}
                 </Link>
               }
             />
@@ -194,16 +210,20 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               value={
                 release.submittedAt
                   ? formatShortDate(release.submittedAt)
-                  : "—"
+                  : "Not submitted"
               }
             />
             <Meta
               label="LG review"
-              value={release.labelgridReviewStatus ?? "—"}
+              value={release.labelgridReviewStatus ?? "Not available"}
             />
           </dl>
         </div>
         <div className="flex flex-col gap-2">
+          {fromQueue ? <div className="flex gap-2">
+            {previousQueueId ? <Link href={`/admin/releases/${previousQueueId}?queue=pending`} className="h-8 border border-border px-3 py-1.5 text-xs font-semibold hover:border-foreground">Previous</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Previous</span>}
+            {nextQueueId ? <Link href={`/admin/releases/${nextQueueId}?queue=pending`} className="h-8 border border-foreground bg-foreground px-3 py-1.5 text-xs font-semibold text-background hover:opacity-85">Next release</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Next release</span>}
+          </div> : null}
           {canImpersonate ? (
             <LoginAsUserButton
               userId={release.user.id}
@@ -222,8 +242,22 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
         </div>
       </div>
 
+      <section aria-label="Release review summary" className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-5">
+        <SummaryMetric label="Tracks" value={String(release.tracks.length)} />
+        <SummaryMetric label="Open issues" value={String(unresolvedIssues.length)} alert={unresolvedIssues.length > 0} />
+        <SummaryMetric label="Blocking" value={String(blockingIssues.length)} alert={blockingIssues.length > 0} />
+        <SummaryMetric label="Documents pending" value={String(pendingDocuments.length)} alert={pendingDocuments.length > 0} />
+        <SummaryMetric label="Media ready" value={mediaReadyForLg ? "Yes" : "No"} alert={!mediaReadyForLg} />
+      </section>
+
+      <nav aria-label="Release sections" className="flex gap-1 overflow-x-auto border-b border-border pb-2">
+        {["Overview", "Tracks", "Artwork", "Rights", "QC", "Documents", "LabelGrid", "Delivery", "History"].map((label) => (
+          <a key={label} href={`#${label.toLowerCase()}`} className="shrink-0 border border-border px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground hover:border-foreground hover:text-foreground">{label}</a>
+        ))}
+      </nav>
+
       {release.syncError ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <div className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">Sync error</p>
           <p className="mt-1 break-words text-xs">{release.syncError}</p>
         </div>
@@ -240,24 +274,23 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
       ) : null}
 
       {release.permanentlyLocked ? (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950">
-          Final rejection — permanently locked. Edit and resubmit are disabled.
+        <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950">
+          Final rejection. This release is permanently locked, so editing and resubmission are disabled.
         </div>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
-          {/* Overview */}
-          <Section title="Overview">
+          <Section id="overview" title="Release overview" description="Core metadata sent through the catalog and delivery workflow.">
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <Row label="Title" value={release.title} />
               <Row label="Type" value={release.contentType} />
-              <Row label="Artist" value={release.artist?.name ?? "—"} />
+              <Row label="Artist" value={release.artist?.name ?? "Not set"} />
               <Row label="Label" value={release.label?.name ?? "RDISTRO"} />
-              <Row label="Primary genre" value={release.primaryGenre ?? "—"} />
+              <Row label="Primary genre" value={release.primaryGenre ?? "Not set"} />
               <Row
                 label="Secondary genre"
-                value={String(meta.secondaryGenre ?? meta.secondary_genre ?? "—")}
+                value={String(meta.secondaryGenre ?? meta.secondary_genre ?? "Not set")}
               />
               <Row
                 label="Release date"
@@ -266,7 +299,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               <Row
                 label="Original release date"
                 value={String(
-                  meta.originalReleaseDate ?? meta.original_release_date ?? "—"
+                  meta.originalReleaseDate ?? meta.original_release_date ?? "Not set"
                 )}
               />
               <Row label="UPC" value={release.upc ?? "Assign on distribute"} />
@@ -289,13 +322,13 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               <Row
                 label="℗"
                 value={String(
-                  meta.pLine ?? meta.pline ?? meta.copyrightP ?? "—"
+                  meta.pLine ?? meta.pline ?? meta.copyrightP ?? "Not set"
                 )}
               />
               <Row
                 label="©"
                 value={String(
-                  meta.cLine ?? meta.cline ?? meta.copyrightC ?? "—"
+                  meta.cLine ?? meta.cline ?? meta.copyrightC ?? "Not set"
                 )}
               />
               <Row label="Artwork AI" value={release.artworkAiUsage} />
@@ -303,8 +336,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             </dl>
           </Section>
 
-          {/* Tracks */}
-          <Section title="Tracks / audio">
+          <Section id="tracks" title="Tracks and audio" description="Track metadata, identifiers, contributors, QC findings, and the submitted master audio.">
             <ul className="space-y-4">
               {release.tracks.map((t) => {
                 const tm = parseJsonObject(t.metadataJson) as Record<
@@ -321,12 +353,12 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                 return (
                   <li
                     key={t.id}
-                    className="rounded-md border border-border/80 p-3"
+                    className="border border-border/80 p-3"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-medium">
-                          {String(t.trackNumber).padStart(2, "0")} · {t.title}
+                          {String(t.trackNumber).padStart(2, "0")} / {t.title}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {release.artist?.name}
@@ -334,13 +366,13 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                             ? ` feat. ${String(tm.featuredArtists)}`
                             : ""}
                           {t.durationMs
-                            ? ` · ${formatDuration(t.durationMs)}`
+                            ? ` / ${formatDuration(t.durationMs)}`
                             : ""}
                         </p>
                       </div>
                       {trackQc && trackQc.length > 0 ? (
                         <span className="text-[11px] font-medium text-amber-900">
-                          ⚠ {trackQc.length} QC issue
+                          {trackQc.length} QC issue
                           {trackQc.length === 1 ? "" : "s"}
                         </span>
                       ) : (
@@ -358,7 +390,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                             {trackQc?.some((i) =>
                               /isrc/i.test(i.code + (i.title ?? ""))
                             ) ? (
-                              <span className="text-amber-800">⚠</span>
+                              <span className="text-amber-800">Check</span>
                             ) : null}
                           </span>
                         }
@@ -369,20 +401,20 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                       />
                       <Row
                         label="Composition"
-                        value={String(tm.compositionType ?? tm.composition ?? "—")}
+                        value={String(tm.compositionType ?? tm.composition ?? "Not set")}
                       />
                       <Row
                         label="Version"
-                        value={String(tm.version ?? tm.mixVersion ?? "—")}
+                        value={String(tm.version ?? tm.mixVersion ?? "Not set")}
                       />
                       <Row
                         label="AI"
-                        value={String(tm.aiUsage ?? tm.ai_usage ?? "—")}
+                        value={String(tm.aiUsage ?? tm.ai_usage ?? "Not set")}
                       />
                       <Row
                         label="Samples"
                         value={String(
-                          tm.commercialSamples ?? tm.samples ?? "—"
+                          tm.commercialSamples ?? tm.samples ?? "Not set"
                         )}
                       />
                     </dl>
@@ -390,7 +422,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                       <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                         {t.contributors.map((c) => (
                           <li key={c.id}>
-                            {c.name} · {c.role}
+                            {c.name} / {c.role}
                           </li>
                         ))}
                       </ul>
@@ -413,7 +445,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             </ul>
           </Section>
 
-          <ReleaseQcPanel
+          <section id="qc" className="scroll-mt-20"><ReleaseQcPanel
             releaseId={release.id}
             labelgridId={release.labelgridId}
             qcEnabled={release.qcEnabled}
@@ -423,9 +455,20 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             qcFetchedAt={release.qcFetchedAt?.toISOString() ?? null}
             report={qc}
             canRefresh={hasPermission(admin.role, "releases.qc")}
-          />
+          /></section>
 
-          <Section title="Credits & rights">
+          <Section id="artwork" title="Artwork" description="The release cover currently stored for this catalog record.">
+            <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+              {release.artworkUrl ? <img src={release.artworkUrl} alt={`${release.title} artwork`} className="aspect-square w-full border border-border object-cover" /> : <div className="grid aspect-square w-full place-items-center border border-dashed border-border bg-muted text-xs text-muted-foreground">No artwork available</div>}
+              <dl className="space-y-2 text-sm">
+                <Row label="Artwork available" value={artworkOnDisk ? "Yes" : "No"} />
+                <Row label="LabelGrid media ready" value={mediaReadyForLg ? "Yes" : "No"} />
+                <Row label="AI usage" value={release.artworkAiUsage} />
+              </dl>
+            </div>
+          </Section>
+
+          <Section id="rights" title="Credits and rights" description="Submitted writer, contributor, ownership, and rights information.">
             <div className="space-y-3 text-sm">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -436,7 +479,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                     t.contributors.map((c) => (
                       <li key={c.id} className="text-sm">
                         {c.name}{" "}
-                        <span className="text-muted-foreground">· {c.role}</span>
+                        <span className="text-muted-foreground"> / {c.role}</span>
                         <span className="text-muted-foreground">
                           {" "}
                           (track {t.trackNumber})
@@ -452,17 +495,17 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               <dl className="grid gap-2 sm:grid-cols-2">
                 <Row
                   label="℗ owner"
-                  value={String(meta.pLine ?? meta.pline ?? "—")}
+                  value={String(meta.pLine ?? meta.pline ?? "Not set")}
                 />
                 <Row
                   label="© owner"
-                  value={String(meta.cLine ?? meta.cline ?? "—")}
+                  value={String(meta.cLine ?? meta.cline ?? "Not set")}
                 />
               </dl>
             </div>
           </Section>
 
-          <Section title="Documents">
+          <Section id="documents" title="Documentation and licenses" description="Evidence uploaded for ownership, authorization, samples, remixes, and cover licensing.">
             {release.documents.length === 0 ? (
               <p className="text-sm text-muted-foreground">No documents yet.</p>
             ) : (
@@ -475,7 +518,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                     <div>
                       <p className="font-medium">{d.kind}</p>
                       <p className="text-xs text-muted-foreground">
-                        {d.filename} · {d.reviewStatus} ·{" "}
+                        {d.filename} / {d.reviewStatus} /{" "}
                         {formatShortDate(d.createdAt)}
                       </p>
                     </div>
@@ -493,7 +536,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             )}
           </Section>
 
-          <Section title="LabelGrid review">
+          <Section id="labelgrid" title="LabelGrid review" description="Provider review state and issues cached from the existing LabelGrid release.">
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <Row
                 label="Provider status"
@@ -517,10 +560,10 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                   release.reviewedBy
                     ? `${release.reviewedBy.name}${
                         release.reviewedAt
-                          ? ` · ${formatShortDate(release.reviewedAt)}`
+                          ? ` / ${formatShortDate(release.reviewedAt)}`
                           : ""
                       }`
-                    : "—"
+                    : "Not reviewed"
                 }
               />
             </dl>
@@ -532,7 +575,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
                   .map((issue) => (
                     <li
                       key={issue.id}
-                      className="rounded-md border border-border px-3 py-2 text-sm"
+                      className="border border-border px-3 py-2 text-sm"
                     >
                       <p className="font-medium">
                         {issue.title ?? issue.code ?? "Issue"}
@@ -551,14 +594,14 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
             )}
           </Section>
 
-          <ReleaseDeliveryPanel
+          <section id="delivery" className="scroll-mt-20"><ReleaseDeliveryPanel
             releaseId={release.id}
             deliveryState={release.deliveryState}
             delivery={delivery}
             canSync={hasPermission(admin.role, "releases.moderate")}
-          />
+          /></section>
 
-          <Section title="Activity / audit">
+          <Section id="history" title="Activity and audit history" description="Recorded changes and operational events for this release.">
             {release.activities.length === 0 ? (
               <p className="text-sm text-muted-foreground">No events yet.</p>
             ) : (
@@ -583,7 +626,7 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
           </Section>
         </div>
 
-        <aside className="space-y-4 xl:sticky xl:top-16 xl:self-start">
+        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
           {canDecide ||
           hasPermission(admin.role, "releases.moderate") ? (
             <ReleaseReviewActions
@@ -603,12 +646,12 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
               Staff-only. Never shown to the user.
             </p>
             {release.reviewNotes ? (
-              <p className="mt-2 whitespace-pre-wrap rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p className="mt-2 whitespace-pre-wrap border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
                 User-facing notes: {release.reviewNotes}
               </p>
             ) : null}
             {release.holdReason ? (
-              <p className="mt-2 whitespace-pre-wrap rounded-md bg-violet-50 px-3 py-2 text-xs text-violet-950">
+              <p className="mt-2 whitespace-pre-wrap border border-border bg-muted px-3 py-2 text-xs">
                 Hold: {release.holdReason}
               </p>
             ) : null}
@@ -620,20 +663,29 @@ export default async function AdminReleaseDetailPage({ params }: Props) {
 }
 
 function Section({
+  id,
   title,
+  description,
   children,
 }: {
+  id?: string;
   title: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-border bg-card">
+    <section id={id} className="scroll-mt-20 border border-border bg-card">
       <div className="border-b border-border px-4 py-2.5">
         <h2 className="text-sm font-semibold">{title}</h2>
+        {description ? <p className="mt-0.5 text-[11px] text-muted-foreground">{description}</p> : null}
       </div>
       <div className="px-4 py-3">{children}</div>
     </section>
   );
+}
+
+function SummaryMetric({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
+  return <div className="border-b border-border px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className={cn("mt-1 text-lg font-semibold tabular-nums", alert && "text-amber-800")}>{value}</p></div>;
 }
 
 function Meta({

@@ -82,7 +82,7 @@ export default async function AdminHomePage() {
       </header>
 
       <nav aria-label="Quick actions" className="grid border border-border bg-card md:grid-cols-3">
-        <QuickLink href="/admin/releases?filter=pending_review" label="Review releases" detail={`${s.pendingReview} waiting`} icon={<Disc />} />
+        <QuickLink href="/admin/review-queue" label="Review releases" detail={`${s.pendingReview} waiting`} icon={<Disc />} />
         <QuickLink href="/admin/royalties" label="Import royalties" detail="Open royalty ledger" icon={<FileCsv />} />
         <QuickLink href="/admin/royalties" label="Process withdrawals" detail={`${s.pendingWithdrawals} pending`} icon={<Bank />} />
       </nav>

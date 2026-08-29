@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { updateArtist } from "@/lib/labelgrid";
+import { isLabelGridLive } from "@/lib/labelgrid/config";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -59,6 +61,21 @@ export async function PATCH(request: Request, { params }: Params) {
         { error: "Artist names cannot be changed after submission." },
         { status: 403 }
       );
+    }
+    const providerData = {
+      ...(!existing.locked && body.name !== undefined ? { artist_name: body.name.trim() } : {}),
+      ...(body.fullName !== undefined ? { full_name: body.fullName?.trim() || "" } : {}),
+      ...(body.email !== undefined ? { email: body.email?.trim() || "" } : {}),
+      ...(body.location !== undefined ? { location: body.location?.trim() || "" } : {}),
+      ...(body.bioShort !== undefined ? { bio_short: body.bioShort?.trim() || "" } : {}),
+    };
+    if (existing.labelgridId && isLabelGridLive()) {
+      try {
+        await updateArtist(existing.labelgridId, providerData);
+      } catch (error) {
+        console.error("[artists/patch] LabelGrid update failed", error);
+        return NextResponse.json({ error: "LabelGrid artist update failed. Local data was not changed." }, { status: 502 });
+      }
     }
     const artist = await prisma.artist.update({
       where: { id: existing.id },
