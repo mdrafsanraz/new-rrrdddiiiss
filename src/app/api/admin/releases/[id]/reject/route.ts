@@ -5,6 +5,8 @@ import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { withdrawReleaseFromReview } from "@/lib/labelgrid";
 import { prisma } from "@/lib/db";
 import { logReleaseActivity } from "@/lib/releases/activity";
+import { notifyReleaseReviewAction } from "@/lib/email";
+import { appUrl } from "@/lib/stripe";
 import {
   canAdminDecide,
   normalizeReleaseStatus,
@@ -123,6 +125,15 @@ export async function POST(request: Request, { params }: Params) {
           status: "open",
         },
       });
+      if (fresh.user.email) {
+        await notifyReleaseReviewAction({
+          to: fresh.user.email,
+          releaseTitle: fresh.title,
+          releaseUrl: appUrl(`/dashboard/releases/${id}`),
+          kind: "changes_required",
+          message: body.notes.trim(),
+        });
+      }
     }
 
     await logReleaseActivity({

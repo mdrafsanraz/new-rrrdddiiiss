@@ -1,7 +1,10 @@
 /**
  * Delete-vs-takedown eligibility, decided from LabelGrid's own
  * GET /releases/{id}/delivery-status flags — `ever_delivered` and `state`
- * — never from RDISTRO's local status.
+ * — never from RDISTRO's local status. The one exception is `isApproved`:
+ * once review has approved a release it's committed to distribution even
+ * if the delivery-status API hasn't reported movement yet, so Delete must
+ * not be offered in that gap.
  *
  * Uses `ever_delivered` rather than `ever_submitted`: takedown-all's own
  * description says it queues removal "to each store the release was
@@ -15,7 +18,7 @@
  *
  *   Never delivered draft → Delete Release (DELETE /releases/{release})
  *   In RDISTRO/LabelGrid review → No destructive action
- *   Delivering / delivered / live → Request Takedown
+ *   Approved / Delivering / delivered / live → Request Takedown
  *                                    (POST /releases/{release}/takedown-all)
  *
  * The two actions are mutually exclusive by construction — never both true.
@@ -34,6 +37,12 @@ export function computeReleaseLifecycleActions(input: {
   deliveryState: string | null | undefined;
   /** RDISTRO's user-facing review state overrides pre-delivery deletion. */
   isInReview?: boolean;
+  /**
+   * True once review has approved the release — from that point it's
+   * committed to distribution, so only Takedown applies (not Delete), even
+   * before LabelGrid's own delivery-status API reports movement yet.
+   */
+  isApproved?: boolean;
 }): ReleaseLifecycleActions {
   const everDelivered = Boolean(input.everDelivered);
   const state = input.deliveryState ?? null;
@@ -63,7 +72,8 @@ export function computeReleaseLifecycleActions(input: {
     everDelivered ||
     state === "in_progress" ||
     state === "live" ||
-    state === "action_needed";
+    state === "action_needed" ||
+    Boolean(input.isApproved);
 
   if (inDistributionPipeline) {
     return { canDelete: false, canTakedown: true, takedownDisabledReason: null };

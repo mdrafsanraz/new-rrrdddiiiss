@@ -53,7 +53,10 @@ const releaseInclude = {
     orderBy: { trackNumber: "asc" as const },
     include: { contributors: true },
   },
-  reviewIssues: { orderBy: { createdAt: "desc" as const } },
+  reviewIssues: {
+    orderBy: { createdAt: "desc" as const },
+    include: { documents: { select: { id: true } } },
+  },
   documents: { orderBy: { createdAt: "desc" as const }, take: 20 },
 };
 
@@ -94,9 +97,18 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
+  // A release held on a document request gets no edit/delete, and no
+  // resubmit until every requested document has actually been uploaded —
+  // the only action available before then is the upload card itself.
+  const documentRequiredIssues = openIssues.filter((i) => i.requiresDocument);
+  const documentRequested = documentRequiredIssues.length > 0;
+  const documentProvided = documentRequiredIssues.every(
+    (i) => ("documents" in i ? i.documents.length : 0) > 0
+  );
   const canSubmit = canUserSubmitRelease(release);
-  const canResubmit = canUserResubmitRelease(release);
-  const canEdit = canUserEditRelease(release);
+  const canResubmit =
+    canUserResubmitRelease(release) && (!documentRequested || documentProvided);
+  const canEdit = canUserEditRelease(release) && !documentRequested;
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
     id: d.id,
@@ -173,12 +185,14 @@ export default async function ReleaseDetailPage({ params }: Props) {
       territoryNames = territoriesResult.value;
   }
 
-  const { canDelete, canTakedown, takedownDisabledReason } =
+  const { canDelete: canDeleteLifecycle, canTakedown, takedownDisabledReason } =
     computeReleaseLifecycleActions({
       everDelivered,
       deliveryState: delivery?.state ?? null,
       isInReview: facing === "in_review",
+      isApproved: facing === "approved",
     });
+  const canDelete = canDeleteLifecycle && !documentRequested;
 
   const trackDurationsByLgId: Record<number, number | null> = {};
   for (const t of tracks) {
@@ -272,7 +286,9 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-6">
             {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
-            {canResubmit ? <ResubmitReleaseButton releaseId={release.id} /> : null}
+            {canResubmit && !documentRequested ? (
+              <ResubmitReleaseButton releaseId={release.id} />
+            ) : null}
             {!finalReject ? (
               <ReleaseActions
                 releaseId={release.id}

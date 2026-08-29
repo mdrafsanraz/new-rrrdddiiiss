@@ -78,6 +78,43 @@ export async function notifySupportUser(input: SupportEmail) {
   return sendSupportEmail(input);
 }
 
+type ReleaseReviewEmail = {
+  to: string;
+  releaseTitle: string;
+  releaseUrl: string;
+  kind: "changes_required" | "document_requested";
+  message: string;
+  documentKind?: string;
+};
+
+/** Notifies the release owner when staff requests changes or a document — the only way they'd otherwise find out is by revisiting the release page. */
+export async function notifyReleaseReviewAction(input: ReleaseReviewEmail) {
+  const resend = getResend();
+  const heading =
+    input.kind === "document_requested"
+      ? `Document requested${input.documentKind ? `: ${input.documentKind}` : ""}`
+      : "Changes requested";
+  const subject = `Action needed on "${input.releaseTitle}"`;
+
+  if (!resend) {
+    console.log(`[email] RESEND_API_KEY not set — skipped release review email to ${input.to}`);
+    return;
+  }
+
+  try {
+    const { error } = await resend.emails.send({
+      from: fromAddress(),
+      to: input.to,
+      subject,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(heading)} for ${escapeHtml(input.releaseTitle)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO / RELEASE REVIEW</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(heading)}</h1><p style="margin:8px 0 0;color:#71717a;font-size:14px">${escapeHtml(input.releaseTitle)}</p><div style="margin-top:24px;padding:18px;border-left:3px solid #18181b;background:#fafafa;white-space:pre-wrap;font-size:14px;line-height:1.65">${escapeHtml(input.message)}</div><a href="${escapeHtml(input.releaseUrl)}" style="display:inline-block;margin-top:24px;padding:12px 18px;border-radius:10px;background:#18181b;color:#fff;text-decoration:none;font-weight:600">View release</a></div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO.</p></div></body></html>`,
+    });
+    if (error) console.error(`[email] Resend failed to send release review email to ${input.to}:`, error);
+  } catch (error) {
+    // Review actions stay successful even when the email provider is unavailable.
+    console.error(`[email] Resend request failed for release review email to ${input.to}:`, error);
+  }
+}
+
 /**
  * Sends the password-reset email via Resend. When RESEND_API_KEY is not
  * set (local dev without a key), logs the link instead so the flow is

@@ -32,10 +32,20 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isInReview = getUserFacingReleaseStatus(release.status) === "in_review";
+  const facing = getUserFacingReleaseStatus(release.status);
+  const isInReview = facing === "in_review";
   if (isInReview) {
     return NextResponse.json(
       { error: "A release that is in review cannot be deleted." },
+      { status: 409 }
+    );
+  }
+  if (facing === "approved") {
+    return NextResponse.json(
+      {
+        error:
+          "This release has been approved and is committed to distribution — request a takedown instead.",
+      },
       { status: 409 }
     );
   }

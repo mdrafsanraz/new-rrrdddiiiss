@@ -8,6 +8,7 @@ import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { fetchLabelGridDeliveryStatus } from "@/lib/labelgrid/status-sync";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
 import { logReleaseActivity } from "@/lib/releases/activity";
+import { getUserFacingReleaseStatus } from "@/lib/releases/status";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -65,6 +66,7 @@ export async function POST(request: Request, { params }: Params) {
   const { canTakedown, takedownDisabledReason } = computeReleaseLifecycleActions({
     everDelivered: delivery?.ever_delivered,
     deliveryState: delivery?.state ?? null,
+    isApproved: getUserFacingReleaseStatus(release.status) === "approved",
   });
   if (!canTakedown) {
     return NextResponse.json(

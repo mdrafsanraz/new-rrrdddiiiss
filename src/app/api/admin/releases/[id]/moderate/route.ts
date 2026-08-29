@@ -6,6 +6,8 @@ import { withdrawReleaseFromReview } from "@/lib/labelgrid";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { logReleaseActivity } from "@/lib/releases/activity";
+import { notifyReleaseReviewAction } from "@/lib/email";
+import { appUrl } from "@/lib/stripe";
 import {
   canAdminDecide,
   canAdminSendBackToDraft,
@@ -125,6 +127,7 @@ export async function POST(request: Request, { params }: Params) {
           reviewedAt: new Date(),
           reviewedById: gate.admin.id,
         },
+        include: { user: true },
       });
 
       await logReleaseActivity({
@@ -142,6 +145,16 @@ export async function POST(request: Request, { params }: Params) {
         targetId: id,
         summary: `Requested ${body.documentKind} for ${release.title}`,
       });
+      if (fresh.user.email) {
+        await notifyReleaseReviewAction({
+          to: fresh.user.email,
+          releaseTitle: fresh.title,
+          releaseUrl: appUrl(`/dashboard/releases/${id}`),
+          kind: "document_requested",
+          message: body.notes.trim(),
+          documentKind: body.documentKind,
+        });
+      }
 
       return NextResponse.json({ release: fresh, issue });
     }
