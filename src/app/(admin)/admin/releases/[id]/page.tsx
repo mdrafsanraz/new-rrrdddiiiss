@@ -23,6 +23,7 @@ import {
 import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-media-form";
 import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { ProviderAudioPlayer } from "@/components/admin/provider-audio-player";
+import { DocumentReviewForm } from "@/components/admin/document-review-form";
 
 type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
@@ -53,7 +54,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
         },
         reviewedBy: { select: { name: true, email: true } },
         reviewIssues: { orderBy: { createdAt: "desc" } },
-        documents: { orderBy: { createdAt: "desc" } },
+        documents: { orderBy: { createdAt: "desc" }, include: { issue: { select: { id: true, title: true, category: true, message: true } } } },
         activities: { orderBy: { createdAt: "desc" }, take: 40 },
         takedowns: { orderBy: { createdAt: "desc" }, take: 5 },
       },
@@ -73,12 +74,24 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
         },
         reviewedBy: { select: { name: true, email: true } },
         reviewIssues: { orderBy: { createdAt: "desc" } },
-        documents: { orderBy: { createdAt: "desc" } },
+        documents: { orderBy: { createdAt: "desc" }, include: { issue: { select: { id: true, title: true, category: true, message: true } } } },
         activities: { orderBy: { createdAt: "desc" }, take: 40 },
       },
     });
   }
   if (!release) notFound();
+
+  const documentIds = release.documents.map((document) => document.id);
+  const documentActivities = release.activities.filter((activity) => activity.type.startsWith("document_"));
+  const documentPeopleIds = [...new Set([
+    ...release.documents.flatMap((document) => [document.uploadedById, document.reviewedById]),
+    ...documentActivities.map((activity) => activity.actorUserId),
+  ].filter((value): value is string => Boolean(value)))];
+  const [documentNotes, documentPeople] = await Promise.all([
+    documentIds.length ? prisma.internalNote.findMany({ where: { entityType: "document", entityId: { in: documentIds } }, orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } }) : Promise.resolve([]),
+    documentPeopleIds.length ? prisma.user.findMany({ where: { id: { in: documentPeopleIds } }, select: { id: true, name: true, email: true } }) : Promise.resolve([]),
+  ]);
+  const documentPeopleById = new Map(documentPeople.map((person) => [person.id, person]));
 
   const fromQueue = (await searchParams)?.queue === "pending";
   let previousQueueId: string | undefined;
@@ -501,35 +514,19 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
             </div>
           </Section>
 
-          <Section id="documents" title="Documentation and licenses" description="Evidence uploaded for ownership, authorization, samples, remixes, and cover licensing.">
+          <Section id="documents" title="Documentation and licenses" description="User submissions, review decisions, requested replacements, and document-related changes for this release.">
             {release.documents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No documents yet.</p>
+              <div className="py-6 text-center"><p className="text-sm font-medium">No documents submitted</p><p className="mt-1 text-xs text-muted-foreground">User uploads and document requests will appear here with their review history.</p></div>
             ) : (
-              <ul className="divide-y divide-border text-sm">
-                {release.documents.map((d) => (
-                  <li
-                    key={d.id}
-                    className="flex flex-wrap items-center justify-between gap-2 py-2"
-                  >
-                    <div>
-                      <p className="font-medium">{d.kind}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.filename} / {d.reviewStatus} /{" "}
-                        {formatShortDate(d.createdAt)}
-                      </p>
-                    </div>
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-                    >
-                      View
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-3">{release.documents.map((document) => {
+                const uploader = documentPeopleById.get(document.uploadedById);
+                const reviewer = document.reviewedById ? documentPeopleById.get(document.reviewedById) : null;
+                const track = document.trackId ? release.tracks.find((item) => item.id === document.trackId) : null;
+                const notes = documentNotes.filter((note) => note.entityId === document.id);
+                return <article key={document.id} className="border border-border bg-background"><div className="grid gap-4 p-4 lg:grid-cols-[1fr_auto]"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">{document.kind}</h3><span className={cn("px-2 py-0.5 text-[10px] font-semibold capitalize", document.reviewStatus === "approved" ? "bg-emerald-100 text-emerald-800" : document.reviewStatus === "rejected" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{document.reviewStatus.replaceAll("_", " ")}</span></div><p className="mt-1 truncate text-xs text-muted-foreground">{document.filename} / {document.mimeType}</p><dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-3"><Meta label="Submitted" value={formatShortDate(document.createdAt)} /><Meta label="Submitted by" value={uploader ? `${uploader.name} / ${uploader.email}` : document.uploadedById === release.userId ? `${release.user.name} / ${release.user.email}` : "User account unavailable"} /><Meta label="Scope" value={track ? `${track.title}${track.isrc ? ` / ${track.isrc}` : ""}` : "Whole release"} /><Meta label="Requested for" value={document.issue?.title ?? document.issue?.category ?? "General evidence"} /><Meta label="Reviewed" value={document.reviewedAt ? formatShortDate(document.reviewedAt) : "Awaiting review"} /><Meta label="Reviewed by" value={reviewer ? reviewer.name : document.reviewedById ? "Staff account unavailable" : "Not reviewed"} /><Meta label="Expires" value={document.expiresAt ? formatShortDate(document.expiresAt) : "No expiry"} /></dl>{document.issue?.message ? <p className="mt-3 border-l-2 border-amber-400 pl-3 text-xs text-muted-foreground">{document.issue.message}</p> : null}{document.reviewNote ? <div className="mt-3 bg-muted/40 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">User-facing review note</p><p className="mt-1 whitespace-pre-wrap text-xs">{document.reviewNote}</p></div> : null}{notes.length ? <div className="mt-3 space-y-2">{notes.map((note) => <div key={note.id} className="border-l-2 border-border pl-3 text-xs"><p className="font-semibold">Internal note by {note.author.name}</p><p className="mt-0.5 whitespace-pre-wrap text-muted-foreground">{note.body}</p><p className="mt-1 text-[10px] text-muted-foreground">{formatShortDate(note.createdAt)}</p></div>)}</div> : null}</div><a href={document.url} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center border border-border px-3 text-xs font-semibold hover:bg-muted">Open file</a></div>{hasPermission(admin.role, "documents.manage") ? <DocumentReviewForm id={document.id} status={document.reviewStatus} expiresAt={document.expiresAt?.toISOString().slice(0, 10) ?? ""} /> : null}</article>;
+              })}</div>
             )}
+            {documentActivities.length ? <div className="mt-5 border-t border-border pt-4"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Document activity</h3><ol className="mt-3 space-y-3">{documentActivities.map((activity) => { const actor = activity.actorUserId ? documentPeopleById.get(activity.actorUserId) : null; return <li key={activity.id} className="grid gap-1 text-xs sm:grid-cols-[120px_1fr]"><time className="text-muted-foreground">{formatDistanceToNow(activity.createdAt)}</time><div><p className="font-semibold">{activity.title}</p><p className="mt-0.5 text-muted-foreground">{activity.description ?? "No additional detail"}{actor ? ` / by ${actor.name}` : ""}</p></div></li>; })}</ol></div> : null}
           </Section>
 
           <Section id="labelgrid" title="LabelGrid review" description="Provider review state and issues cached from the existing LabelGrid release.">

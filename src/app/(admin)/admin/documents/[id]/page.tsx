@@ -1,16 +1,16 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, User } from "@phosphor-icons/react/dist/ssr";
-import { DocumentReviewForm } from "@/components/admin/document-review-form";
+import { notFound, redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 
 type Props = { params: Promise<{ id: string }> };
-const date = (value: Date | null) => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "Not recorded";
-export default async function DocumentReviewPage({ params }: Props) { await requirePermission("documents.manage"); const { id } = await params; const document = await prisma.releaseDocument.findUnique({ where: { id }, include: { release: { include: { user: { select: { id: true, name: true, email: true } }, artist: { select: { name: true } }, tracks: { orderBy: { trackNumber: "asc" }, select: { id: true, title: true, isrc: true } } } }, issue: true } }); if (!document) notFound(); const [notes, track] = await Promise.all([prisma.internalNote.findMany({ where: { entityType: "document", entityId: id }, orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } }), document.trackId ? prisma.track.findUnique({ where: { id: document.trackId }, select: { title: true, isrc: true } }) : null]); return <div className="mx-auto max-w-[1200px] space-y-6"><header className="border-b border-border pb-6"><Link href="/admin/documents" className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft /> Compliance queue</Link><div className="mt-5 flex items-center gap-2 text-primary"><FileText size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Document review</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">{document.kind}</h1><p className="mt-2 text-sm text-muted-foreground">{document.filename}</p></header>
-  <section className="grid border border-border bg-card md:grid-cols-4"><Metric label="Status" value={document.reviewStatus.replaceAll("_", " ")} /><Metric label="Uploaded" value={date(document.createdAt)} /><Metric label="Expires" value={date(document.expiresAt)} /><Metric label="File type" value={document.mimeType} /></section>
-  <div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]"><section className="border border-border bg-card p-5"><h2 className="text-sm font-semibold">Compliance context</h2><dl className="mt-4 grid gap-4 text-xs sm:grid-cols-2"><Item label="Release"><Link href={`/admin/releases/${document.release.id}`} className="font-semibold hover:underline">{document.release.title}</Link></Item><Item label="Artist">{document.release.artist?.name ?? "Not assigned"}</Item><Item label="Track">{track ? `${track.title}${track.isrc ? ` / ${track.isrc}` : ""}` : "Release-level document"}</Item><Item label="Review issue">{document.issue?.title ?? "No linked issue"}</Item></dl><a href={document.url} target="_blank" rel="noreferrer" className="mt-5 inline-flex h-10 items-center border border-border px-4 text-xs font-semibold hover:bg-muted">Open uploaded file</a>{document.reviewNote ? <div className="mt-5 border-t border-border pt-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Previous review note</p><p className="mt-2 whitespace-pre-wrap text-sm">{document.reviewNote}</p></div> : null}</section><aside className="border border-border bg-card p-5"><div className="flex items-center gap-2"><User /><h2 className="text-sm font-semibold">Account</h2></div><p className="mt-4 font-semibold">{document.release.user.name}</p><p className="mt-1 text-xs text-muted-foreground">{document.release.user.email}</p><Link href={`/admin/users/${document.release.user.id}`} className="mt-4 inline-block text-xs font-semibold hover:underline">View account</Link></aside></div>
-  <DocumentReviewForm id={id} expiresAt={document.expiresAt?.toISOString().slice(0, 10) ?? ""} />
-  {notes.length ? <section className="border border-border bg-card"><div className="border-b border-border px-5 py-3"><h2 className="text-sm font-semibold">Internal notes</h2></div><div className="divide-y divide-border">{notes.map((note) => <div key={note.id} className="px-5 py-4"><div className="flex justify-between text-[10px] text-muted-foreground"><span className="font-semibold text-foreground">{note.author.name}</span><span>{date(note.createdAt)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm">{note.body}</p></div>)}</div></section> : null}</div>; }
-function Metric({ label, value }: { label: string; value: string }) { return <div className="border-b border-border p-4 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-2 text-sm font-semibold capitalize">{value}</p></div>; }
-function Item({ label, children }: { label: string; children: React.ReactNode }) { return <div><dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-1">{children}</dd></div>; }
+
+export default async function LegacyDocumentReviewPage({ params }: Props) {
+  await requirePermission("documents.manage");
+  const { id } = await params;
+  const document = await prisma.releaseDocument.findUnique({
+    where: { id },
+    select: { releaseId: true },
+  });
+  if (!document) notFound();
+  redirect(`/admin/releases/${document.releaseId}#documents`);
+}

@@ -56,7 +56,7 @@ export default async function AdminHomePage() {
     { label: "Releases waiting for review", value: s.pendingReview, href: "/admin/releases?filter=pending_review" },
     { label: "Changes required", value: s.changesRequired, href: "/admin/releases?filter=changes_required" },
     { label: "QC flagged releases", value: s.qcFlagged, href: "/admin/releases?filter=qc_flagged" },
-    { label: "Pending rights documents", value: s.docsPending, href: "/admin/documents?status=pending" },
+    { label: "Pending rights documents", value: s.docsPending, href: "/admin/action-required#documentation" },
     { label: "LabelGrid sync failures", value: s.syncFailures, href: "/admin/releases?filter=sync_issues" },
     { label: "Open support tickets", value: s.openSupport, href: "/admin/support?status=open" },
     { label: "Takedown requests", value: s.takedownRequests, href: "/admin/takedowns" },
