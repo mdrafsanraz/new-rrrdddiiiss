@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { PlanId } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 
+const PLAN_TIER: Record<PlanId, number> = { free: 0, starter: 1, pro: 2 };
+
 export function UpgradeButtons({
   currentPlan,
   stripeReady,
@@ -48,7 +50,7 @@ export function UpgradeButtons({
 
   return (
     <div className="flex flex-wrap gap-3">
-      {currentPlan !== "starter" ? (
+      {PLAN_TIER[currentPlan] < PLAN_TIER.starter ? (
         <Button
           className="h-10 px-5"
           disabled={!stripeReady || loading !== null}
@@ -58,7 +60,7 @@ export function UpgradeButtons({
           {loading === "starter" ? "Redirecting…" : "Upgrade to Starter"}
         </Button>
       ) : null}
-      {currentPlan !== "pro" ? (
+      {PLAN_TIER[currentPlan] < PLAN_TIER.pro ? (
         <Button
           className="h-10 px-5"
           disabled={!stripeReady || loading !== null}
