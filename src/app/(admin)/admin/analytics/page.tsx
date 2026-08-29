@@ -1,108 +1,49 @@
+import { ChartLine, Clock, Disc, Money, Storefront, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 
-export const metadata = { title: "Analytics · Admin" };
+export const metadata = { title: "Analytics | Admin" }; export const dynamic = "force-dynamic";
+const integer = new Intl.NumberFormat("en-US"); const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const monthKey = (value: Date) => `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}`;
+const monthLabel = (key: string) => new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(`${key}-01T00:00:00.000Z`));
 
 export default async function AdminAnalyticsPage() {
-  await requirePermission("analytics.read");
-
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-
-  const [
-    submittedToday,
-    submittedMonth,
-    approvedInternal,
-    changesRequired,
-    rejected,
-    qcWarnings,
-    docsRequested,
-    users,
-    free,
-    starter,
-    pro,
-    openSupport,
-  ] = await Promise.all([
-    prisma.release.count({ where: { submittedAt: { gte: startOfDay } } }),
-    prisma.release.count({ where: { submittedAt: { gte: startOfMonth } } }),
-    prisma.releaseActivity.count({
-      where: { type: "internal_approved" },
-    }),
-    prisma.release.count({
-      where: {
-        status: {
-          in: [
-            "internal_changes_required",
-            "labelgrid_changes_required",
-            "changes_required",
-          ],
-        },
-      },
-    }),
-    prisma.release.count({
-      where: {
-        status: {
-          in: ["internal_rejected", "labelgrid_rejected", "rejected"],
-        },
-      },
-    }),
-    prisma.release.count({
-      where: { qcStatus: { in: ["warning", "review_required"] } },
-    }),
-    prisma.releaseActivity.count({ where: { type: "document_requested" } }),
-    prisma.user.count(),
-    prisma.user.count({ where: { planId: "free" } }),
-    prisma.user.count({ where: { planId: "starter" } }),
-    prisma.user.count({ where: { planId: "pro" } }),
-    prisma.supportTicket.count({
-      where: { status: { in: ["open", "in_progress"] } },
-    }),
+  await requirePermission("analytics.read"); const [{ now }] = await prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() AS now`; const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1)); const activeSince = new Date(now.getTime() - 30 * 86400000); const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [newUsers, activeUsers, usersTimeline, releasesTimeline, submittedMonth, approvedMonth, tracksDistributed, moderation, reviewed, territories, retailers, royaltyPeriods, royaltyGroups, withdrawals, successfulInvoices] = await Promise.all([
+    prisma.user.count({ where: { role: "user", createdAt: { gte: monthStart } } }),
+    prisma.user.count({ where: { role: "user", terminated: false, lastActiveAt: { gte: activeSince } } }),
+    prisma.user.findMany({ where: { role: "user", createdAt: { gte: start } }, select: { createdAt: true } }),
+    prisma.release.findMany({ where: { createdAt: { gte: start } }, select: { createdAt: true, submittedAt: true } }),
+    prisma.release.count({ where: { submittedAt: { gte: monthStart } } }),
+    prisma.releaseActivity.count({ where: { type: { in: ["internal_approved", "labelgrid_approved"] }, createdAt: { gte: monthStart } } }),
+    prisma.track.count({ where: { release: { status: { in: ["delivering", "live", "takedown_pending", "taken_down"] } } } }),
+    prisma.releaseActivity.groupBy({ by: ["type"], where: { type: { in: ["internal_approved", "internal_changes_required", "internal_rejected"] } }, _count: true }),
+    prisma.release.findMany({ where: { submittedAt: { not: null }, reviewedAt: { not: null } }, select: { submittedAt: true, reviewedAt: true } }),
+    prisma.royaltyTransaction.groupBy({ by: ["territory"], where: { territory: { not: null } }, _sum: { quantity: true, sourceNetRevenueUsd: true }, orderBy: { _sum: { sourceNetRevenueUsd: "desc" } }, take: 8 }),
+    prisma.royaltyTransaction.groupBy({ by: ["retailer"], where: { retailer: { not: null } }, _sum: { quantity: true, sourceNetRevenueUsd: true }, orderBy: { _sum: { sourceNetRevenueUsd: "desc" } }, take: 8 }),
+    prisma.royaltyPeriod.findMany({ where: { startDate: { gte: start } }, orderBy: { startDate: "asc" }, select: { id: true, period: true, startDate: true } }),
+    prisma.royaltyTransaction.groupBy({ by: ["royaltyPeriodId"], where: { royaltyPeriod: { startDate: { gte: start } } }, _sum: { sourceNetRevenueUsd: true, userPayableUsd: true } }),
+    prisma.withdrawal.findMany({ where: { createdAt: { gte: start } }, select: { createdAt: true, amount: true, status: true } }),
+    prisma.subscriptionEvent.aggregate({ where: { type: "invoice.payment_succeeded", occurredAt: { gte: start } }, _sum: { amountDue: true }, _count: true }),
   ]);
-
-  const paid = starter + pro;
-  const conversion =
-    users > 0 ? Math.round((paid / users) * 1000) / 10 : 0;
-
-  const rows = [
-    ["Submitted today", submittedToday],
-    ["Submitted this month", submittedMonth],
-    ["Internal approvals (all time)", approvedInternal],
-    ["Currently changes required", changesRequired],
-    ["Rejected (final)", rejected],
-    ["QC warning / review required", qcWarnings],
-    ["Documents requested (all time)", docsRequested],
-    ["Users", users],
-    ["Free", free],
-    ["Starter", starter],
-    ["Pro", pro],
-    ["Free → paid %", `${conversion}%`],
-    ["Support backlog", openSupport],
-  ] as const;
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Analytics</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Operational metrics from local data only — no fabricated charts.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-md border border-border bg-card p-4"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {label}
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const months = Array.from({ length: 12 }, (_, index) => { const value = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1)); return monthKey(value); });
+  const countByMonth = (values: Date[]) => months.map((month) => ({ label: monthLabel(month), value: values.filter((value) => monthKey(value) === month).length }));
+  const userGrowth = countByMonth(usersTimeline.map((item) => item.createdAt)); const catalogGrowth = countByMonth(releasesTimeline.map((item) => item.createdAt)); const submissions = countByMonth(releasesTimeline.flatMap((item) => item.submittedAt ? [item.submittedAt] : []));
+  const withdrawalTrend = months.map((month) => ({ label: monthLabel(month), value: withdrawals.filter((item) => monthKey(item.createdAt) === month && ["processing", "paid"].includes(item.status)).reduce((sum, item) => sum + Number(item.amount), 0) }));
+  const royaltyTrend = royaltyPeriods.map((period) => { const group = royaltyGroups.find((item) => item.royaltyPeriodId === period.id); return { label: period.period, value: Number(group?._sum.sourceNetRevenueUsd ?? 0), payable: Number(group?._sum.userPayableUsd ?? 0) }; });
+  const decisions = { approved: moderation.find((item) => item.type === "internal_approved")?._count ?? 0, changes: moderation.find((item) => item.type === "internal_changes_required")?._count ?? 0, rejected: moderation.find((item) => item.type === "internal_rejected")?._count ?? 0 }; const decisionTotal = decisions.approved + decisions.changes + decisions.rejected; const exceptionRate = decisionTotal ? ((decisions.changes + decisions.rejected) / decisionTotal) * 100 : 0;
+  const reviewHours = reviewed.flatMap((release) => release.submittedAt && release.reviewedAt ? [(release.reviewedAt.getTime() - release.submittedAt.getTime()) / 3600000] : []).filter((value) => value >= 0); const averageReviewHours = reviewHours.length ? reviewHours.reduce((sum, value) => sum + value, 0) / reviewHours.length : null;
+  return <div className="mx-auto max-w-[1480px] space-y-6"><header className="border-b border-border pb-6"><div className="flex items-center gap-2 text-primary"><ChartLine size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Platform intelligence</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Analytics</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Operational trends calculated from RDISTRO accounts, catalog events, imported LabelGrid royalties, withdrawals and recorded Stripe webhooks.</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-6"><Metric label="New users this month" value={integer.format(newUsers)} icon={<UsersThree />} /><Metric label="Active users, 30 days" value={integer.format(activeUsers)} icon={<UsersThree />} /><Metric label="Releases submitted" value={integer.format(submittedMonth)} icon={<Disc />} /><Metric label="Releases approved" value={integer.format(approvedMonth)} icon={<Disc />} /><Metric label="Tracks distributed" value={integer.format(tracksDistributed)} icon={<Storefront />} /><Metric label="Average review time" value={averageReviewHours === null ? "No data" : averageReviewHours < 48 ? `${averageReviewHours.toFixed(1)} hours` : `${(averageReviewHours / 24).toFixed(1)} days`} icon={<Clock />} /></section>
+    <div className="grid gap-5 xl:grid-cols-3"><Trend title="New users" description="Account registrations by month" data={userGrowth} /><Trend title="Catalog growth" description="Releases created by month" data={catalogGrowth} /><Trend title="Release submissions" description="First submission timestamps by month" data={submissions} /></div>
+    <div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]"><section className="border border-border bg-card"><PanelTitle title="Moderation outcomes" detail="All recorded internal decisions" /><div className="grid grid-cols-3 border-b border-border"><Decision label="Approved" value={decisions.approved} /><Decision label="Changes" value={decisions.changes} /><Decision label="Rejected" value={decisions.rejected} /></div><div className="p-5"><p className="text-xs text-muted-foreground">Change request and rejection rate</p><p className="mt-2 text-4xl font-semibold">{exceptionRate.toFixed(1)}%</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Calculated from recorded approval, changes-required and rejection activities.</p></div></section><section className="border border-border bg-card"><PanelTitle title="Royalty trend" detail="Imported source net and calculated user payable" />{royaltyTrend.length ? <div className="divide-y divide-border">{royaltyTrend.map((item) => <div key={item.label} className="grid grid-cols-[1fr_auto_auto] gap-5 px-5 py-3 text-xs"><span className="font-semibold">{item.label}</span><span className="text-muted-foreground">Source {usd.format(item.value)}</span><span className="font-semibold">Payable {usd.format(item.payable)}</span></div>)}</div> : <Empty text="No royalty periods in the last 12 months." />}</section></div>
+    <div className="grid gap-5 xl:grid-cols-2"><Ranking title="Top territories" rows={territories.map((item) => ({ label: item.territory ?? "Unknown", quantity: Number(item._sum.quantity ?? 0), revenue: Number(item._sum.sourceNetRevenueUsd ?? 0) }))} /><Ranking title="Top DSPs" rows={retailers.map((item) => ({ label: item.retailer ?? "Unknown", quantity: Number(item._sum.quantity ?? 0), revenue: Number(item._sum.sourceNetRevenueUsd ?? 0) }))} /></div>
+    <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]"><Trend title="Withdrawal volume" description="Processing and paid withdrawal value by month" data={withdrawalTrend} currency /><section className="border border-border bg-card"><PanelTitle title="Recorded subscription value" detail="Successful Stripe invoice webhook events, last 12 months" /><div className="p-5"><Money className="text-muted-foreground" size={22} /><p className="mt-5 text-4xl font-semibold">{usd.format(Number(successfulInvoices._sum.amountDue ?? 0))}</p><p className="mt-2 text-xs text-muted-foreground">Across {successfulInvoices._count.toLocaleString()} successful invoice events. This is recorded invoice value, not an accounting revenue statement.</p></div></section></div>
+  </div>;
 }
+function Metric({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) { return <div className="border-b border-border p-4 sm:border-r xl:border-b-0"><div className="flex justify-between gap-2 text-muted-foreground"><p className="text-[10px] font-semibold uppercase tracking-wide">{label}</p>{icon}</div><p className="mt-5 text-2xl font-semibold tabular-nums">{value}</p></div>; }
+function PanelTitle({ title, detail }: { title: string; detail: string }) { return <div className="border-b border-border px-5 py-4"><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div>; }
+function Trend({ title, description, data, currency = false }: { title: string; description: string; data: Array<{ label: string; value: number }>; currency?: boolean }) { const max = Math.max(...data.map((item) => item.value), 0); return <section className="border border-border bg-card"><PanelTitle title={title} detail={description} /><div className="flex h-56 items-end gap-2 px-4 pb-4 pt-8">{data.map((item) => <div key={item.label} className="group flex h-full min-w-0 flex-1 flex-col justify-end"><span className="mb-2 hidden text-center text-[9px] font-semibold group-hover:block">{currency ? usd.format(item.value) : integer.format(item.value)}</span><div className="min-h-px bg-foreground/80" style={{ height: `${max ? Math.max(2, item.value / max * 100) : 1}%` }} /><span className="mt-2 truncate text-center text-[9px] text-muted-foreground">{item.label}</span></div>)}</div></section>; }
+function Decision({ label, value }: { label: string; value: number }) { return <div className="border-r border-border p-4 last:border-r-0"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-2 text-xl font-semibold">{integer.format(value)}</p></div>; }
+function Ranking({ title, rows }: { title: string; rows: Array<{ label: string; quantity: number; revenue: number }> }) { return <section className="border border-border bg-card"><PanelTitle title={title} detail="Ranked by imported source net revenue" />{rows.length ? <div className="divide-y divide-border">{rows.map((row, index) => <div key={row.label} className="grid grid-cols-[30px_1fr_auto_auto] gap-3 px-4 py-3 text-xs"><span className="text-muted-foreground">{index + 1}</span><span className="truncate font-semibold">{row.label}</span><span className="text-muted-foreground">{integer.format(row.quantity)} units</span><span className="font-semibold">{usd.format(row.revenue)}</span></div>)}</div> : <Empty text="No imported royalty dimensions available." />}</section>; }
+function Empty({ text }: { text: string }) { return <p className="px-5 py-12 text-center text-xs text-muted-foreground">{text}</p>; }

@@ -201,6 +201,20 @@
   animation: rdistro-marquee 38s linear infinite;
 }
 
+.control {
+  margin-top: 0.25rem;
+  height: 2.25rem;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding-inline: 0.5rem;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rdistro-marquee {
     animation: none;

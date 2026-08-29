@@ -1,75 +1,35 @@
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Funnel, LockKey, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { AuditAction, Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/admin";
-import { listAuditLogs } from "@/lib/admin/audit";
-import { formatDistanceToNow } from "@/lib/admin/format";
+import { prisma } from "@/lib/db";
 
-export const metadata = { title: "Audit Logs · Admin" };
-
-type Props = { searchParams: Promise<{ page?: string }> };
+export function generateMetadata() { return { title: "Audit Log | Admin" }; } export const dynamic = "force-dynamic";
+type Props = { searchParams: Promise<{ q?: string; actor?: string; user?: string; release?: string; action?: string; target?: string; ip?: string; from?: string; to?: string; page?: string }> };
+const actions = Object.values(AuditAction); const take = 50;
+const date = (value: Date) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" }).format(value);
+function metadata(value: string) { try { const parsed = JSON.parse(value); return Object.keys(parsed).length ? JSON.stringify(parsed, null, 2) : ""; } catch { return value; } }
 
 export default async function AdminAuditPage({ searchParams }: Props) {
-  await requirePermission("audit.read");
-  const sp = await searchParams;
-  const page = Math.max(1, Number(sp.page ?? "1") || 1);
-  const pageSize = 50;
-  const { rows, total } = await listAuditLogs({
-    take: pageSize,
-    skip: (page - 1) * pageSize,
-  });
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Append-only staff actions · {total.toLocaleString()} events. Not
-          editable.
-        </p>
-      </div>
-
-      <div className="overflow-x-auto rounded-md border border-border bg-card">
-        <table className="w-full min-w-[800px] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">When</th>
-              <th className="px-3 py-2">Actor</th>
-              <th className="px-3 py-2">Action</th>
-              <th className="px-3 py-2">Target</th>
-              <th className="px-3 py-2">Summary</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-3 py-10 text-center text-muted-foreground"
-                >
-                  No audit events yet.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDistanceToNow(row.createdAt)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">
-                    {row.actor?.email ?? "System"}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-[11px]">
-                    {row.action}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {row.targetType}
-                    {row.targetId ? ` · ${row.targetId.slice(0, 10)}…` : ""}
-                  </td>
-                  <td className="px-3 py-2.5">{row.summary}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  await requirePermission("audit.read"); const params = await searchParams; const q = params.q?.trim() ?? ""; const action = actions.includes(params.action as AuditAction) ? params.action as AuditAction : undefined; const page = Math.max(1, Number(params.page) || 1);
+  const [staff, targetGroups, matchingUsers, matchingReleases] = await Promise.all([
+    prisma.user.findMany({ where: { role: { not: "user" } }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
+    prisma.auditLog.groupBy({ by: ["targetType"], orderBy: { targetType: "asc" } }),
+    params.user ? prisma.user.findMany({ where: { OR: [{ name: { contains: params.user, mode: "insensitive" } }, { email: { contains: params.user, mode: "insensitive" } }, { id: { contains: params.user } }] }, take: 30, select: { id: true } }) : Promise.resolve([]),
+    params.release ? prisma.release.findMany({ where: { OR: [{ title: { contains: params.release, mode: "insensitive" } }, { upc: { contains: params.release, mode: "insensitive" } }, { id: { contains: params.release } }, { labelgridId: { contains: params.release, mode: "insensitive" } }] }, take: 30, select: { id: true } }) : Promise.resolve([]),
+  ]);
+  const createdAt: Prisma.DateTimeFilter = {}; if (params.from && !Number.isNaN(Date.parse(params.from))) createdAt.gte = new Date(`${params.from}T00:00:00.000Z`); if (params.to && !Number.isNaN(Date.parse(params.to))) createdAt.lte = new Date(`${params.to}T23:59:59.999Z`);
+  const userIds = matchingUsers.map((item) => item.id); const releaseIds = matchingReleases.map((item) => item.id);
+  const where: Prisma.AuditLogWhereInput = { ...(params.actor ? { actorUserId: params.actor } : {}), ...(action ? { action } : {}), ...(params.target ? { targetType: params.target } : {}), ...(params.ip ? { ip: { contains: params.ip } } : {}), ...(Object.keys(createdAt).length ? { createdAt } : {}), AND: [
+    ...(q ? [{ OR: [{ summary: { contains: q, mode: "insensitive" as const } }, { targetId: { contains: q, mode: "insensitive" as const } }, { targetType: { contains: q, mode: "insensitive" as const } }, { metadataJson: { contains: q, mode: "insensitive" as const } }, { actor: { is: { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }] } } }] }] : []),
+    ...(params.user ? [{ OR: userIds.flatMap((id) => [{ targetId: id }, { metadataJson: { contains: id } }]) }] : []),
+    ...(params.release ? [{ OR: releaseIds.flatMap((id) => [{ targetId: id }, { metadataJson: { contains: id } }]) }] : []),
+  ] };
+  const [rows, total, actionGroups] = await Promise.all([prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * take, take, include: { actor: { select: { id: true, name: true, email: true } } } }), prisma.auditLog.count({ where }), prisma.auditLog.groupBy({ by: ["action"], _count: true, orderBy: { _count: { action: "desc" } }, take: 4 })]);
+  const pages = Math.max(1, Math.ceil(total / take)); const pageHref = (next: number) => { const query = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]))); query.set("page", String(next)); return `/admin/audit?${query}`; };
+  return <div className="mx-auto max-w-[1480px] space-y-6"><header className="grid gap-5 border-b border-border pb-6 lg:grid-cols-[1fr_auto] lg:items-end"><div><div className="flex items-center gap-2 text-primary"><LockKey size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Immutable operations record</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Activity and audit log</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Search append-only administrative events. IP addresses appear only when the originating workflow legitimately captured one.</p></div><p className="text-xs text-muted-foreground">{total.toLocaleString()} matching events</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-4">{actionGroups.map((group) => <Link key={group.action} href={`/admin/audit?action=${group.action}`} className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.action.replaceAll("_", " ")}</p><p className="mt-2 text-2xl font-semibold">{group._count.toLocaleString()}</p></Link>)}</section>
+    <form className="grid gap-3 border border-border bg-card p-4 md:grid-cols-3 xl:grid-cols-[1.2fr_repeat(7,1fr)_auto] xl:items-end"><Field label="Search"><input name="q" defaultValue={q} placeholder="Summary, target or metadata" className="control" /></Field><Field label="Admin"><select name="actor" defaultValue={params.actor ?? ""} className="control"><option value="">All actors</option>{staff.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="User"><input name="user" defaultValue={params.user} placeholder="Name, email or ID" className="control" /></Field><Field label="Release"><input name="release" defaultValue={params.release} placeholder="Title, UPC or ID" className="control" /></Field><Field label="Action"><select name="action" defaultValue={action ?? ""} className="control"><option value="">All actions</option>{actions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></Field><Field label="Target"><select name="target" defaultValue={params.target ?? ""} className="control"><option value="">All targets</option>{targetGroups.map((item) => <option key={item.targetType} value={item.targetType}>{item.targetType.replaceAll("_", " ")}</option>)}</select></Field><Field label="From"><input type="date" name="from" defaultValue={params.from} className="control" /></Field><Field label="To"><input type="date" name="to" defaultValue={params.to} className="control" /></Field><button className="flex h-9 items-center justify-center gap-2 bg-foreground px-4 text-xs font-semibold text-background"><Funnel /> Apply</button><Field label="IP contains"><input name="ip" defaultValue={params.ip} placeholder="Recorded IP" className="control" /></Field></form>
+    <section className="overflow-hidden border border-border bg-card"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold">Recorded events</h2><p className="mt-1 text-[11px] text-muted-foreground">Entries cannot be edited or deleted from the admin application.</p></div>{Object.values(params).some(Boolean) ? <Link href="/admin/audit" className="flex items-center gap-1 text-xs font-semibold hover:underline"><MagnifyingGlass /> Clear filters</Link> : null}</div><div className="overflow-x-auto"><table className="w-full min-w-[1280px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Timestamp</th><th className="px-3 py-3">Actor</th><th className="px-3 py-3">Action</th><th className="px-3 py-3">Target</th><th className="px-3 py-3">Summary and metadata</th><th className="px-4 py-3">IP</th></tr></thead><tbody className="divide-y divide-border">{!rows.length ? <tr><td colSpan={6} className="px-4 py-16 text-center text-muted-foreground">No audit events match these filters.</td></tr> : rows.map((row) => { const detail = metadata(row.metadataJson); return <tr key={row.id} className="align-top hover:bg-muted/20"><td className="whitespace-nowrap px-4 py-4">{date(row.createdAt)}</td><td className="px-3 py-4">{row.actor ? <><p className="font-semibold">{row.actor.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{row.actor.email}</p></> : <span className="text-muted-foreground">System</span>}</td><td className="px-3 py-4 font-mono text-[10px]">{row.action}</td><td className="px-3 py-4"><p className="capitalize">{row.targetType.replaceAll("_", " ")}</p><p className="mt-1 max-w-48 truncate font-mono text-[10px] text-muted-foreground">{row.targetId ?? "No target ID"}</p></td><td className="px-3 py-4"><p className="font-semibold">{row.summary}</p>{detail ? <details className="mt-2"><summary className="cursor-pointer text-[10px] font-semibold text-muted-foreground">View metadata</summary><pre className="mt-2 max-w-xl overflow-x-auto whitespace-pre-wrap border border-border bg-muted/30 p-3 font-mono text-[10px] leading-5">{detail}</pre></details> : null}</td><td className="px-4 py-4 font-mono text-[10px] text-muted-foreground">{row.ip ?? "Not captured"}</td></tr>; })}</tbody></table></div><footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground"><span>Page {page} of {pages}</span><div className="flex gap-2">{page > 1 ? <Link href={pageHref(page - 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground"><ArrowLeft /> Previous</Link> : null}{page < pages ? <Link href={pageHref(page + 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground">Next <ArrowRight /></Link> : null}</div></footer></section></div>;
 }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}{children}</label>; }

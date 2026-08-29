@@ -96,7 +96,15 @@ enum SupportTicketStatus {
   open
   in_progress
   answered
+  resolved
   closed
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
 }
 
 enum SupportTicketCategory {
@@ -341,6 +349,7 @@ model User {
   walletTransactions        WalletTransaction[]
   withdrawals               Withdrawal[]
   subscriptionEvents        SubscriptionEvent[]
+  assignedSupportTickets    SupportTicket[]        @relation("SupportAssignee")
 }
 
 model SubscriptionEvent {
@@ -646,6 +655,7 @@ model ReleaseDocument {
   reviewedById     String?
   reviewedAt       DateTime?
   reviewNote       String?
+  expiresAt        DateTime?
   syncedNotePosted Boolean              @default(false)
   createdAt        DateTime             @default(now())
 
@@ -655,6 +665,7 @@ model ReleaseDocument {
   @@index([releaseId])
   @@index([issueId])
   @@index([reviewStatus])
+  @@index([expiresAt])
 }
 
 /**
@@ -1005,14 +1016,24 @@ model SupportTicket {
   subject   String
   category  SupportTicketCategory @default(general)
   status    SupportTicketStatus   @default(open)
+  priority  SupportTicketPriority @default(normal)
+  assignedToId String?
+  releaseId String?
+  artistId String?
+  escalatedAt DateTime?
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedTo User?          @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   messages SupportMessage[]
 
   @@index([userId])
   @@index([status])
+  @@index([priority, status])
+  @@index([assignedToId, status])
+  @@index([releaseId])
+  @@index([artistId])
   @@index([updatedAt])
 }
 

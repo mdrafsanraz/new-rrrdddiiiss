@@ -269,6 +269,12 @@ export async function reconcileLabelGridReleaseStatus(
       },
     });
 
+    if (nextStatus === "taken_down") {
+      await prisma.takedownRequest.updateMany({ where: { releaseId, status: { in: ["requested", "submitted", "processing"] } }, data: { status: "completed", completedAt: new Date(), error: null } });
+    } else if (nextStatus === "takedown_pending") {
+      await prisma.takedownRequest.updateMany({ where: { releaseId, status: { in: ["requested", "submitted"] } }, data: { status: "processing" } });
+    }
+
     if (
       reviewStatus === "require_changes" ||
       reviewStatus === "rejected" ||

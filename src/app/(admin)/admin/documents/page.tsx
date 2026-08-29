@@ -3,11 +3,12 @@ import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { formatShortDate } from "@/lib/admin/format";
 import { cn } from "@/lib/utils";
+import type { Prisma } from "@prisma/client";
 
 export const metadata = { title: "Rights & Documents · Admin" };
 
 type Props = {
-  searchParams: Promise<{ status?: string; kind?: string }>;
+  searchParams: Promise<{ status?: string; kind?: string; q?: string; page?: string }>;
 };
 
 const STATUSES = [
@@ -22,24 +23,28 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const status = STATUSES.includes(sp.status as (typeof STATUSES)[number])
     ? (sp.status as (typeof STATUSES)[number])
-    : "pending";
+    : sp.status === "expired" || sp.status === "all" ? sp.status : "pending";
+  const q = sp.q?.trim() ?? ""; const page = Math.max(1, Number(sp.page) || 1); const take = 50;
+  const [{ now }] = await prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() AS now`;
+  const where: Prisma.ReleaseDocumentWhereInput = { ...(status === "expired" ? { expiresAt: { lt: now } } : status === "all" ? {} : { reviewStatus: status }), ...(sp.kind ? { kind: sp.kind } : {}), ...(q ? { OR: [{ filename: { contains: q, mode: "insensitive" } }, { release: { is: { OR: [{ title: { contains: q, mode: "insensitive" } }, { upc: { contains: q, mode: "insensitive" } }, { user: { is: { OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] } } }] } } }] } : {}) };
 
-  const docs = await prisma.releaseDocument.findMany({
-    where: { reviewStatus: status },
+  const [docs, total, statusGroups, kindGroups, expired] = await Promise.all([prisma.releaseDocument.findMany({
+    where,
     orderBy: { createdAt: "desc" },
-    take: 80,
+    skip: (page - 1) * take, take,
     include: {
       release: {
         select: {
           id: true,
           title: true,
           artist: { select: { name: true } },
-          user: { select: { email: true } },
+          user: { select: { name: true, email: true } }, upc: true,
         },
       },
       issue: { select: { title: true, category: true } },
     },
-  });
+  }), prisma.releaseDocument.count({ where }), prisma.releaseDocument.groupBy({ by: ["reviewStatus"], _count: true }), prisma.releaseDocument.groupBy({ by: ["kind"], orderBy: { kind: "asc" } }), prisma.releaseDocument.count({ where: { expiresAt: { lt: now } } })]);
+  const pages = Math.max(1, Math.ceil(total / take));
 
   return (
     <div className="space-y-5">
@@ -52,8 +57,10 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
         </p>
       </div>
 
+      <section className="grid border border-border bg-card sm:grid-cols-3 xl:grid-cols-5">{STATUSES.map((item) => <Link key={item} href={`/admin/documents?status=${item}`} className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.replaceAll("_", " ")}</p><p className="mt-2 text-2xl font-semibold">{statusGroups.find((group) => group.reviewStatus === item)?._count ?? 0}</p></Link>)}<Link href="/admin/documents?status=expired" className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Expired</p><p className="mt-2 text-2xl font-semibold text-red-700">{expired}</p></Link></section>
+
       <div className="flex flex-wrap gap-1.5">
-        {STATUSES.map((s) => (
+        {[...STATUSES, "expired", "all"].map((s) => (
           <Link
             key={s}
             href={`/admin/documents?status=${s}`}
@@ -68,6 +75,8 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
           </Link>
         ))}
       </div>
+
+      <form className="grid gap-2 border border-border bg-card p-4 sm:grid-cols-[1fr_220px_auto]"><input type="hidden" name="status" value={status} /><input name="q" defaultValue={q} placeholder="Release, UPC, user or filename" className="h-10 border border-border bg-background px-3 text-sm" /><select name="kind" defaultValue={sp.kind ?? ""} className="h-10 border border-border bg-background px-3 text-xs"><option value="">All document types</option>{kindGroups.map((item) => <option key={item.kind} value={item.kind}>{item.kind}</option>)}</select><button className="h-10 bg-foreground px-4 text-xs font-semibold text-background">Apply filters</button></form>
 
       <div className="overflow-x-auto rounded-md border border-border bg-card">
         <table className="w-full min-w-[720px] text-left text-sm">
@@ -102,7 +111,7 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
                     </p>
                   </td>
                   <td className="px-3 py-2.5 text-xs">
-                    {d.release.user.email}
+                    <p>{d.release.user.name}</p><p className="text-[10px] text-muted-foreground">{d.release.user.email}</p>
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
                     {d.issue?.title ?? d.issue?.category ?? "—"}
@@ -112,10 +121,10 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <Link
-                      href={`/admin/releases/${d.releaseId}`}
+                      href={`/admin/documents/${d.id}`}
                       className="text-xs font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      Open release
+                      Review
                     </Link>
                   </td>
                 </tr>
@@ -124,6 +133,7 @@ export default async function AdminDocumentsPage({ searchParams }: Props) {
           </tbody>
         </table>
       </div>
+      {pages > 1 ? <nav className="flex justify-end gap-2 text-xs">{page > 1 ? <Link href={`/admin/documents?status=${status}&page=${page - 1}`} className="border border-border px-3 py-2 font-semibold">Previous</Link> : null}{page < pages ? <Link href={`/admin/documents?status=${status}&page=${page + 1}`} className="border border-border px-3 py-2 font-semibold">Next</Link> : null}</nav> : null}
     </div>
   );
 }

@@ -156,7 +156,7 @@ export default async function AdminHomePage() {
               <h2 id="action-heading" className="text-sm font-semibold">Action required</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">Queues that may need staff intervention</p>
             </div>
-            <WarningCircle size={18} weight="duotone" className="text-amber-600" aria-hidden />
+            <Link href="/admin/action-required" className="flex items-center gap-2 text-xs font-semibold hover:underline">Open workspace <WarningCircle size={18} weight="duotone" className="text-amber-600" aria-hidden /></Link>
           </div>
           <div className="grid gap-px bg-border sm:grid-cols-2">
             {actionItems.map((item) => (

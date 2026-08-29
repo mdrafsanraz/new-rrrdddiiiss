@@ -1,97 +1,37 @@
 import Link from "next/link";
+import { ArrowLeft, ArrowRight, Funnel, Storefront, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import type { Prisma, TakedownReason, TakedownStatus } from "@prisma/client";
+import { TakedownForm } from "@/components/admin/takedown-form";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
-import { formatShortDate } from "@/lib/admin/format";
-import { AdminStatusBadge } from "@/components/admin/status-badges";
-import { TakedownForm } from "@/components/admin/takedown-form";
+import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
+import { deliveryStateLabel, outletStateLabel } from "@/lib/labelgrid/state-labels";
 
-export const metadata = { title: "Takedowns · Admin" };
+export const metadata = { title: "Takedowns | Admin" }; export const dynamic = "force-dynamic";
+type Props = { searchParams: Promise<{ q?: string; status?: string; reason?: string; page?: string }> };
+const statuses: TakedownStatus[] = ["requested", "submitted", "processing", "completed", "failed"];
+const reasons: TakedownReason[] = ["user_requested", "compliance", "copyright", "fraud", "dsp_request", "administrative"];
+const take = 40;
+const date = (value: Date | null) => value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(value) : "Not recorded";
+type Delivery = { ever_delivered?: boolean; outlets?: Array<{ state?: string; operation?: string; currently_live?: boolean }> };
+function deliveryData(value: string): Delivery { try { return JSON.parse(value) as Delivery; } catch { return {}; } }
+function outletSummary(value: string) { const outlets = deliveryData(value).outlets ?? []; const groups = new Map<string, number>(); for (const outlet of outlets) { const key = outlet.state ?? "unknown"; groups.set(key, (groups.get(key) ?? 0) + 1); } return groups.size ? [...groups].map(([state, count]) => `${count} ${outletStateLabel(state)}`).join(" / ") : "No cached outlet status"; }
 
-export default async function AdminTakedownsPage() {
-  await requirePermission("releases.takedown");
-
-  const [requests, liveReleases] = await Promise.all([
-    prisma.takedownRequest.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: {
-        release: {
-          select: { id: true, title: true, status: true },
-        },
-        requestedBy: { select: { name: true } },
-      },
-    }),
-    prisma.release.findMany({
-      where: {
-        status: { in: ["live", "delivering", "labelgrid_approved"] },
-        labelgridId: { not: null },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 30,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        artist: { select: { name: true } },
-      },
-    }),
+export default async function TakedownsPage({ searchParams }: Props) {
+  await requirePermission("releases.takedown"); const params = await searchParams; const q = params.q?.trim() ?? ""; const status = statuses.includes(params.status as TakedownStatus) ? params.status as TakedownStatus : undefined; const reason = reasons.includes(params.reason as TakedownReason) ? params.reason as TakedownReason : undefined; const page = Math.max(1, Number(params.page) || 1);
+  const where: Prisma.TakedownRequestWhereInput = { ...(status ? { status } : {}), ...(reason ? { reason } : {}), ...(q ? { OR: [{ release: { is: { OR: [{ title: { contains: q, mode: "insensitive" } }, { upc: { contains: q, mode: "insensitive" } }, { labelgridId: { contains: q, mode: "insensitive" } }, { user: { is: { OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] } } }] } } }] } : {}) };
+  const [requests, total, groups, candidates] = await Promise.all([
+    prisma.takedownRequest.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * take, take, include: { release: { select: { id: true, title: true, upc: true, status: true, labelgridId: true, labelgridReviewStatus: true, deliveryState: true, deliveryJson: true, lastSyncedAt: true, artist: { select: { name: true } }, user: { select: { id: true, name: true, email: true } } } }, requestedBy: { select: { name: true } } } }),
+    prisma.takedownRequest.count({ where }), prisma.takedownRequest.groupBy({ by: ["status"], _count: true }),
+    prisma.release.findMany({ where: { labelgridId: { not: null } }, orderBy: { updatedAt: "desc" }, take: 100, select: { id: true, title: true, status: true, deliveryState: true, deliveryJson: true, artist: { select: { name: true } } } }),
   ]);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Takedowns</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          LabelGrid supports managed takedown via{" "}
-          <code className="text-xs">POST /releases/&#123;id&#125;/takedown-all</code>{" "}
-          only (all eligible outlets). Per-store takedown is not in the API.
-        </p>
-      </div>
-
-      <section className="rounded-md border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Request takedown</h2>
-        <TakedownForm
-          releases={liveReleases.map((r) => ({
-            id: r.id,
-            label: `${r.title} · ${r.artist?.name ?? "—"}`,
-          }))}
-        />
-      </section>
-
-      <section className="rounded-md border border-border bg-card">
-        <div className="border-b border-border px-4 py-2.5">
-          <h2 className="text-sm font-semibold">Recent requests</h2>
-        </div>
-        <ul className="divide-y divide-border">
-          {requests.length === 0 ? (
-            <li className="px-4 py-8 text-sm text-muted-foreground">
-              No takedown requests yet.
-            </li>
-          ) : (
-            requests.map((t) => (
-              <li
-                key={t.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-              >
-                <div>
-                  <Link
-                    href={`/admin/releases/${t.releaseId}`}
-                    className="font-medium hover:underline"
-                  >
-                    {t.release.title}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {t.reason.replace("_", " ")} · {t.status} ·{" "}
-                    {formatShortDate(t.createdAt)}
-                    {t.requestedBy ? ` · ${t.requestedBy.name}` : ""}
-                  </p>
-                </div>
-                <AdminStatusBadge status={t.release.status} />
-              </li>
-            ))
-          )}
-        </ul>
-      </section>
-    </div>
-  );
+  const eligible = candidates.filter((release) => { const delivery = deliveryData(release.deliveryJson); return computeReleaseLifecycleActions({ everDelivered: delivery.ever_delivered, deliveryState: release.deliveryState, isInReview: ["pending_internal_review", "labelgrid_in_review"].includes(release.status) }).canTakedown; });
+  const count = (value: TakedownStatus) => groups.find((group) => group.status === value)?._count ?? 0; const pages = Math.max(1, Math.ceil(total / take)); const pageHref = (next: number) => { const query = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]))); query.set("page", String(next)); return `/admin/takedowns?${query}`; };
+  return <div className="mx-auto max-w-[1400px] space-y-6"><header className="border-b border-border pb-6"><div className="flex items-center gap-2 text-primary"><Storefront size={18} weight="duotone" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">Catalog removal</span></div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">Takedowns</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Submit full-outlet removals through LabelGrid and monitor cached store progress. LabelGrid does not expose per-store takedown submission in the checked-in API document.</p></header>
+    <section className="grid border border-border bg-card sm:grid-cols-2 xl:grid-cols-5">{statuses.map((item) => <Link key={item} href={`/admin/takedowns?status=${item}`} className="border-b border-border p-4 sm:border-r xl:border-b-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item === "processing" ? "Store removal pending" : item}</p><p className={`mt-2 text-2xl font-semibold ${item === "failed" && count(item) ? "text-red-700" : ""}`}>{count(item)}</p></Link>)}</section>
+    <section className="border border-border bg-card"><details><summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold">Request a full-outlet takedown</summary><div className="border-t border-border p-5"><TakedownForm releases={eligible.map((release) => ({ id: release.id, label: `${release.title} / ${release.artist?.name ?? "Artist not assigned"}` }))} /></div></details></section>
+    <form className="grid gap-2 border border-border bg-card p-4 sm:grid-cols-[1fr_200px_220px_auto]"><input name="q" defaultValue={q} placeholder="Release, UPC, LabelGrid ID or user" className="h-10 border border-border bg-background px-3 text-sm" /><select name="status" defaultValue={status ?? ""} className="h-10 border border-border bg-background px-3 text-xs"><option value="">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item}</option>)}</select><select name="reason" defaultValue={reason ?? ""} className="h-10 border border-border bg-background px-3 text-xs"><option value="">All reasons</option>{reasons.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><button className="flex h-10 items-center justify-center gap-2 bg-foreground px-4 text-xs font-semibold text-background"><Funnel /> Apply</button></form>
+    <section className="overflow-hidden border border-border bg-card"><div className="flex justify-between border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold">Removal queue</h2><p className="mt-1 text-[11px] text-muted-foreground">{total.toLocaleString()} matching requests</p></div>{Object.values(params).some(Boolean) ? <Link href="/admin/takedowns" className="text-xs font-semibold hover:underline">Clear filters</Link> : null}</div><div className="overflow-x-auto"><table className="w-full min-w-[1300px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Release</th><th className="px-3 py-3">User</th><th className="px-3 py-3">Reason</th><th className="px-3 py-3">Requested</th><th className="px-3 py-3">LabelGrid</th><th className="px-3 py-3">DSP removal</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-border">{!requests.length ? <tr><td colSpan={7} className="px-4 py-16 text-center text-muted-foreground">No takedown requests match these filters.</td></tr> : requests.map((request) => <tr key={request.id} className="align-top hover:bg-muted/20"><td className="px-4 py-4"><Link href={`/admin/releases/${request.releaseId}`} className="font-semibold hover:underline">{request.release.title}</Link><p className="mt-1 text-[10px] text-muted-foreground">UPC {request.release.upc ?? "Not assigned"} / LG {request.release.labelgridId ?? "Not linked"}</p></td><td className="px-3 py-4"><Link href={`/admin/users/${request.release.user.id}`} className="font-semibold hover:underline">{request.release.user.name}</Link><p className="mt-1 text-[10px] text-muted-foreground">{request.release.user.email}</p></td><td className="px-3 py-4 capitalize">{request.reason.replaceAll("_", " ")}<p className="mt-1 max-w-56 text-[10px] text-muted-foreground">{request.message ?? "No provider message"}</p></td><td className="px-3 py-4">{date(request.createdAt)}<p className="mt-1 text-[10px] text-muted-foreground">{request.requestedBy?.name ?? "System"}</p></td><td className="px-3 py-4"><p className="font-semibold capitalize">{request.release.labelgridReviewStatus?.replaceAll("_", " ") ?? "Not cached"}</p><p className="mt-1 text-[10px] text-muted-foreground">Delivery {deliveryStateLabel(request.release.deliveryState)}</p></td><td className="px-3 py-4"><p className="font-semibold capitalize">{request.status === "processing" ? "Store removal pending" : request.status}</p><p className="mt-1 max-w-72 text-[10px] text-muted-foreground">{outletSummary(request.release.deliveryJson)}</p>{request.error ? <p className="mt-2 max-w-72 text-[10px] text-red-700">{request.error}</p> : null}</td><td className="px-4 py-4 text-right"><Link href={`/admin/releases/${request.releaseId}#delivery`} className="font-semibold hover:underline">Refresh and inspect</Link></td></tr>)}</tbody></table></div><footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground"><span>Page {page} of {pages}</span><div className="flex gap-2">{page > 1 ? <Link href={pageHref(page - 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground"><ArrowLeft /> Previous</Link> : null}{page < pages ? <Link href={pageHref(page + 1)} className="flex h-8 items-center gap-1 border border-border px-3 font-semibold text-foreground">Next <ArrowRight /></Link> : null}</div></footer></section>
+    <p className="flex items-center gap-2 text-xs text-muted-foreground"><WarningCircle /> Failed requests are not retried automatically. Refresh LabelGrid state before deciding whether another destructive request is safe.</p>
+  </div>;
 }

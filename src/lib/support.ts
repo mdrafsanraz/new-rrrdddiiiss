@@ -10,6 +10,7 @@ export const SUPPORT_STATUSES = [
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In progress" },
   { value: "answered", label: "Answered" },
+  { value: "resolved", label: "Resolved" },
   { value: "closed", label: "Closed" },
 ] as const;
 
