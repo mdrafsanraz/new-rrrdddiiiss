@@ -39,13 +39,13 @@ export function ReleasesFilter({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="border border-border bg-card">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           apply();
         }}
-        className="flex flex-col gap-3 border border-border bg-card p-4 sm:flex-row sm:items-end"
+        className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5"
       >
         <div className="flex-1">
           <Field
@@ -53,7 +53,7 @@ export function ReleasesFilter({
             label="Search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Title, artist, UPC, ISRC, catalog #"
+            placeholder="Search title, artist, UPC, ISRC, or catalog number"
           />
         </div>
         <Button type="submit" className="h-11 px-5">
@@ -62,7 +62,7 @@ export function ReleasesFilter({
         </Button>
       </form>
 
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-2">
         {FILTERS.map((f) => {
           const active = status === f.value;
           return (
@@ -75,8 +75,8 @@ export function ReleasesFilter({
               }}
               className={
                 active
-                  ? "shrink-0 cursor-pointer bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors duration-200 ease-[var(--ease-rdistro)]"
-                  : "shrink-0 cursor-pointer border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 ease-[var(--ease-rdistro)] hover:border-primary/40 hover:text-foreground"
+                  ? "shrink-0 cursor-pointer bg-foreground px-3 py-2 text-xs font-semibold text-background transition-colors duration-200 ease-[var(--ease-rdistro)]"
+                  : "shrink-0 cursor-pointer border border-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors duration-200 ease-[var(--ease-rdistro)] hover:border-border hover:bg-background hover:text-foreground"
               }
             >
               {f.label}

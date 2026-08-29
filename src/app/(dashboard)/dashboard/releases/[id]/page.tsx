@@ -54,7 +54,6 @@ const releaseInclude = {
     include: { contributors: true },
   },
   reviewIssues: { orderBy: { createdAt: "desc" as const } },
-  activities: { orderBy: { createdAt: "desc" as const }, take: 40 },
   documents: { orderBy: { createdAt: "desc" as const }, take: 20 },
 };
 
@@ -85,7 +84,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
       release = {
         ...release,
         reviewIssues: [],
-        activities: [],
         documents: [],
       };
     }
@@ -105,12 +103,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
     filename: d.filename,
     kind: d.kind,
     url: d.url,
-  }));
-  const activities = (release.activities ?? []).map((a) => ({
-    id: a.id,
-    title: a.title,
-    description: a.description,
-    createdAt: a.createdAt.toISOString(),
   }));
   const showSentBackNotice =
     normalizeReleaseStatus(release.status) === "ready_to_submit" &&
@@ -216,7 +208,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
       : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 pb-8">
       <Link
         href="/dashboard/releases"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -225,24 +217,20 @@ export default async function ReleaseDetailPage({ params }: Props) {
         Releases
       </Link>
 
-      {/* HEADER */}
-      <div className="flex flex-wrap items-start gap-5 border-b border-border pb-6">
-        <div className="size-20 shrink-0 overflow-hidden border border-border bg-muted">
+      <header className="grid border border-border bg-card md:grid-cols-[15rem_minmax(0,1fr)]">
+        <div className="aspect-square overflow-hidden border-b border-border bg-muted md:border-r md:border-b-0">
           {displayArtworkUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={displayArtworkUrl} alt="" className="size-full object-cover" />
           ) : (
             <div className="flex size-full items-center justify-center text-muted-foreground">
-              <Disc size={22} weight="regular" aria-hidden />
+              <Disc size={40} weight="regular" aria-hidden />
             </div>
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-col p-5 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">
-              {displayTitle}
-            </h1>
             <StatusBadge status={release.status} />
             {live?.reviewStatus ? (
               <Badge tone={reviewStatusTone(live.reviewStatus)}>
@@ -250,17 +238,39 @@ export default async function ReleaseDetailPage({ params }: Props) {
               </Badge>
             ) : null}
           </div>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {displayArtist ?? "—"}
-            {displayUpc ? ` · UPC ${displayUpc}` : ""}
-            {displayContentType ? ` · ${displayContentType}` : ""}
-            {displayReleaseDate ? ` · ${displayReleaseDate.toLocaleDateString()}` : ""}
+          <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
+            {displayTitle}
+          </h1>
+          <p className="mt-2 text-base font-medium text-muted-foreground sm:text-lg">
+            {displayArtist ?? "Artist unavailable"}
           </p>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+
+          <dl className="mt-6 grid grid-cols-2 border border-border sm:grid-cols-4">
+            {[
+              ["Type", displayContentType],
+              ["Release date", displayReleaseDate?.toLocaleDateString()],
+              ["Tracks", String(live?.tracks.length ?? tracks.length)],
+              ["UPC", displayUpc],
+            ].map(([label, value], index) => (
+              <div
+                key={label}
+                className={cn(
+                  "min-w-0 p-3.5",
+                  index < 3 && "border-r border-border",
+                  index < 2 && "max-sm:border-b"
+                )}
+              >
+                <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
+                <dd className="mt-1 truncate text-sm font-semibold">{value || "-"}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <p className="mt-5 max-w-2xl text-sm leading-6 text-muted-foreground">
             {getUserFacingStatusDescription(release.status)}
           </p>
 
-          <div className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-6">
             {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
             {canResubmit ? <ResubmitReleaseButton releaseId={release.id} /> : null}
             {!finalReject ? (
@@ -286,7 +296,29 @@ export default async function ReleaseDetailPage({ params }: Props) {
             ) : null}
           </div>
         </div>
-      </div>
+      </header>
+
+      <section aria-label="Release record" className="grid border border-border bg-card sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ["Catalog number", live?.catalogNumber ?? release.catalogNumber],
+          ["Distribution ID", release.labelgridId],
+          ["Created", release.createdAt.toLocaleDateString()],
+          ["Last updated", release.updatedAt.toLocaleString()],
+        ].map(([label, value], index) => (
+          <dl
+            key={label}
+            className={cn(
+              "min-w-0 p-4",
+              index < 3 && "lg:border-r lg:border-border",
+              index % 2 === 0 && "max-lg:border-r max-lg:border-border",
+              index < 2 && "max-lg:border-b max-lg:border-border"
+            )}
+          >
+            <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
+            <dd className="mt-1 truncate text-sm font-semibold">{value || "-"}</dd>
+          </dl>
+        ))}
+      </section>
 
       {showSentBackNotice ? (
         <Callout tone="info" icon={<ArrowUUpLeft size={18} weight="bold" aria-hidden />} title="Sent back to draft">
@@ -378,7 +410,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
           <EmptyState
             icon={<Disc size={22} weight="regular" aria-hidden />}
             title="Not synced yet"
-            description="Continue the release builder to sync this release — catalog details will appear here once it has."
+            description="Continue the release builder to sync this release. Catalog details will appear here once it has."
           />
         </div>
       ) : liveError ? (
@@ -394,7 +426,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
           delivery={delivery}
           deliveryError={deliveryError}
           documents={documents}
-          activities={activities}
         />
       ) : null}
 

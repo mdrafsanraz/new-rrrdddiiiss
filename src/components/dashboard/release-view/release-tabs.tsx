@@ -12,6 +12,7 @@ import {
 } from "@/lib/labelgrid/state-labels";
 import { Badge } from "./badge";
 import { Card, CardBody, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type DeliveryOutletRow = {
   outlet: string;
@@ -38,20 +39,12 @@ export type ReleaseDocument = {
   url: string;
 };
 
-export type ReleaseActivityRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  createdAt: string;
-};
-
 const TABS = [
   "Overview",
   "Tracks",
   "Credits & Rights",
   "Distribution",
   "Delivery",
-  "Activity",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -87,19 +80,19 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </dt>
-      <dd className="mt-0.5 truncate text-sm font-medium">{value ?? "—"}</dd>
+      <dd className="mt-1 break-words text-sm font-semibold">{value ?? "-"}</dd>
     </div>
   );
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString();
 }
 
 function formatDuration(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return "—";
+  if (!ms || ms <= 0) return "-";
   const totalSec = Math.round(ms / 1000);
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
@@ -110,7 +103,13 @@ function explicitLabel(value: string | null): string {
   if (value === "on") return "Explicit";
   if (value === "edited") return "Clean / Edited";
   if (value === "off") return "Not Explicit";
-  return "—";
+  return "-";
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes || bytes <= 0) return "-";
+  const mb = bytes / 1024 / 1024;
+  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
 }
 
 export function ReleaseTabs({
@@ -121,7 +120,6 @@ export function ReleaseTabs({
   delivery,
   deliveryError,
   documents,
-  activities,
 }: {
   live: LiveRelease;
   outletNames: Record<string, string>;
@@ -130,16 +128,16 @@ export function ReleaseTabs({
   delivery: DeliveryStatusData | null;
   deliveryError: string | null;
   documents: ReleaseDocument[];
-  activities: ReleaseActivityRow[];
 }) {
   const [tab, setTab] = useState<Tab>("Overview");
   const reduceMotion = useReducedMotion();
 
   return (
-    <div>
+    <div className="border border-border bg-card">
       <div
         role="tablist"
-        className="flex gap-1 overflow-x-auto border-b border-border"
+        aria-label="Release details"
+        className="flex overflow-x-auto border-b border-border bg-muted/25 p-2"
       >
         {TABS.map((t) => (
           <button
@@ -149,10 +147,10 @@ export function ReleaseTabs({
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={
-              "shrink-0 cursor-pointer border-b-2 px-3 py-2.5 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)] " +
+              "shrink-0 cursor-pointer border px-3 py-2 text-sm font-medium transition-colors duration-200 ease-[var(--ease-rdistro)] " +
               (tab === t
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground")
+                ? "border-border bg-background text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground")
             }
           >
             {t}
@@ -160,7 +158,7 @@ export function ReleaseTabs({
         ))}
       </div>
 
-      <div className="mt-5">
+      <div className="p-4 sm:p-5">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={tab}
@@ -193,7 +191,6 @@ export function ReleaseTabs({
                 outletNames={outletNames}
               />
             ) : null}
-            {tab === "Activity" ? <ActivityTab activities={activities} /> : null}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -205,13 +202,60 @@ export function ReleaseTabs({
 // Overview
 
 function OverviewTab({ live }: { live: LiveRelease }) {
+  const creditCount = live.tracks.reduce(
+    (sum, track) =>
+      sum +
+      track.contributors.length +
+      track.writers.length +
+      track.publishers.length,
+    0
+  );
+  const allStores =
+    live.dspConfigs.length === 0 ||
+    live.dspConfigs.some(
+      (config) => config.outletId === "all_dsps" && config.enabled
+    );
+
   return (
     <div className="space-y-4">
-      <Section title="Release">
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 border border-border bg-card lg:grid-cols-4">
+        {[
+          ["Tracks", live.tracks.length],
+          ["Artists", live.artists.length || (live.artist ? 1 : 0)],
+          ["Credits", creditCount],
+          [
+            "Stores",
+            allStores
+              ? "All"
+              : live.dspConfigs.filter((config) => config.enabled).length,
+          ],
+        ].map(([label, value], index) => (
+          <div
+            key={label}
+            className={cn("p-4", index < 3 && "border-r border-border")}
+          >
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums">
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <Section title="Release metadata" subtitle="Catalog and presentation data">
+        <dl className="grid grid-cols-2 gap-x-5 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+          <Field label="Title" value={live.title} />
           <Field
             label="Artists"
-            value={live.artists.length ? live.artists.map((a) => a.name).join(", ") : live.artist}
+            value={
+              live.artists.length
+                ? live.artists
+                    .map((artist) =>
+                      `${artist.name}${artist.role ? ` (${artist.role})` : ""}`
+                    )
+                    .join(", ")
+                : live.artist
+            }
           />
           <Field label="Version" value={live.mixVersion} />
           <Field label="UPC" value={live.barcodeNumber} />
@@ -229,6 +273,10 @@ function OverviewTab({ live }: { live: LiveRelease }) {
           />
           <Field label="Localization" value={live.preferredLocalization} />
           <Field label="Catalog number" value={live.catalogNumber} />
+          <Field label="Explicit content" value={explicitLabel(live.explicit)} />
+          <Field label="Distribution ID" value={live.id} />
+          <Field label="Genre ID" value={live.primaryGenreId} />
+          <Field label="Review status" value={live.reviewStatus} />
         </dl>
       </Section>
 
@@ -262,30 +310,46 @@ function TracksTab({
     );
   }
   return (
-    <div className="divide-y divide-border border border-border bg-card">
-      {tracks.map((t) => (
-        <div key={t.id} className="px-4 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                <span className="mr-3 tabular-nums text-muted-foreground">
-                  {String(t.trackNumber ?? 0).padStart(2, "0")}
-                </span>
-                {t.title}
-                {t.mixVersion ? ` (${t.mixVersion})` : ""}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t.artist ?? "—"}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>ISRC {t.isrc ?? "pending"}</span>
-                <span>{explicitLabel(t.explicit)}</span>
-                <span>{formatDuration(trackDurationsByLgId[t.id])}</span>
+    <div className="space-y-3">
+      {tracks.map((track) => (
+        <article key={track.id} className="border border-border bg-card">
+          <header className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center bg-foreground text-xs font-semibold text-background tabular-nums">
+                {String(track.trackNumber ?? 0).padStart(2, "0")}
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-semibold">
+                  {track.title}
+                  {track.mixVersion ? ` (${track.mixVersion})` : ""}
+                </h3>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {track.artist ?? "Artist unavailable"}
+                </p>
               </div>
             </div>
-            <AudioCell audio={t.audio} />
-          </div>
-        </div>
+            <AudioCell audio={track.audio} />
+          </header>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-5 p-4 sm:grid-cols-4 lg:grid-cols-6">
+            <Field label="ISRC" value={track.isrc ?? "Pending"} />
+            <Field label="ISWC" value={track.iswc ?? "Pending"} />
+            <Field
+              label="Duration"
+              value={formatDuration(trackDurationsByLgId[track.id])}
+            />
+            <Field label="Content" value={explicitLabel(track.explicit)} />
+            <Field label="Contributors" value={track.contributors.length} />
+            <Field label="Writers" value={track.writers.length} />
+            <Field label="Publishers" value={track.publishers.length} />
+            <Field label="Track ID" value={track.id} />
+            <Field label="Audio file" value={track.audio?.filename} />
+            <Field
+              label="File size"
+              value={formatFileSize(track.audio?.filesize ?? null)}
+            />
+            <Field label="Audio status" value={track.audio?.status} />
+          </dl>
+        </article>
       ))}
     </div>
   );
@@ -345,7 +409,7 @@ function CreditsTab({
       {live.tracks.map((t) => (
         <Section
           key={t.id}
-          title={`${String(t.trackNumber ?? 0).padStart(2, "0")} · ${t.title}`}
+          title={`${String(t.trackNumber ?? 0).padStart(2, "0")} - ${t.title}`}
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
@@ -378,7 +442,7 @@ function CreditsTab({
                       <span className="font-medium">{w.name}</span>{" "}
                       <span className="text-xs text-muted-foreground">
                         {w.roles.join(", ")}
-                        {w.share != null ? ` · ${w.share}%` : ""}
+                        {w.share != null ? `, ${w.share}%` : ""}
                       </span>
                     </li>
                   ))}
@@ -533,7 +597,7 @@ function DeliveryTab({
           <p className="text-sm text-destructive">{deliveryError}</p>
         ) : !delivery ? (
           <p className="text-sm text-muted-foreground">
-            No delivery data yet — available once this release is submitted
+            No delivery data yet. It becomes available once this release is submitted
             for distribution.
           </p>
         ) : (
@@ -580,13 +644,13 @@ function DeliveryTab({
                         <td className="py-2.5 pr-3 text-muted-foreground">
                           {o.updated_at
                             ? new Date(o.updated_at).toLocaleString()
-                            : "—"}
+                            : "-"}
                         </td>
                         <td className="py-2.5 text-muted-foreground">
                           {o.error_code ??
                             (o.attention_owner === "customer"
                               ? "Action needed on your end"
-                              : "—")}
+                              : "-")}
                         </td>
                       </tr>
                     ))}
@@ -598,47 +662,5 @@ function DeliveryTab({
         )}
       </Section>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Activity
-
-function ActivityTab({ activities }: { activities: ReleaseActivityRow[] }) {
-  if (activities.length === 0) {
-    return (
-      <Section>
-        <p className="text-sm text-muted-foreground">
-          No activity recorded yet.
-        </p>
-      </Section>
-    );
-  }
-  return (
-    <Section>
-      <ol className="space-y-0">
-        {activities.map((a, i) => (
-          <li key={a.id} className="relative flex gap-4 pb-5 last:pb-0">
-            <span className="mt-1.5 flex flex-col items-center">
-              <span className="size-2 shrink-0 rounded-full bg-primary" />
-              {i < activities.length - 1 ? (
-                <span className="mt-1 w-px flex-1 bg-border" />
-              ) : null}
-            </span>
-            <div className="min-w-0 pb-1">
-              <p className="text-sm font-medium">{a.title}</p>
-              {a.description ? (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {a.description}
-                </p>
-              ) : null}
-              <p className="mt-1 text-xs text-muted-foreground">
-                {new Date(a.createdAt).toLocaleString()}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </Section>
   );
 }

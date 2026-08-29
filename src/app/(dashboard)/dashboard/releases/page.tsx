@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { Disc, PencilSimple } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowRight,
+  Disc,
+  Eye,
+  PencilSimple,
+  Plus,
+} from "@phosphor-icons/react/dist/ssr";
 import { requireUser } from "@/lib/auth/session";
 import { getUserUsage } from "@/lib/entitlements/server";
 import { prisma } from "@/lib/db";
@@ -11,6 +17,7 @@ import { ReleasesFilter } from "@/components/dashboard/releases-filter";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
+  getUserFacingReleaseStatus,
   statusesForUserFacingFilter,
   type ReleaseStatusValue,
 } from "@/lib/releases/status";
@@ -130,40 +137,100 @@ export default async function ReleasesPage({ searchParams }: Props) {
     reconcileStatuses(releases),
   ]);
 
+  const statusCounts = releases.reduce(
+    (counts, release) => {
+      const status = statusByReleaseId.get(release.id) ?? release.status;
+      const key = getUserFacingReleaseStatus(status);
+      if (key === "draft") counts.draft += 1;
+      if (key === "in_review" || key === "approved" || key === "delivering") {
+        counts.inProgress += 1;
+      }
+      if (key === "live") counts.live += 1;
+      return counts;
+    },
+    { draft: 0, inProgress: 0, live: 0 }
+  );
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Catalog
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            Releases
+    <div className="space-y-6 pb-8">
+      <header className="grid gap-6 border-b border-border pb-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="max-w-2xl">
+          <h1 className="text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+            Your release catalog
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Track drafts, review, and live deliveries in one place.
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Build new releases, follow every review, and keep delivery status in view.
           </p>
         </div>
         <Link
           href="/dashboard/releases/new"
-          className={cn(buttonVariants(), "h-10 px-5")}
+          className={cn(buttonVariants({ size: "lg" }), "h-11 px-5")}
         >
+          <Plus size={16} weight="bold" aria-hidden />
           New release
         </Link>
-      </div>
+      </header>
 
-      <section className="border border-border bg-card p-5">
-        <UsageMeter
-          label="Submitted this month"
-          used={usage.releasesThisMonth}
-          limit={usage.releasesLimit}
-          hint="Counted on first submit to review. Drafts and resubmits do not add to the quota."
-        />
+      <section className="grid border border-border bg-card lg:grid-cols-[1.25fr_1fr]">
+        <div className="grid grid-cols-2 border-b border-border lg:grid-cols-4 lg:border-r lg:border-b-0">
+          <div className="col-span-2 flex min-h-36 flex-col justify-between border-b border-border p-5 sm:col-span-1 sm:border-r sm:border-b-0">
+            <span className="text-sm font-medium text-muted-foreground">
+              {q || statusFilter ? "Matching releases" : "Total releases"}
+            </span>
+            <strong className="text-5xl font-semibold tracking-[-0.05em] tabular-nums">
+              {releases.length}
+            </strong>
+          </div>
+          {[
+            ["Drafts", statusCounts.draft],
+            ["In progress", statusCounts.inProgress],
+            ["Live", statusCounts.live],
+          ].map(([label, value], index) => (
+            <div
+              key={label}
+              className={cn(
+                "flex min-h-28 flex-col justify-between p-4 sm:min-h-36 sm:p-5",
+                index < 2 && "border-r border-border"
+              )}
+            >
+              <span className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</span>
+              <strong className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
+                {value}
+              </strong>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center p-5 sm:p-6">
+          <div className="w-full">
+            <UsageMeter
+              label="Monthly submissions"
+              used={usage.releasesThisMonth}
+              limit={usage.releasesLimit}
+              hint="Drafts and resubmissions do not use your monthly allowance."
+            />
+          </div>
+        </div>
       </section>
 
       <ReleasesFilter initialQ={q ?? ""} initialStatus={statusFilter} />
 
-      <section className="border border-border bg-card">
+      <section aria-labelledby="release-list-heading" className="border border-border bg-card">
+        <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
+          <div>
+            <h2 id="release-list-heading" className="font-semibold">Catalog</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {releases.length} {releases.length === 1 ? "release" : "releases"} shown
+            </p>
+          </div>
+          {(q || statusFilter) && (
+            <Link
+              href="/dashboard/releases"
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Clear filters
+            </Link>
+          )}
+        </div>
         {releases.length === 0 ? (
           <EmptyState
             icon={<Disc size={22} weight="regular" aria-hidden />}
@@ -180,13 +247,13 @@ export default async function ReleasesPage({ searchParams }: Props) {
           />
         ) : (
           <>
-            <div className="hidden items-center gap-4 border-b border-border px-5 py-2.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase sm:flex">
-              <span className="w-14 shrink-0" aria-hidden />
-              <span className="min-w-0 flex-1">Release</span>
-              <span className="w-28 shrink-0">Release date</span>
-              <span className="w-16 shrink-0 text-right">Tracks</span>
-              <span className="w-24 shrink-0 text-right">Status</span>
-              <span className="w-8 shrink-0" aria-hidden />
+            <div className="hidden grid-cols-[4rem_minmax(0,1fr)_7rem_5rem_7.5rem_6rem] items-center gap-4 border-b border-border bg-muted/35 px-5 py-2.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase md:grid">
+              <span aria-hidden />
+              <span>Release</span>
+              <span>Release date</span>
+              <span>Tracks</span>
+              <span>Status</span>
+              <span className="text-right">Action</span>
             </div>
             <ul className="divide-y divide-border">
               {releases.map((r) => {
@@ -203,21 +270,20 @@ export default async function ReleasesPage({ searchParams }: Props) {
                   : r.releaseDate
                     ? r.releaseDate.toLocaleDateString()
                     : null;
+                const isDraft = getUserFacingReleaseStatus(status) === "draft";
+                const actionHref = isDraft
+                  ? `/dashboard/releases/${r.id}/edit`
+                  : `/dashboard/releases/${r.id}`;
                 return (
-                  <li key={r.id} className="group relative">
-                    <Link
-                      href={`/dashboard/releases/${r.id}`}
-                      className="absolute inset-0 z-0"
-                      aria-label={`Open ${title}`}
-                    />
-                    <div className="pointer-events-none flex items-center gap-4 px-5 py-4 transition-colors duration-200 ease-[var(--ease-rdistro)] group-hover:bg-muted/50">
-                      <div className="size-14 shrink-0 overflow-hidden border border-border bg-muted">
+                  <li key={r.id} className="group p-4 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/35 sm:p-5 md:grid md:grid-cols-[4rem_minmax(0,1fr)_7rem_5rem_7.5rem_6rem] md:items-center md:gap-4">
+                    <div className="flex min-w-0 gap-4 md:contents">
+                      <div className="size-16 shrink-0 overflow-hidden border border-border bg-muted md:size-16">
                         {artworkUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={artworkUrl}
                             alt=""
-                            className="size-full object-cover transition-transform duration-300 ease-[var(--ease-rdistro)] group-hover:scale-[1.06]"
+                            className="size-full object-cover transition-transform duration-300 ease-[var(--ease-rdistro)] group-hover:scale-[1.04]"
                           />
                         ) : (
                           <div className="flex size-full items-center justify-center text-muted-foreground">
@@ -225,47 +291,58 @@ export default async function ReleasesPage({ searchParams }: Props) {
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate font-semibold transition-colors group-hover:text-primary">
+                      <div className="min-w-0 flex-1 md:block">
+                        <div className="flex min-w-0 items-start justify-between gap-3 md:block">
+                          <Link
+                            href={`/dashboard/releases/${r.id}`}
+                            className="truncate font-semibold transition-colors group-hover:text-primary hover:underline"
+                          >
                             {title}
-                          </p>
-                          <span className="sm:hidden">
+                          </Link>
+                          <span className="shrink-0 md:hidden">
                             <StatusBadge status={status} />
                           </span>
                         </div>
                         <p className="mt-1 truncate text-sm text-muted-foreground">
                           {artistName}
-                          {r.upc ? ` · UPC ${r.upc}` : ""}
-                          <span className="sm:hidden">
-                            {dateText ? ` · ${dateText}` : ""}
-                            {` · ${trackCount} track${trackCount === 1 ? "" : "s"}`}
-                          </span>
+                          {r.upc ? `, UPC ${r.upc}` : ""}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Updated {r.updatedAt.toLocaleString()}
+                        <p className="mt-2 text-xs text-muted-foreground md:hidden">
+                          {dateText ?? "No release date"}, {trackCount} {trackCount === 1 ? "track" : "tracks"}
                         </p>
                       </div>
-                      <span className="hidden w-28 shrink-0 text-sm text-muted-foreground sm:block">
-                        {dateText ?? "—"}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-4 border-t border-border pt-3 md:contents">
+                      <span className="hidden text-sm text-muted-foreground md:block">
+                        {dateText ?? "-"}
                       </span>
-                      <span className="hidden w-16 shrink-0 text-right text-sm text-muted-foreground sm:block">
+                      <span className="hidden text-sm text-muted-foreground tabular-nums md:block">
                         {trackCount}
                       </span>
-                      <span className="hidden w-24 shrink-0 text-right sm:block">
-                        <StatusBadge status={r.status} />
+                      <span className="hidden md:block">
+                        <StatusBadge status={status} />
                       </span>
-                      <span className="relative z-10 hidden w-8 shrink-0 sm:block">
-                        <Tooltip content="Edit release">
-                          <Link
-                            href={`/dashboard/releases/${r.id}/edit`}
-                            aria-label={`Edit ${title}`}
-                            className="pointer-events-auto flex size-8 items-center justify-center border border-border bg-background text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 hover:border-primary/40 hover:text-primary"
-                          >
+                      <p className="truncate text-xs text-muted-foreground md:hidden">
+                        Updated {r.updatedAt.toLocaleDateString()}
+                      </p>
+                      <Tooltip content={`${isDraft ? "Edit" : "View"} ${title}`}>
+                        <Link
+                          href={actionHref}
+                          aria-label={`${isDraft ? "Edit" : "View"} ${title}`}
+                          className={cn(
+                            buttonVariants({ variant: isDraft ? "default" : "outline", size: "sm" }),
+                            "min-w-20 justify-between px-3"
+                          )}
+                        >
+                          {isDraft ? (
                             <PencilSimple size={14} weight="bold" aria-hidden />
-                          </Link>
-                        </Tooltip>
-                      </span>
+                          ) : (
+                            <Eye size={14} weight="bold" aria-hidden />
+                          )}
+                          {isDraft ? "Edit" : "View"}
+                          <ArrowRight size={13} weight="bold" aria-hidden />
+                        </Link>
+                      </Tooltip>
                     </div>
                   </li>
                 );
