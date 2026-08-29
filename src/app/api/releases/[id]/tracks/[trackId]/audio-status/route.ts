@@ -54,6 +54,29 @@ export async function POST(_request: Request, { params }: Params) {
 
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
 
+  // Self-heal a track orphaned by a since-fixed bug in this route: an
+  // upload attempt that resolved while audioProcessing got cleared without
+  // ever capturing a URL, so nothing was left to poll it again. If
+  // LabelGrid actually has the file, one more direct check can still
+  // recover it instead of leaving it stuck "not found" forever.
+  if (
+    isLabelGridLive() &&
+    track.labelgridId &&
+    !track.audioUrl &&
+    !tMeta.audioProcessing &&
+    !tMeta.audioProcessingError &&
+    tMeta.audioUploadAttemptId
+  ) {
+    const recovered = await fetchStereoUrl(track.labelgridId);
+    if (recovered) {
+      await prisma.track.update({
+        where: { id: track.id },
+        data: { audioUrl: recovered },
+      });
+      return NextResponse.json({ status: "ready", error: null, audioUrl: recovered });
+    }
+  }
+
   if (
     !isLabelGridLive() ||
     !track.labelgridId ||
@@ -81,29 +104,42 @@ export async function POST(_request: Request, { params }: Params) {
       return NextResponse.json({ status: "processing", error: null });
     }
 
+    if (attempt.status === "failed") {
+      tMeta.audioProcessing = false;
+      tMeta.audioProcessingError = attempt.error?.message ?? "Audio processing failed";
+      await prisma.track.update({
+        where: { id: track.id },
+        data: { metadataJson: JSON.stringify(tMeta) },
+      });
+      return NextResponse.json({
+        status: "failed",
+        error: tMeta.audioProcessingError,
+        audioUrl: track.audioUrl ?? null,
+      });
+    }
+
+    // The upload attempt itself resolved (no longer queued/processing), but
+    // LabelGrid's files/stereo GET can lag a beat behind that — don't
+    // declare victory until it actually resolves a URL. Reporting "ready"
+    // here without one would persist audioProcessing=false and permanently
+    // stop polling (the early-return above then reports "none" forever,
+    // since nothing else ever retries), orphaning the track's audio.
+    const audioUrl = await fetchStereoUrl(track.labelgridId);
+    if (!audioUrl) {
+      return NextResponse.json({ status: "processing", error: null });
+    }
+
     tMeta.audioProcessing = false;
-    tMeta.audioProcessingError =
-      attempt.status === "failed" ? attempt.error?.message ?? "Audio processing failed" : null;
-
-    // Completed/superseded but never resolved within uploadTrackStereoAudio's
-    // own poll budget — this is the only place that ever finds out, so it
-    // must persist the file URL itself or the track's audio silently
-    // disappears on the next page load (audioUrl stays null forever).
-    const audioUrl =
-      attempt.status === "failed" ? null : await fetchStereoUrl(track.labelgridId);
-
+    tMeta.audioProcessingError = null;
     await prisma.track.update({
       where: { id: track.id },
-      data: {
-        metadataJson: JSON.stringify(tMeta),
-        ...(audioUrl ? { audioUrl } : {}),
-      },
+      data: { metadataJson: JSON.stringify(tMeta), audioUrl },
     });
 
     return NextResponse.json({
-      status: attempt.status === "failed" ? "failed" : "ready",
-      error: tMeta.audioProcessingError,
-      audioUrl: audioUrl ?? track.audioUrl ?? null,
+      status: "ready",
+      error: null,
+      audioUrl,
     });
   } catch (error) {
     return NextResponse.json(
