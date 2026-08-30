@@ -15,12 +15,16 @@ export function WalletWithdraw({
   available,
   currency,
   threshold,
+  fixedFee,
+  percentageFee,
   hasPayoutMethod,
   payoutDestination,
 }: {
   available: string;
   currency: string;
   threshold: number;
+  fixedFee: string;
+  percentageFee: string;
   hasPayoutMethod: boolean;
   payoutDestination: string;
 }) {
@@ -33,6 +37,16 @@ export function WalletWithdraw({
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const canWithdraw = hasPayoutMethod && Number(available) >= threshold;
+  const requestedAmount = Number(amount);
+  const calculatedFee = Number.isFinite(requestedAmount) && requestedAmount > 0
+    ? Number(fixedFee) + requestedAmount * (Number(percentageFee) / 100)
+    : 0;
+  const netPayable = Math.max(0, requestedAmount - calculatedFee);
+  const amountIsValid = Number.isFinite(requestedAmount) && requestedAmount > 0;
+  const money = (value: number) => new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(value);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -184,6 +198,23 @@ export function WalletWithdraw({
                       />
                     </div>
                   </label>
+                  <dl className="mt-4 overflow-hidden rounded-xl border border-border bg-muted/25">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 text-xs">
+                      <dt className="text-muted-foreground">Withdrawal amount</dt>
+                      <dd className="font-semibold tabular-nums">{money(Number.isFinite(requestedAmount) ? requestedAmount : 0)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 text-xs">
+                      <dt className="text-muted-foreground">
+                        Fee
+                        {Number(percentageFee) > 0 ? ` (${Number(percentageFee)}%)` : ""}
+                      </dt>
+                      <dd className="font-semibold tabular-nums text-red-600">−{money(calculatedFee)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-border bg-background px-4 py-3">
+                      <dt className="text-sm font-semibold">Net payable</dt>
+                      <dd className="text-lg font-semibold tabular-nums text-emerald-700">{money(netPayable)}</dd>
+                    </div>
+                  </dl>
                   <div className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4">
                     <ShieldCheck
                       className="mt-0.5 shrink-0 text-primary"
@@ -203,13 +234,13 @@ export function WalletWithdraw({
                     type="submit"
                     className="mt-5 h-11 w-full"
                     loading={busy}
+                    disabled={!amountIsValid || netPayable <= 0}
                   >
                     {busy ? "Reserving funds…" : "Request withdrawal"}
                   </Button>
                   <p className="mt-3 text-center text-[10px] leading-4 text-muted-foreground">
-                    No fee is shown because RDISTRO has not configured a wallet
-                    fee. This request remains pending until finance processes
-                    it.
+                    The fee is calculated from the payout method configured by
+                    RDISTRO. This request remains pending until finance processes it.
                   </p>
                 </form>
               )}

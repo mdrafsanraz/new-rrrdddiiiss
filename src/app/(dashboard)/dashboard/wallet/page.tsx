@@ -82,11 +82,29 @@ export default async function WalletPage({
     prisma.walletTransaction.count({ where }),
     getPayoutPolicy(),
   ]);
+  const withdrawalIds = transactions
+    .filter((transaction) => transaction.type === "withdrawal")
+    .map((transaction) => transaction.sourceId);
+  const paidAmountByWithdrawalId = withdrawalIds.length
+    ? new Map(
+        (
+          await prisma.withdrawal.findMany({
+            where: { id: { in: withdrawalIds }, paidAmount: { not: null } },
+            select: { id: true, paidAmount: true },
+          })
+        ).map((withdrawal) => [withdrawal.id, withdrawal.paidAmount!.toString()]),
+      )
+    : new Map<string, string>();
   const items: WalletFeedItem[] = transactions.map((transaction) => ({
     id: transaction.id,
     type: transaction.type,
     direction: transaction.direction,
-    amount: transaction.amount.toString(),
+    // A settled withdrawal shows what the user actually received (net of
+    // tax/fee), not the gross amount reserved from their balance at
+    // request time — the ledger itself still tracks the gross amount.
+    amount:
+      paidAmountByWithdrawalId.get(transaction.sourceId) ??
+      transaction.amount.toString(),
     currency: transaction.currency,
     title: transaction.title,
     description: transaction.description,
@@ -96,6 +114,9 @@ export default async function WalletPage({
   }));
   const payoutDestination = describePayoutDestination(user);
   const savedMethodEnabled = Boolean(user.payoutMethod && user.payoutMethod in payoutPolicy.methods && payoutPolicy.methods[user.payoutMethod as keyof typeof payoutPolicy.methods].enabled);
+  const selectedPayoutPolicy = user.payoutMethod && user.payoutMethod in payoutPolicy.methods
+    ? payoutPolicy.methods[user.payoutMethod as keyof typeof payoutPolicy.methods]
+    : null;
   const href = (changes: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
     const merged = {
@@ -147,8 +168,10 @@ export default async function WalletPage({
               </p>
               <WalletWithdraw
                 available={balances.available.toString()}
-                currency="USD"
-                threshold={Number(user.payoutMethod && user.payoutMethod in payoutPolicy.methods ? payoutPolicy.methods[user.payoutMethod as keyof typeof payoutPolicy.methods].minimum : 0)}
+                currency={payoutPolicy.currency}
+                threshold={Number(selectedPayoutPolicy?.minimum ?? 0)}
+                fixedFee={selectedPayoutPolicy?.fixedFee ?? "0"}
+                percentageFee={selectedPayoutPolicy?.percentageFee ?? "0"}
                 hasPayoutMethod={savedMethodEnabled}
                 payoutDestination={payoutDestination}
               />

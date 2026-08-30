@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma, type WalletTransactionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { describePayoutDestination, payoutMethodLabel } from "@/lib/payout-methods";
-import { getPayoutPolicy, PAYOUT_METHODS, type PayoutMethod } from "@/lib/payout-settings";
+import { getPayoutPolicy, payoutFee, PAYOUT_METHODS, type PayoutMethod } from "@/lib/payout-settings";
 
 const ZERO = new Prisma.Decimal(0);
 const RESERVED_DEBIT_STATUSES: WalletTransactionStatus[] = [
@@ -90,6 +90,10 @@ export async function requestWithdrawal(input: {
         throw new Error(
           `The minimum ${payoutMethodLabel(user.payoutMethod)} withdrawal is ${policy.currency} ${methodPolicy.minimum}.`,
         );
+      const fee = payoutFee(input.amount, methodPolicy);
+      const netPayable = input.amount.minus(fee);
+      if (netPayable.lte(0))
+        throw new Error("Withdrawal amount must be greater than the configured payout fee.");
       const groups = await tx.walletTransaction.groupBy({
         by: ["direction", "status"],
         where: { userId: input.userId },
