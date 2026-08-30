@@ -28,6 +28,7 @@ import {
   type LiveReleaseSummary,
 } from "@/lib/labelgrid/live-release";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
+import { DashboardProviderArtwork } from "@/components/dashboard/provider-media";
 
 /**
  * Best-effort live overlay for the list view — LabelGrid is the source of
@@ -278,7 +279,12 @@ export default async function ReleasesPage({ searchParams }: Props) {
                   <li key={r.id} className="group p-4 transition-colors duration-200 ease-[var(--ease-rdistro)] hover:bg-muted/35 sm:p-5 md:grid md:grid-cols-[4rem_minmax(0,1fr)_7rem_5rem_7.5rem_6rem] md:items-center md:gap-4">
                     <div className="flex min-w-0 gap-4 md:contents">
                       <div className="size-16 shrink-0 overflow-hidden border border-border bg-muted md:size-16">
-                        {artworkUrl ? (
+                        {live?.coverUrl ? (
+                          <DashboardProviderArtwork
+                            releaseId={r.id}
+                            className="size-full object-cover transition-transform duration-300 ease-[var(--ease-rdistro)] group-hover:scale-[1.04]"
+                          />
+                        ) : artworkUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={artworkUrl}

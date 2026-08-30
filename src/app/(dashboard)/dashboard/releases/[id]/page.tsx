@@ -44,6 +44,7 @@ import {
   ReleaseTabs,
   type DeliveryStatusData,
 } from "@/components/dashboard/release-view/release-tabs";
+import { DashboardProviderArtwork } from "@/components/dashboard/provider-media";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -200,9 +201,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const canDelete = canDeleteLifecycle && !documentRequested && !needsChanges;
 
   const trackDurationsByLgId: Record<number, number | null> = {};
+  const trackIdsByLgId: Record<number, string> = {};
   for (const t of tracks) {
     if (t.labelgridId && /^\d+$/.test(t.labelgridId)) {
       trackDurationsByLgId[Number(t.labelgridId)] = t.durationMs ?? null;
+      trackIdsByLgId[Number(t.labelgridId)] = t.id;
     }
   }
 
@@ -238,7 +241,9 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
       <header className="grid border border-border bg-card md:grid-cols-[15rem_minmax(0,1fr)]">
         <div className="aspect-square overflow-hidden border-b border-border bg-muted md:border-r md:border-b-0">
-          {displayArtworkUrl ? (
+          {live?.coverUrl ? (
+            <DashboardProviderArtwork releaseId={release.id} className="size-full object-cover" />
+          ) : displayArtworkUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={displayArtworkUrl} alt="" className="size-full object-cover" />
           ) : (
@@ -440,10 +445,12 @@ export default async function ReleaseDetailPage({ params }: Props) {
         </Callout>
       ) : live ? (
         <ReleaseTabs
+          releaseId={release.id}
           live={live}
           outletNames={outletNames}
           territoryNames={territoryNames}
           trackDurationsByLgId={trackDurationsByLgId}
+          trackIdsByLgId={trackIdsByLgId}
           delivery={delivery}
           deliveryError={deliveryError}
           documents={documents}

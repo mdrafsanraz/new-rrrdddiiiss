@@ -36,6 +36,7 @@ import { releaseTitleLabel } from "@/lib/releases/display";
 import { statusesForUserFacingFilter } from "@/lib/releases/status";
 import { cn } from "@/lib/utils";
 import { getWalletBalances } from "@/lib/wallet";
+import { DashboardProviderArtwork } from "@/components/dashboard/provider-media";
 
 export const metadata = { title: "Dashboard" };
 
@@ -437,7 +438,9 @@ export default async function DashboardHomePage() {
             {displayReleases.slice(0, 10).map((release) => (
               <Link key={release.id} href={`/dashboard/releases/${release.id}`} className="group min-w-0">
                 <div className="aspect-square overflow-hidden rounded-[18px] bg-muted shadow-[0_10px_28px_oklch(0.3_0.02_250/0.07)]">
-                  {release.artworkUrl ? (
+                  {release.labelgridId && release.artworkUrl ? (
+                    <DashboardProviderArtwork releaseId={release.id} className="size-full object-cover transition-transform duration-700 ease-[var(--ease-rdistro)] group-hover:scale-[1.045]" />
+                  ) : release.artworkUrl ? (
                     <img src={release.artworkUrl} alt="" className="size-full object-cover transition-transform duration-700 ease-[var(--ease-rdistro)] group-hover:scale-[1.045]" />
                   ) : (
                     <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,var(--primary)_16%,transparent),transparent_55%)] text-muted-foreground"><Disc size={30} weight="duotone" /></div>

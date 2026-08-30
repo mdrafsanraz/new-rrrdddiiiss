@@ -13,6 +13,7 @@ import {
 import { Badge } from "./badge";
 import { Card, CardBody, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { DashboardProviderAudio } from "@/components/dashboard/provider-media";
 
 type DeliveryOutletRow = {
   outlet: string;
@@ -113,18 +114,22 @@ function formatFileSize(bytes: number | null): string {
 }
 
 export function ReleaseTabs({
+  releaseId,
   live,
   outletNames,
   territoryNames,
   trackDurationsByLgId,
+  trackIdsByLgId,
   delivery,
   deliveryError,
   documents,
 }: {
+  releaseId: string;
   live: LiveRelease;
   outletNames: Record<string, string>;
   territoryNames: Record<string, string>;
   trackDurationsByLgId: Record<number, number | null>;
+  trackIdsByLgId: Record<number, string>;
   delivery: DeliveryStatusData | null;
   deliveryError: string | null;
   documents: ReleaseDocument[];
@@ -170,8 +175,10 @@ export function ReleaseTabs({
             {tab === "Overview" ? <OverviewTab live={live} /> : null}
             {tab === "Tracks" ? (
               <TracksTab
+                releaseId={releaseId}
                 tracks={live.tracks}
                 trackDurationsByLgId={trackDurationsByLgId}
+                trackIdsByLgId={trackIdsByLgId}
               />
             ) : null}
             {tab === "Credits & Rights" ? (
@@ -296,11 +303,15 @@ function OverviewTab({ live }: { live: LiveRelease }) {
 // Tracks
 
 function TracksTab({
+  releaseId,
   tracks,
   trackDurationsByLgId,
+  trackIdsByLgId,
 }: {
+  releaseId: string;
   tracks: LiveTrack[];
   trackDurationsByLgId: Record<number, number | null>;
+  trackIdsByLgId: Record<number, string>;
 }) {
   if (tracks.length === 0) {
     return (
@@ -328,7 +339,7 @@ function TracksTab({
                 </p>
               </div>
             </div>
-            <AudioCell audio={track.audio} />
+            <AudioCell audio={track.audio} releaseId={releaseId} trackId={trackIdsByLgId[track.id]} />
           </header>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-5 p-4 sm:grid-cols-4 lg:grid-cols-6">
             <Field label="ISRC" value={track.isrc ?? "Pending"} />
@@ -355,7 +366,7 @@ function TracksTab({
   );
 }
 
-function AudioCell({ audio }: { audio: LiveTrack["audio"] }) {
+function AudioCell({ audio, releaseId, trackId }: { audio: LiveTrack["audio"]; releaseId: string; trackId?: string }) {
   if (!audio) {
     return (
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -377,15 +388,8 @@ function AudioCell({ audio }: { audio: LiveTrack["audio"] }) {
       </div>
     );
   }
-  if (audio.url) {
-    return (
-      <audio
-        controls
-        preload="none"
-        src={audio.url}
-        className="h-8 max-w-[240px] shrink-0"
-      />
-    );
+  if (audio.url && trackId) {
+    return <DashboardProviderAudio releaseId={releaseId} trackId={trackId} />;
   }
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
