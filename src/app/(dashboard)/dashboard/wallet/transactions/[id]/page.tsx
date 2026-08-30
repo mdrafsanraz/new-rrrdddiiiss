@@ -101,6 +101,34 @@ export default async function WalletTransactionPage({
           />
         </dl>
       </section>
+      {withdrawal?.paidAmount ? (
+        <section className="overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="border-b border-border px-6 py-4">
+            <h2 className="text-sm font-semibold">Payout breakdown</h2>
+          </div>
+          <dl className="divide-y divide-border px-6">
+            <Detail
+              label="Payout amount"
+              value={money(
+                withdrawal.payoutAmount ?? withdrawal.amount,
+                withdrawal.currency,
+              )}
+            />
+            <Detail
+              label="Tax withholding"
+              value={`− ${money(withdrawal.taxWithholding ?? 0, withdrawal.currency)}`}
+            />
+            <Detail
+              label="Fee"
+              value={`− ${money(withdrawal.fee ?? 0, withdrawal.currency)}`}
+            />
+            <Detail
+              label="Net amount paid"
+              value={money(withdrawal.paidAmount, withdrawal.currency)}
+            />
+          </dl>
+        </section>
+      ) : null}
       <p className="flex items-center gap-2 text-xs leading-5 text-muted-foreground">
         <Receipt />
         Withdrawal requests remain pending until reviewed and processed by
