@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { AdminUserEditForm } from "@/components/admin/user-edit-form";
 import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
+import { WalletAdjustmentDialog } from "@/components/admin/wallet-adjustment-dialog";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { planLabel } from "@/lib/plans";
 import { getWalletBalances } from "@/lib/wallet";
@@ -64,7 +65,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
       />
 
       <section className="border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4"><div><h2 className="text-sm font-semibold">Wallet</h2><p className="mt-1 text-xs text-muted-foreground">Derived from immutable ledger entries. Corrections must create adjustments or reversals.</p></div><Link href={`/admin/wallets?q=${encodeURIComponent(user.email)}`} className="text-xs font-semibold hover:underline">Open in global ledger</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4"><div><h2 className="text-sm font-semibold">Wallet</h2><p className="mt-1 text-xs text-muted-foreground">Derived from immutable ledger entries. Corrections must create adjustments or reversals.</p></div><div className="flex items-center gap-3"><WalletAdjustmentDialog userId={user.id} /><Link href={`/admin/wallets?q=${encodeURIComponent(user.email)}`} className="text-xs font-semibold hover:underline">Open in global ledger</Link></div></div>
         <div className="grid border-b border-border sm:grid-cols-4"><WalletMetric label="Available" value={money(balances.available)} /><WalletMetric label="Pending" value={money(balances.pending)} /><WalletMetric label="Lifetime earned" value={money(balances.lifetimeEarnings)} /><WalletMetric label="Paid lifetime" value={money(balances.lifetimeWithdrawn)} /></div>
         {!user.walletTransactions.length ? <p className="px-5 py-8 text-center text-sm text-muted-foreground">No wallet entries yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3">Date</th><th className="px-3 py-3">Entry</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Source</th><th className="px-5 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-border">{user.walletTransactions.map((entry) => <tr key={entry.id}><td className="px-5 py-3 text-muted-foreground">{entry.createdAt.toLocaleDateString()}</td><td className="px-3 py-3"><p className="font-semibold">{entry.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{entry.type.replaceAll("_", " ")}</p></td><td className="px-3 py-3 uppercase">{entry.status}</td><td className="px-3 py-3 font-mono text-[10px] text-muted-foreground">{entry.sourceType.replaceAll("_", " ")}</td><td className={`px-5 py-3 text-right font-semibold ${entry.direction === "credit" ? "text-emerald-800" : "text-red-700"}`}>{entry.direction === "credit" ? "+" : "-"}{money(entry.amount)}</td></tr>)}</tbody></table></div>}
       </section>

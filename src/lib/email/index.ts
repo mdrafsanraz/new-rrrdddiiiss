@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { appUrl } from "@/lib/stripe";
 
 let resendClient: Resend | null = null;
 
@@ -113,6 +114,141 @@ export async function notifyReleaseReviewAction(input: ReleaseReviewEmail) {
     // Review actions stay successful even when the email provider is unavailable.
     console.error(`[email] Resend request failed for release review email to ${input.to}:`, error);
   }
+}
+
+type BrandedEmail = {
+  to: string;
+  subject: string;
+  preheader: string;
+  heading: string;
+  message: string;
+  actionUrl?: string;
+  actionLabel?: string;
+};
+
+/** Shared plain-notice template for account-lifecycle emails (welcome, subscription, profile, wallet). */
+async function sendBrandedEmail(input: BrandedEmail) {
+  const resend = getResend();
+  if (!resend) {
+    console.log(`[email] RESEND_API_KEY not set — skipped email to ${input.to}: ${input.subject}`);
+    return;
+  }
+  const action = input.actionUrl
+    ? `<a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;margin-top:24px;padding:12px 18px;border-radius:10px;background:#18181b;color:#fff;text-decoration:none;font-weight:600">${escapeHtml(input.actionLabel ?? "Open RDISTRO")}</a>`
+    : "";
+  try {
+    const { error } = await resend.emails.send({
+      from: fromAddress(),
+      to: input.to,
+      subject: input.subject,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><div style="margin-top:16px;white-space:pre-wrap;font-size:14px;line-height:1.65;color:#3f3f46">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO.</p></div></body></html>`,
+    });
+    if (error) console.error(`[email] Resend failed to send email to ${input.to}:`, error);
+  } catch (error) {
+    // Account operations stay successful even when the email provider is unavailable.
+    console.error(`[email] Resend request failed for email to ${input.to}:`, error);
+  }
+}
+
+export async function sendWelcomeEmail(to: string, name: string) {
+  return sendBrandedEmail({
+    to,
+    subject: "Welcome to RDISTRO",
+    preheader: "Your account is ready — start building your catalog.",
+    heading: `Welcome, ${name}`,
+    message:
+      "Your RDISTRO account is set up. Add an artist and create your first release whenever you're ready.",
+    actionUrl: appUrl("/dashboard"),
+    actionLabel: "Go to dashboard",
+  });
+}
+
+export async function notifySubscriptionChanged(input: {
+  to: string;
+  name: string;
+  planLabel: string;
+  status: string;
+}) {
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `Your plan is now ${input.planLabel}`,
+    preheader: `Your RDISTRO subscription changed to ${input.planLabel}.`,
+    heading: "Subscription updated",
+    message: `Hi ${input.name}, your plan is now ${input.planLabel} (status: ${input.status}).`,
+    actionUrl: appUrl("/dashboard/settings/subscription"),
+    actionLabel: "View subscription",
+  });
+}
+
+export async function notifyProfileUpdated(to: string, name: string) {
+  return sendBrandedEmail({
+    to,
+    subject: "Your RDISTRO profile was updated",
+    preheader: "Your account profile details were just changed.",
+    heading: "Profile updated",
+    message: `Hi ${name}, your account profile details were just updated. If this wasn't you, contact support immediately.`,
+    actionUrl: appUrl("/dashboard/settings"),
+    actionLabel: "Review profile",
+  });
+}
+
+export async function notifyWithdrawalStatusChanged(input: {
+  to: string;
+  name: string;
+  amount: string;
+  currency: string;
+  status: string;
+  reason?: string | null;
+}) {
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `Withdrawal ${input.status}: ${input.amount} ${input.currency}`,
+    preheader: `Your withdrawal request is now ${input.status}.`,
+    heading: `Withdrawal ${input.status}`,
+    message:
+      `Hi ${input.name}, your withdrawal of ${input.amount} ${input.currency} is now ${input.status}.` +
+      (input.reason ? `\n\n${input.reason}` : ""),
+    actionUrl: appUrl("/dashboard/wallet"),
+    actionLabel: "View wallet",
+  });
+}
+
+export async function notifyWalletAdjustment(input: {
+  to: string;
+  name: string;
+  amount: string;
+  currency: string;
+  isCredit: boolean;
+  reason: string;
+}) {
+  const verb = input.isCredit ? "credited" : "debited";
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `Wallet ${verb}: ${input.amount} ${input.currency}`,
+    preheader: `A manual adjustment was made to your wallet.`,
+    heading: `Wallet ${verb}`,
+    message: `Hi ${input.name}, ${input.amount} ${input.currency} was ${verb} to your wallet.\n\n${input.reason}`,
+    actionUrl: appUrl("/dashboard/wallet"),
+    actionLabel: "View wallet",
+  });
+}
+
+export async function notifyRoyaltyCredited(input: {
+  to: string;
+  name: string;
+  amount: string;
+  currency: string;
+  periodLabel: string;
+}) {
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `New royalty credit: ${input.amount} ${input.currency}`,
+    preheader: "A new royalty credit was added to your wallet.",
+    heading: "Royalty credited",
+    message: `Hi ${input.name}, ${input.amount} ${input.currency} was just added to your wallet for ${input.periodLabel}.`,
+    actionUrl: appUrl("/dashboard/wallet"),
+    actionLabel: "View wallet",
+  });
 }
 
 /**

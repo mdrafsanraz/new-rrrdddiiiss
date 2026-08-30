@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { prisma } from "@/lib/db";
+import { notifyWithdrawalStatusChanged } from "@/lib/email";
 
 const schema = z.object({
   status: z.enum(["processing", "paid", "declined"]),
@@ -21,7 +22,10 @@ export async function PATCH(
   try {
     const { id } = await context.params;
     const input = schema.parse(await request.json());
-    const existing = await prisma.withdrawal.findUnique({ where: { id } });
+    const existing = await prisma.withdrawal.findUnique({
+      where: { id },
+      include: { user: { select: { email: true, name: true } } },
+    });
     if (!existing)
       return NextResponse.json(
         { error: "Withdrawal not found." },
@@ -73,6 +77,14 @@ export async function PATCH(
         reason: input.reason,
         note: input.note,
       },
+    });
+    await notifyWithdrawalStatusChanged({
+      to: existing.user.email,
+      name: existing.user.name,
+      amount: existing.amount.toString(),
+      currency: existing.currency,
+      status: input.status,
+      reason: input.status === "declined" ? withdrawal.failureReason : null,
     });
     return NextResponse.json({ ok: true, withdrawal });
   } catch (error) {

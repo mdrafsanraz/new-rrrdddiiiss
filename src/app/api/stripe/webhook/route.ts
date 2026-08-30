@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { getStripe, planIdFromPriceId } from "@/lib/stripe";
+import { notifySubscriptionChanged } from "@/lib/email";
+import { planLabel } from "@/lib/plans";
 import type { PlanId, SubscriptionStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -41,6 +43,11 @@ async function syncSubscription(sub: Stripe.Subscription) {
     return null;
   }
 
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { planId: true, stripeStatus: true, email: true, name: true },
+  });
+
   const priceId = sub.items.data[0]?.price?.id ?? null;
   const planFromMeta = sub.metadata?.planId as PlanId | undefined;
   const planId =
@@ -63,6 +70,16 @@ async function syncSubscription(sub: Stripe.Subscription) {
       subscriptionCancelAtPeriodEnd: sub.cancel_at_period_end,
     },
   });
+
+  if (before && (before.planId !== entitled || before.stripeStatus !== stripeStatus)) {
+    await notifySubscriptionChanged({
+      to: before.email,
+      name: before.name,
+      planLabel: planLabel(entitled),
+      status: stripeStatus,
+    });
+  }
+
   return userId;
 }
 
@@ -130,6 +147,7 @@ export async function POST(request: Request) {
           },
         });
         if (user) {
+          const changed = user.planId !== "free" || user.stripeStatus !== "canceled";
           await prisma.user.update({
             where: { id: user.id },
             data: {
@@ -142,6 +160,14 @@ export async function POST(request: Request) {
             },
           });
           await recordEvent(event, user.id, { status: sub.status });
+          if (changed) {
+            await notifySubscriptionChanged({
+              to: user.email,
+              name: user.name,
+              planLabel: planLabel("free"),
+              status: "canceled",
+            });
+          }
         }
         break;
       }

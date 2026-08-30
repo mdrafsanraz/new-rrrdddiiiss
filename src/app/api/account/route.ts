@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { notifyProfileUpdated } from "@/lib/email";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -41,6 +42,8 @@ export async function PATCH(request: Request) {
         ...(body.country !== undefined ? { country: body.country?.trim() || null } : {}),
       },
     });
+
+    await notifyProfileUpdated(sessionUser.email, user.name);
 
     return NextResponse.json({
       user: {

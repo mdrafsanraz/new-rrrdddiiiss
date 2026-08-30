@@ -1,5 +1,6 @@
 import { Prisma, type PlanId, type RoyaltyRule } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { notifyRoyaltyCredited } from "@/lib/email";
 
 const ZERO = new Prisma.Decimal(0);
 const ONE_HUNDRED = new Prisma.Decimal(100);
@@ -275,7 +276,12 @@ export async function publishRoyaltyPeriod(
     if (row.userId && ["matched", "manual_match"].includes(row.matchStatus))
       grouped.set(row.userId, [...(grouped.get(row.userId) ?? []), row]);
   const publishedAt = new Date();
-  return prisma.$transaction(
+  // Collected inside the transaction (pure in-memory, no extra DB/network
+  // calls) so emails can be sent afterward — never inside the transaction
+  // itself, which would hold it open across N Resend calls for however
+  // many users this period pays out.
+  const credited: Array<{ userId: string; amount: string }> = [];
+  const result = await prisma.$transaction(
     async (tx) => {
       for (const [userId, rows] of grouped) {
         const sourceNetTotal = rows.reduce(
@@ -308,6 +314,9 @@ export async function publishRoyaltyPeriod(
           },
         });
         const isCredit = userPayableTotal.gte(0);
+        if (isCredit) {
+          credited.push({ userId, amount: userPayableTotal.toString() });
+        }
         await tx.walletTransaction.create({
           data: {
             userId,
@@ -347,4 +356,32 @@ export async function publishRoyaltyPeriod(
     },
     { timeout: 60_000 },
   );
+
+  if (credited.length) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: credited.map((c) => c.userId) } },
+      select: { id: true, email: true, name: true },
+    });
+    const usersById = new Map(users.map((u) => [u.id, u]));
+    const periodLabel = new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(period.startDate);
+    await Promise.allSettled(
+      credited.map((c) => {
+        const user = usersById.get(c.userId);
+        if (!user) return Promise.resolve();
+        return notifyRoyaltyCredited({
+          to: user.email,
+          name: user.name,
+          amount: c.amount,
+          currency: "USD",
+          periodLabel,
+        });
+      }),
+    );
+  }
+
+  return result;
 }
