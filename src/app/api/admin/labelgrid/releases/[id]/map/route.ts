@@ -46,7 +46,12 @@ export async function POST(request: Request, { params }: Params) {
     const title = provider.title?.trim() || provider.titles?.[0]?.text?.trim() || `LabelGrid release ${id}`;
     const primaryArtist = provider.artists?.find((row) => row.artist?.artist_name?.trim())?.artist;
     const releaseDate = provider.release_date ? new Date(`${provider.release_date}T00:00:00.000Z`) : null;
-    const status = mapLabelGridStatusToLocalStatus(provider.review_status, provider.delivery_status) ?? "draft";
+    const status = mapLabelGridStatusToLocalStatus(
+      provider.review_status,
+      null,
+      false,
+      provider.delivery_status,
+    ) ?? "draft";
     const result = await prisma.$transaction(async (tx) => {
       const raced = await tx.release.findFirst({ where: { labelgridId: id }, select: { id: true } });
       if (raced) throw new Error("MAPPING_CONFLICT");

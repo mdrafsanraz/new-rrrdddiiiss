@@ -28,6 +28,7 @@ import {
 } from "@/lib/labelgrid/live-release";
 import { getReleaseDeliveryStatus } from "@/lib/labelgrid";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
+import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import { reviewStatusLabel, reviewStatusTone } from "@/lib/labelgrid/state-labels";
 import {
   canUserEditRelease,
@@ -64,6 +65,26 @@ const releaseInclude = {
 export default async function ReleaseDetailPage({ params }: Props) {
   const user = await requireUser();
   const { id } = await params;
+
+  // Reconcile before reading the row used by the primary status badge and
+  // permissions. Otherwise a direct visit can keep showing a stale full
+  // takedown even while LabelGrid reports the release as still distributed.
+  if (isLabelGridLive()) {
+    const mapped = await prisma.release.findFirst({
+      where: { id, userId: user.id, labelgridId: { not: null } },
+      select: { id: true },
+    });
+    if (mapped) {
+      try {
+        await withTimeout(
+          reconcileLabelGridReleaseStatus(mapped.id, { deep: true }),
+          6000,
+        );
+      } catch (error) {
+        console.error("[releases/detail] status reconciliation failed", error);
+      }
+    }
+  }
 
   let release;
   try {

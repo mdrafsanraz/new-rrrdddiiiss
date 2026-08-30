@@ -375,8 +375,15 @@ export function statusesForUserFacingFilter(
  */
 export function mapLabelGridStatusToLocalStatus(
   reviewStatus: string | null | undefined,
-  deliveryState?: string | null
+  deliveryState?: string | null,
+  currentlyLive?: boolean,
+  releaseDeliveryStatus?: string | null,
 ): ReleaseStatusValue | null {
+  // LabelGrid keeps the release-level status as `distributed` when only
+  // some DSPs have been taken down. That and `currently_live` are stronger
+  // signals than an outlet/removal-oriented overall state: do not collapse
+  // a partially removed catalog item into a full RDISTRO takedown.
+  if (currentlyLive || releaseDeliveryStatus === "distributed") return "live";
   if (deliveryState === "live") return "live";
   if (deliveryState === "removing") return "takedown_pending";
   if (deliveryState === "removed") return "taken_down";

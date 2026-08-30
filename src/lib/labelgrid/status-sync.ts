@@ -228,15 +228,18 @@ export async function reconcileLabelGridReleaseStatus(
     const lg = await getRelease(release.labelgridId);
     const data =
       lg && typeof lg === "object" && "data" in lg
-        ? (lg as { data: { review_status?: string | null } }).data
-        : (lg as { review_status?: string | null });
+        ? (lg as { data: { review_status?: string | null; delivery_status?: string | null } }).data
+        : (lg as { review_status?: string | null; delivery_status?: string | null });
     const reviewStatus = data?.review_status ?? null;
+    const releaseDeliveryStatus = data?.delivery_status ?? null;
 
     let deliveryState: string | null = release.deliveryState;
+    let currentlyLive = false;
     let deliveryJson: string | undefined;
     if (opts.deep !== false) {
       const delivery = await fetchLabelGridDeliveryStatus(release.labelgridId);
       deliveryState = delivery?.state ?? deliveryState;
+      currentlyLive = Boolean(delivery?.currently_live);
       if (delivery) {
         deliveryJson = JSON.stringify(delivery);
       }
@@ -244,7 +247,9 @@ export async function reconcileLabelGridReleaseStatus(
 
     const mapped = mapLabelGridStatusToLocalStatus(
       reviewStatus,
-      deliveryState
+      deliveryState,
+      currentlyLive,
+      releaseDeliveryStatus,
     );
 
     // Do not overwrite local status with null (LG still draft) once past distribute.
