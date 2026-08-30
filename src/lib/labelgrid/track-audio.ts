@@ -16,13 +16,25 @@ export type TrackAudioResolution =
 export async function resolveTrackAudioUrl(
   labelgridTrackId: number | string
 ): Promise<TrackAudioResolution> {
+  let stereoUrl: string | null = null;
   try {
     const raw = await getTrackFile(labelgridTrackId, "stereo");
     const file =
       raw && typeof raw === "object" && "data" in raw
         ? raw.data
         : (raw as FileData);
-    if (file?.url) return { ok: true, url: file.url };
+    stereoUrl = file?.url ?? null;
+    if (stereoUrl) {
+      try {
+        const absolute = new URL(stereoUrl);
+        if (absolute.protocol === "https:" || absolute.protocol === "http:") {
+          return { ok: true, url: absolute.toString() };
+        }
+      } catch {
+        // LabelGrid sandbox returns storage paths such as `labels/...mp3`.
+        // Resolve those against the CDN origin exposed by the track preview.
+      }
+    }
   } catch (error) {
     if (!(error instanceof LabelGridApiError) || error.status !== 404) {
       console.error(`[track-audio] lookup failed for track ${labelgridTrackId}`, error);
@@ -33,7 +45,14 @@ export async function resolveTrackAudioUrl(
   try {
     const raw = await getTrack(labelgridTrackId);
     const track = raw?.data ?? (raw as unknown as TrackData);
-    if (track.audio_preview_url) return { ok: true, url: track.audio_preview_url };
+    if (track.audio_preview_url) {
+      if (stereoUrl) {
+        const preview = new URL(track.audio_preview_url);
+        const fullStereoUrl = new URL(stereoUrl.replace(/^\/+/, ""), `${preview.origin}/`);
+        return { ok: true, url: fullStereoUrl.toString() };
+      }
+      return { ok: true, url: track.audio_preview_url };
+    }
     return { ok: false, status: 404 };
   } catch (error) {
     if (error instanceof LabelGridApiError && error.status === 404) {
