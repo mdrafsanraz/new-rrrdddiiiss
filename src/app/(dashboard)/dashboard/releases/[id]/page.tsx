@@ -29,7 +29,6 @@ import {
 import { getReleaseDeliveryStatus } from "@/lib/labelgrid";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
-import { reviewStatusLabel, reviewStatusTone } from "@/lib/labelgrid/state-labels";
 import {
   canUserEditRelease,
   canUserResubmitRelease,
@@ -40,7 +39,6 @@ import {
   normalizeReleaseStatus,
 } from "@/lib/releases/status";
 import { ReleaseActions } from "@/components/dashboard/release-view/release-actions";
-import { Badge } from "@/components/dashboard/release-view/badge";
 import {
   ReleaseTabs,
   type DeliveryStatusData,
@@ -288,11 +286,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
         <div className="flex min-w-0 flex-col p-5 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={release.status} />
-            {live?.reviewStatus ? (
-              <Badge tone={reviewStatusTone(live.reviewStatus)}>
-                Distribution: {reviewStatusLabel(live.reviewStatus)}
-              </Badge>
-            ) : null}
           </div>
           <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
             {displayTitle}

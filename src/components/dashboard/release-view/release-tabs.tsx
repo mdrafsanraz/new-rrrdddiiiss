@@ -283,7 +283,6 @@ function OverviewTab({ live }: { live: LiveRelease }) {
           <Field label="Explicit content" value={explicitLabel(live.explicit)} />
           <Field label="Distribution ID" value={live.id} />
           <Field label="Genre ID" value={live.primaryGenreId} />
-          <Field label="Review status" value={live.reviewStatus} />
         </dl>
       </Section>
 
