@@ -63,17 +63,26 @@ export async function POST(request: Request) {
       },
       include: { messages: true },
     });
-    await notifySupportTeam({
-      subject: `[${supportTicketNumber(ticket.id)}] New support ticket: ${ticket.subject}`,
-      preheader: `${user.name} opened a new support ticket.`,
-      heading: "New support request",
-      message: `${body.body.trim()}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
-      ticketNumber: supportTicketNumber(ticket.id),
-      ticketSubject: ticket.subject,
-      actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
-      actionLabel: "Open in support inbox",
-      replyTo: user.email,
-    });
+    // The ticket is already committed. Notification delivery must not turn a
+    // successful creation into a 500 (and tempt the user to create duplicates).
+    try {
+      await notifySupportTeam({
+        subject: `[${supportTicketNumber(ticket.id)}] New support ticket: ${ticket.subject}`,
+        preheader: `${user.name} opened a new support ticket.`,
+        heading: "New support request",
+        message: `${body.body.trim()}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
+        ticketNumber: supportTicketNumber(ticket.id),
+        ticketSubject: ticket.subject,
+        actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
+        actionLabel: "Open in support inbox",
+        replyTo: user.email,
+      });
+    } catch (notificationError) {
+      console.error(
+        `[support] notification failed for ticket ${ticket.id}`,
+        notificationError,
+      );
+    }
     return NextResponse.json({ ticket }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
