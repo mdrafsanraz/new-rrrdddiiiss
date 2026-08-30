@@ -1,18 +1,17 @@
-import { getTrackFile } from "@/lib/labelgrid";
+import { getTrack, getTrackFile } from "@/lib/labelgrid";
 import { listTracksForRelease } from "@/lib/labelgrid/catalog";
 import { LabelGridApiError } from "@/lib/labelgrid/client";
-import type { FileData } from "@/lib/labelgrid/types";
+import type { FileData, TrackData } from "@/lib/labelgrid/types";
 
 export type TrackAudioResolution =
   | { ok: true; url: string }
   | { ok: false; status: 404 | 502 };
 
 /**
- * Live GET /tracks/{track}/files/stereo — shared by every audio route (admin
- * and end-user, both by local track and by raw LabelGrid track id) so the
- * 404-vs-502 distinction is made once: 404 means LabelGrid genuinely has no
- * file for this track yet (normal, nothing to retry); 502 means the lookup
- * itself failed (transient — worth retrying).
+ * Prefer the master URL from GET /tracks/{track}/files/stereo. Some catalog
+ * tracks do not expose that file endpoint even though LabelGrid can generate
+ * playback from the master; document.json exposes that URL as
+ * GET /tracks/{track} `.audio_preview_url`.
  */
 export async function resolveTrackAudioUrl(
   labelgridTrackId: number | string
@@ -23,13 +22,24 @@ export async function resolveTrackAudioUrl(
       raw && typeof raw === "object" && "data" in raw
         ? raw.data
         : (raw as FileData);
-    if (!file?.url) return { ok: false, status: 404 };
-    return { ok: true, url: file.url };
+    if (file?.url) return { ok: true, url: file.url };
+  } catch (error) {
+    if (!(error instanceof LabelGridApiError) || error.status !== 404) {
+      console.error(`[track-audio] lookup failed for track ${labelgridTrackId}`, error);
+      return { ok: false, status: 502 };
+    }
+  }
+
+  try {
+    const raw = await getTrack(labelgridTrackId);
+    const track = raw?.data ?? (raw as unknown as TrackData);
+    if (track.audio_preview_url) return { ok: true, url: track.audio_preview_url };
+    return { ok: false, status: 404 };
   } catch (error) {
     if (error instanceof LabelGridApiError && error.status === 404) {
       return { ok: false, status: 404 };
     }
-    console.error(`[track-audio] lookup failed for track ${labelgridTrackId}`, error);
+    console.error(`[track-audio] preview lookup failed for track ${labelgridTrackId}`, error);
     return { ok: false, status: 502 };
   }
 }
@@ -41,8 +51,13 @@ export async function resolveReleaseTrackLabelGridId(input: {
   trackNumber: number;
   isrc: string | null;
 }): Promise<string | null> {
-  if (input.trackLabelGridId) return input.trackLabelGridId;
   const tracks = await listTracksForRelease(Number(input.releaseLabelGridId));
+  if (
+    input.trackLabelGridId &&
+    tracks.some((track) => String(track.id) === input.trackLabelGridId)
+  ) {
+    return input.trackLabelGridId;
+  }
   const normalizedIsrc = input.isrc?.trim().toUpperCase();
   if (normalizedIsrc) {
     const matches = tracks.filter(

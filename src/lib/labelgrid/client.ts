@@ -37,6 +37,8 @@ export function labelGridApiErrorMessage(error: LabelGridApiError): string {
 type RequestOptions = {
   method?: string;
   body?: unknown;
+  /** Expected non-success responses that callers handle as normal control flow. */
+  quietStatuses?: readonly number[];
   searchParams?: Record<
     string,
     string | number | undefined | readonly (string | number)[]
@@ -94,7 +96,9 @@ export async function labelgridFetchRaw<T>(
   }
 
   if (!res.ok) {
-    console.error("[labelgrid]", res.status, path, parsed);
+    if (!options.quietStatuses?.includes(res.status)) {
+      console.error("[labelgrid]", res.status, path, parsed);
+    }
     throw new LabelGridApiError(
       `LabelGrid ${options.method ?? "GET"} ${path} failed (${res.status})`,
       res.status,

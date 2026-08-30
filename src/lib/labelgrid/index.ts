@@ -253,7 +253,8 @@ export function getTrackFile(
   fileType: "stereo" | "dolby" | "lyrics"
 ) {
   return labelgridFetch<FileData | { data: FileData }>(
-    `/tracks/${trackId}/files/${fileType}`
+    `/tracks/${trackId}/files/${fileType}`,
+    { quietStatuses: [404] },
   );
 }
 
