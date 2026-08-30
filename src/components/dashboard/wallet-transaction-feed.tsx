@@ -99,6 +99,7 @@ export function WalletTransactionFeed({ items }: { items: WalletFeedItem[] }) {
                     ? "Royalty Credit"
                     : item.type.replaceAll("_", " ")}{" "}
                   · {date(item.createdAt)}
+                  {item.type === "withdrawal" ? " · Net payable" : ""}
                 </span>
               </span>
               <span className="pl-13 text-left sm:pl-0 sm:text-right">

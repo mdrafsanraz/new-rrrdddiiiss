@@ -89,19 +89,22 @@ export default async function WalletPage({
     ? new Map(
         (
           await prisma.withdrawal.findMany({
-            where: { id: { in: withdrawalIds }, paidAmount: { not: null } },
+            where: { id: { in: withdrawalIds }, userId: user.id },
             select: { id: true, paidAmount: true },
           })
-        ).map((withdrawal) => [withdrawal.id, withdrawal.paidAmount!.toString()]),
+        ).flatMap((withdrawal) =>
+          withdrawal.paidAmount
+            ? [[withdrawal.id, withdrawal.paidAmount.toString()] as const]
+            : [],
+        ),
       )
     : new Map<string, string>();
   const items: WalletFeedItem[] = transactions.map((transaction) => ({
     id: transaction.id,
     type: transaction.type,
     direction: transaction.direction,
-    // A settled withdrawal shows what the user actually received (net of
-    // tax/fee), not the gross amount reserved from their balance at
-    // request time — the ledger itself still tracks the gross amount.
+    // A withdrawal shows the snapshotted net payable; the ledger itself
+    // still reserves the full requested amount from the wallet balance.
     amount:
       paidAmountByWithdrawalId.get(transaction.sourceId) ??
       transaction.amount.toString(),

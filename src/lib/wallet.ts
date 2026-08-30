@@ -126,6 +126,10 @@ export async function requestWithdrawal(input: {
           destination,
           status: "pending",
           reference,
+          payoutAmount: input.amount,
+          taxWithholding: ZERO,
+          fee,
+          paidAmount: netPayable,
         },
       });
       await tx.walletTransaction.create({

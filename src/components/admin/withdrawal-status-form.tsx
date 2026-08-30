@@ -9,12 +9,14 @@ export function WithdrawalStatusForm({
   reference,
   amount,
   currency,
+  initialFee = "0",
 }: {
   id: string;
   current: string;
   reference: string;
   amount: string;
   currency: string;
+  initialFee?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -25,7 +27,7 @@ export function WithdrawalStatusForm({
   const [reason, setReason] = useState("");
   const [payoutAmount, setPayoutAmount] = useState(amount);
   const [taxWithholding, setTaxWithholding] = useState("0");
-  const [fee, setFee] = useState("0");
+  const [fee, setFee] = useState(initialFee);
   const [error, setError] = useState("");
 
   const netPaid = (

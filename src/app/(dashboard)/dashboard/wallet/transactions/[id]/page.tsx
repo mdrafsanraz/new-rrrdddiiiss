@@ -36,6 +36,7 @@ export default async function WalletTransactionPage({
           where: { id: transaction.sourceId, userId: user.id },
         })
       : null;
+  const displayAmount = withdrawal?.paidAmount ?? transaction.amount;
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
@@ -62,10 +63,12 @@ export default async function WalletTransactionPage({
       </header>
       <section className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="border-b border-border p-6">
-          <p className="text-xs text-muted-foreground">Amount</p>
+          <p className="text-xs text-muted-foreground">
+            {withdrawal ? "Net payable" : "Amount"}
+          </p>
           <p className="mt-2 text-4xl font-semibold tracking-tight">
             {transaction.direction === "credit" ? "+" : "−"}
-            {money(transaction.amount, transaction.currency)}
+            {money(displayAmount, transaction.currency)}
           </p>
           <span
             className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${["declined", "reversed"].includes(transaction.status) ? "bg-red-50 text-red-700" : transaction.status === "available" ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}
@@ -123,7 +126,7 @@ export default async function WalletTransactionPage({
               value={`− ${money(withdrawal.fee ?? 0, withdrawal.currency)}`}
             />
             <Detail
-              label="Net amount paid"
+              label={withdrawal.status === "paid" ? "Net amount paid" : "Net payable"}
               value={money(withdrawal.paidAmount, withdrawal.currency)}
             />
           </dl>

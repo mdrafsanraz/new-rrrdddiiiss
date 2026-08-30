@@ -206,7 +206,12 @@ export default async function AdminRoyaltiesPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">
-                    {withdrawal.currency} {withdrawal.amount.toString()}
+                    {withdrawal.currency}{" "}
+                    {(withdrawal.paidAmount ?? withdrawal.amount).toString()}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Net payable · Requested {withdrawal.amount.toString()} · Fee{" "}
+                    {withdrawal.fee?.toString() ?? "0"}
                   </p>
                   <p className="mt-1 text-xs capitalize text-muted-foreground">
                     {withdrawal.method.replaceAll("_", " ")}
@@ -228,6 +233,7 @@ export default async function AdminRoyaltiesPage() {
                     reference={withdrawal.reference}
                     amount={withdrawal.amount.toString()}
                     currency={withdrawal.currency}
+                    initialFee={withdrawal.fee?.toString() ?? "0"}
                   />
                 ) : (
                   <span className="text-xs capitalize text-muted-foreground">
