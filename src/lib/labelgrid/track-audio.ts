@@ -1,5 +1,6 @@
 import { getTrackFile } from "@/lib/labelgrid";
 import { listTracksForRelease } from "@/lib/labelgrid/catalog";
+import { LabelGridApiError } from "@/lib/labelgrid/client";
 import type { FileData } from "@/lib/labelgrid/types";
 
 export type TrackAudioResolution =
@@ -25,6 +26,9 @@ export async function resolveTrackAudioUrl(
     if (!file?.url) return { ok: false, status: 404 };
     return { ok: true, url: file.url };
   } catch (error) {
+    if (error instanceof LabelGridApiError && error.status === 404) {
+      return { ok: false, status: 404 };
+    }
     console.error(`[track-audio] lookup failed for track ${labelgridTrackId}`, error);
     return { ok: false, status: 502 };
   }

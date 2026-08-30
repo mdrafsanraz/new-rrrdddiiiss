@@ -367,6 +367,9 @@ function TracksTab({
 }
 
 function AudioCell({ audio, releaseId, trackId }: { audio: LiveTrack["audio"]; releaseId: string; trackId?: string }) {
+  if (!audio && trackId) {
+    return <DashboardProviderAudio releaseId={releaseId} trackId={trackId} />;
+  }
   if (!audio) {
     return (
       <div className="flex shrink-0 flex-col items-end gap-1">
