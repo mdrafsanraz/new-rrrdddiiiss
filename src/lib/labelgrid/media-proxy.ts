@@ -26,15 +26,27 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
   const range = request.headers.get("range");
   const labelGridOrigin = new URL(getLabelGridBaseUrl()).origin;
   const token = url.origin === labelGridOrigin ? getLabelGridToken() : null;
-  let upstream: Response;
-  try {
-    upstream = await fetch(url, {
+  const fetchUpstream = (authorization: string | null) =>
+    fetch(url, {
       headers: {
+        Accept: request.headers.get("accept") ?? "audio/*, */*;q=0.8",
         ...(range ? { Range: range } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}),
       },
       cache: "no-store",
     });
+  let upstream: Response;
+  try {
+    upstream = await fetchUpstream(token);
+
+    // LabelGrid can return a public/generated media URL on its own API
+    // origin. Sending the API bearer token to that media handler can make it
+    // miss the public asset and return 404, so retry the exact provider URL
+    // without credentials. API-backed URLs still fail closed on the retry.
+    if (token && [401, 403, 404].includes(upstream.status)) {
+      await upstream.body?.cancel();
+      upstream = await fetchUpstream(null);
+    }
   } catch {
     return NextResponse.json(
       { error: "Provider media is temporarily unavailable." },
@@ -43,6 +55,12 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
   }
 
   if (!upstream.ok || !upstream.body) {
+    console.warn("[labelgrid/media] upstream unavailable", {
+      status: upstream.status,
+      origin: url.origin,
+      path: url.pathname,
+      ranged: Boolean(range),
+    });
     return NextResponse.json(
       { error: "Provider media is temporarily unavailable." },
       { status: upstream.status === 404 ? 404 : 502 }
