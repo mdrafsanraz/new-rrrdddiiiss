@@ -46,18 +46,24 @@ export function WalletWithdraw({
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch("/api/wallet/withdrawals", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ amount }),
-    });
-    const body = await response.json();
-    if (!response.ok) setError(body.error ?? "Could not request withdrawal.");
-    else {
+    try {
+      const response = await fetch("/api/wallet/withdrawals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(body?.error ?? "Could not request withdrawal.");
+        return;
+      }
       setSubmitted(true);
       router.refresh();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
   return (
     <div>
@@ -193,7 +199,11 @@ export function WalletWithdraw({
                   {error ? (
                     <p className="mt-3 text-xs text-red-600">{error}</p>
                   ) : null}
-                  <Button className="mt-5 h-11 w-full" loading={busy}>
+                  <Button
+                    type="submit"
+                    className="mt-5 h-11 w-full"
+                    loading={busy}
+                  >
                     {busy ? "Reserving funds…" : "Request withdrawal"}
                   </Button>
                   <p className="mt-3 text-center text-[10px] leading-4 text-muted-foreground">
