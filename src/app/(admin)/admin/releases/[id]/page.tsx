@@ -24,6 +24,7 @@ import { ReplaceReleaseMediaForm } from "@/components/dashboard/replace-release-
 import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { ProviderAudioPlayer } from "@/components/admin/provider-audio-player";
 import { DocumentReviewForm } from "@/components/admin/document-review-form";
+import { fetchLiveRelease, type LiveRelease } from "@/lib/labelgrid/live-release";
 
 type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
@@ -148,13 +149,21 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
   const needsAudio = trackMedia.some((t) => !t.hasAudioOnDisk);
 
   let mediaReadyForLg = artworkOnDisk && !needsAudio;
+  let liveRelease: LiveRelease | null = null;
   if (release.labelgridId && isLabelGridLive()) {
-    try {
-      const lgMedia = await getLabelGridMediaStatus(Number(release.labelgridId));
-      mediaReadyForLg = isLabelGridDraftMediaReady(lgMedia, release.tracks.length);
-    } catch {
+    const [mediaResult, liveResult] = await Promise.allSettled([
+      getLabelGridMediaStatus(Number(release.labelgridId)),
+      fetchLiveRelease(release.userId, Number(release.labelgridId)),
+    ]);
+    if (mediaResult.status === "fulfilled") {
+      mediaReadyForLg = isLabelGridDraftMediaReady(
+        mediaResult.value,
+        release.tracks.length,
+      );
+    } else {
       mediaReadyForLg = Boolean(release.labelgridId) && artworkOnDisk && !needsAudio;
     }
+    if (liveResult.status === "fulfilled") liveRelease = liveResult.value;
   }
 
   const showMediaReplace =
@@ -357,11 +366,19 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                   string,
                   unknown
                 >;
+                const liveTrack = liveRelease?.tracks.find(
+                  (track) =>
+                    (t.labelgridId && String(track.id) === t.labelgridId) ||
+                    track.trackNumber === t.trackNumber,
+                );
+                const displayTitle = liveTrack?.title || t.title;
+                const displayArtist =
+                  liveTrack?.artist || release.artist?.name || "Not supplied";
                 const trackQc = (qc?.issues ?? []).filter((issue) =>
                   (issue.affectedTracks ?? []).some(
                     (at) =>
                       at.id === Number(t.labelgridId) ||
-                      at.title.toLowerCase() === t.title.toLowerCase()
+                      at.title.toLowerCase() === displayTitle.toLowerCase()
                   )
                 );
                 return (
@@ -372,10 +389,11 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-medium">
-                          {String(t.trackNumber).padStart(2, "0")} / {t.title}
+                          {String(liveTrack?.trackNumber ?? t.trackNumber).padStart(2, "0")} / {displayTitle}
+                          {liveTrack?.mixVersion ? ` (${liveTrack.mixVersion})` : ""}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {release.artist?.name}
+                          {displayArtist}
                           {tm.featuredArtists
                             ? ` feat. ${String(tm.featuredArtists)}`
                             : ""}
@@ -400,7 +418,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                         label="ISRC"
                         value={
                           <span className="inline-flex items-center gap-1">
-                            {t.isrc ?? "Assign later"}
+                            {liveTrack?.isrc ?? t.isrc ?? "Assign later"}
                             {trackQc?.some((i) =>
                               /isrc/i.test(i.code + (i.title ?? ""))
                             ) ? (
@@ -409,9 +427,11 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                           </span>
                         }
                       />
+                      <Row label="ISWC" value={liveTrack?.iswc ?? "Not assigned"} />
+                      <Row label="LabelGrid track ID" value={liveTrack?.id ?? t.labelgridId ?? "Not mapped"} />
                       <Row
                         label="Explicit"
-                        value={String(tm.explicit ?? release.explicit)}
+                        value={String(liveTrack?.explicit ?? tm.explicit ?? release.explicit)}
                       />
                       <Row
                         label="Composition"
@@ -432,7 +452,15 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                         )}
                       />
                     </dl>
-                    {t.contributors.length > 0 ? (
+                    {liveTrack ? (
+                      <dl className="mt-3 grid gap-2 border-t border-border/70 pt-3 text-xs sm:grid-cols-3">
+                        <Row label="Contributors" value={liveTrack.contributors.length ? liveTrack.contributors.map((person) => person.name).join(", ") : "None supplied"} />
+                        <Row label="Writers" value={liveTrack.writers.length ? liveTrack.writers.map((person) => person.name).join(", ") : "None supplied"} />
+                        <Row label="Publishers" value={liveTrack.publishers.length ? liveTrack.publishers.map((person) => person.name).join(", ") : "None supplied"} />
+                        <Row label="Audio file" value={liveTrack.audio?.filename ?? "Not supplied"} />
+                        <Row label="Audio status" value={liveTrack.audio?.status ?? (liveTrack.audio ? "Available" : "Unavailable")} />
+                      </dl>
+                    ) : t.contributors.length > 0 ? (
                       <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                         {t.contributors.map((c) => (
                           <li key={c.id}>
