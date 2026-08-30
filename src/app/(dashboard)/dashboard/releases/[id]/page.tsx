@@ -216,8 +216,10 @@ export default async function ReleaseDetailPage({ params }: Props) {
     computeReleaseLifecycleActions({
       everDelivered,
       deliveryState: delivery?.state ?? null,
+      currentlyLive: delivery?.currentlyLive,
       isInReview: facing === "in_review",
       isApproved: facing === "approved",
+      isLive: facing === "live" || facing === "delivering",
     });
   const canDelete = canDeleteLifecycle && !documentRequested && !needsChanges;
 
@@ -227,6 +229,15 @@ export default async function ReleaseDetailPage({ params }: Props) {
     if (t.labelgridId && /^\d+$/.test(t.labelgridId)) {
       trackDurationsByLgId[Number(t.labelgridId)] = t.durationMs ?? null;
       trackIdsByLgId[Number(t.labelgridId)] = t.id;
+    }
+  }
+  if (live) {
+    for (const liveTrack of live.tracks) {
+      if (trackIdsByLgId[liveTrack.id]) continue;
+      const localTrack = tracks.find(
+        (track) => track.trackNumber === liveTrack.trackNumber,
+      );
+      if (localTrack) trackIdsByLgId[liveTrack.id] = localTrack.id;
     }
   }
 

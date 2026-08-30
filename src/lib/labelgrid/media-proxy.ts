@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getLabelGridBaseUrl, getLabelGridToken } from "@/lib/labelgrid/config";
 
 const FORWARDED_RESPONSE_HEADERS = [
   "accept-ranges",
@@ -13,7 +14,7 @@ const FORWARDED_RESPONSE_HEADERS = [
 export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
   let url: URL;
   try {
-    url = new URL(mediaUrl);
+    url = new URL(mediaUrl, `${getLabelGridBaseUrl()}/`);
   } catch {
     return NextResponse.json({ error: "Media URL is invalid." }, { status: 502 });
   }
@@ -23,10 +24,15 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
   }
 
   const range = request.headers.get("range");
+  const labelGridOrigin = new URL(getLabelGridBaseUrl()).origin;
+  const token = url.origin === labelGridOrigin ? getLabelGridToken() : null;
   let upstream: Response;
   try {
     upstream = await fetch(url, {
-      headers: range ? { Range: range } : undefined,
+      headers: {
+        ...(range ? { Range: range } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       cache: "no-store",
     });
   } catch {

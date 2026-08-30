@@ -1,4 +1,5 @@
 import { getTrackFile } from "@/lib/labelgrid";
+import { listTracksForRelease } from "@/lib/labelgrid/catalog";
 import type { FileData } from "@/lib/labelgrid/types";
 
 export type TrackAudioResolution =
@@ -27,4 +28,26 @@ export async function resolveTrackAudioUrl(
     console.error(`[track-audio] lookup failed for track ${labelgridTrackId}`, error);
     return { ok: false, status: 502 };
   }
+}
+
+/** Resolve legacy local tracks that were mapped before provider track IDs were persisted. */
+export async function resolveReleaseTrackLabelGridId(input: {
+  releaseLabelGridId: string;
+  trackLabelGridId: string | null;
+  trackNumber: number;
+  isrc: string | null;
+}): Promise<string | null> {
+  if (input.trackLabelGridId) return input.trackLabelGridId;
+  const tracks = await listTracksForRelease(Number(input.releaseLabelGridId));
+  const normalizedIsrc = input.isrc?.trim().toUpperCase();
+  if (normalizedIsrc) {
+    const matches = tracks.filter(
+      (track) => track.isrc?.trim().toUpperCase() === normalizedIsrc,
+    );
+    if (matches.length === 1) return String(matches[0].id);
+  }
+  const numbered = tracks.filter(
+    (track) => track.track_num === input.trackNumber,
+  );
+  return numbered.length === 1 ? String(numbered[0].id) : null;
 }

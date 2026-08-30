@@ -66,7 +66,11 @@ export async function POST(request: Request, { params }: Params) {
   const { canTakedown, takedownDisabledReason } = computeReleaseLifecycleActions({
     everDelivered: delivery?.ever_delivered,
     deliveryState: delivery?.state ?? null,
+    currentlyLive: delivery?.currently_live,
     isApproved: getUserFacingReleaseStatus(release.status) === "approved",
+    isLive: ["live", "delivering"].includes(
+      getUserFacingReleaseStatus(release.status),
+    ),
   });
   if (!canTakedown) {
     return NextResponse.json(

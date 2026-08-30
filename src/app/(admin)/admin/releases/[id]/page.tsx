@@ -441,7 +441,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                         ))}
                       </ul>
                     ) : null}
-                    {t.labelgridId ? (
+                    {release.labelgridId ? (
                       <ProviderAudioPlayer releaseId={release.id} trackId={t.id} />
                     ) : (
                       <p className="mt-2 text-xs text-muted-foreground">

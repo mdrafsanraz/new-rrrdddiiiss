@@ -35,6 +35,8 @@ export function computeReleaseLifecycleActions(input: {
   everDelivered: boolean | null | undefined;
   /** GET /releases/{id}/delivery-status .state — null when never checked. */
   deliveryState: string | null | undefined;
+  /** True when LabelGrid says at least one DSP is still live. */
+  currentlyLive?: boolean;
   /** RDISTRO's user-facing review state overrides pre-delivery deletion. */
   isInReview?: boolean;
   /**
@@ -43,12 +45,21 @@ export function computeReleaseLifecycleActions(input: {
    * before LabelGrid's own delivery-status API reports movement yet.
    */
   isApproved?: boolean;
+  /** Local user-facing status is Live/Delivering (fallback if provider flags lag). */
+  isLive?: boolean;
 }): ReleaseLifecycleActions {
   const everDelivered = Boolean(input.everDelivered);
   const state = input.deliveryState ?? null;
 
   if (input.isInReview) {
     return { canDelete: false, canTakedown: false, takedownDisabledReason: null };
+  }
+
+  // A partial takedown can report an overall removal-oriented state while
+  // other DSPs remain live. The remaining live deliveries are still eligible
+  // for takedown-all.
+  if (input.currentlyLive) {
+    return { canDelete: false, canTakedown: true, takedownDisabledReason: null };
   }
 
   if (state === "removed") {
@@ -73,7 +84,8 @@ export function computeReleaseLifecycleActions(input: {
     state === "in_progress" ||
     state === "live" ||
     state === "action_needed" ||
-    Boolean(input.isApproved);
+    Boolean(input.isApproved) ||
+    Boolean(input.isLive);
 
   if (inDistributionPipeline) {
     return { canDelete: false, canTakedown: true, takedownDisabledReason: null };

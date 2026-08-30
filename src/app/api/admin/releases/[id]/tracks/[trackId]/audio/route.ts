@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { proxyLabelGridMedia } from "@/lib/labelgrid/media-proxy";
-import { resolveTrackAudioUrl } from "@/lib/labelgrid/track-audio";
+import { resolveReleaseTrackLabelGridId, resolveTrackAudioUrl } from "@/lib/labelgrid/track-audio";
 
 type Params = { params: Promise<{ id: string; trackId: string }> };
 
@@ -11,10 +11,22 @@ async function findTrack(id: string, trackId: string) {
   if ("error" in gate) return { error: gate.error, status: gate.status };
   const track = await prisma.track.findFirst({
     where: { id: trackId, releaseId: id },
-    select: { labelgridId: true },
+    select: {
+      labelgridId: true,
+      trackNumber: true,
+      isrc: true,
+      release: { select: { labelgridId: true } },
+    },
   });
-  if (!track?.labelgridId) return { error: "Audio is not available." as const, status: 404 as const };
-  return { labelgridId: track.labelgridId };
+  if (!track?.release.labelgridId) return { error: "Audio is not available." as const, status: 404 as const };
+  const labelgridId = await resolveReleaseTrackLabelGridId({
+    releaseLabelGridId: track.release.labelgridId,
+    trackLabelGridId: track.labelgridId,
+    trackNumber: track.trackNumber,
+    isrc: track.isrc,
+  });
+  if (!labelgridId) return { error: "Audio is not available." as const, status: 404 as const };
+  return { labelgridId };
 }
 
 export async function GET(request: Request, { params }: Params) {
