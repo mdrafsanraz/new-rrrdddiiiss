@@ -32,10 +32,11 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 /** Status-only check the player uses to decide what to show without downloading the file. */
-export async function HEAD(_request: Request, { params }: Params) {
+export async function HEAD(request: Request, { params }: Params) {
   const { id } = await params;
   const access = await checkAccess(id);
   if ("error" in access) return new NextResponse(null, { status: access.status });
   const resolved = await resolveTrackAudioUrl(id);
-  return new NextResponse(null, { status: resolved.ok ? 200 : resolved.status });
+  if (!resolved.ok) return new NextResponse(null, { status: resolved.status });
+  return proxyLabelGridMedia(request, resolved.url);
 }

@@ -50,10 +50,11 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 /** Status-only check the player uses to decide what to show without downloading the file. */
-export async function HEAD(_request: Request, { params }: Params) {
+export async function HEAD(request: Request, { params }: Params) {
   const { id, trackId } = await params;
   const found = await findTrack(id, trackId);
   if ("error" in found) return new NextResponse(null, { status: found.status });
   const resolved = await resolveTrackAudioUrl(found.labelgridId);
-  return new NextResponse(null, { status: resolved.ok ? 200 : resolved.status });
+  if (!resolved.ok) return new NextResponse(null, { status: resolved.status });
+  return proxyLabelGridMedia(request, resolved.url);
 }

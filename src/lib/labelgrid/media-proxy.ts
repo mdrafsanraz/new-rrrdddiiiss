@@ -26,8 +26,10 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
   const range = request.headers.get("range");
   const labelGridOrigin = new URL(getLabelGridBaseUrl()).origin;
   const token = url.origin === labelGridOrigin ? getLabelGridToken() : null;
+  const method = request.method === "HEAD" ? "HEAD" : "GET";
   const fetchUpstream = (authorization: string | null) =>
     fetch(url, {
+      method,
       headers: {
         Accept: request.headers.get("accept") ?? "audio/*, */*;q=0.8",
         ...(range ? { Range: range } : {}),
@@ -54,7 +56,7 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
     );
   }
 
-  if (!upstream.ok || !upstream.body) {
+  if (!upstream.ok || (method === "GET" && !upstream.body)) {
     console.warn("[labelgrid/media] upstream unavailable", {
       status: upstream.status,
       origin: url.origin,
@@ -76,5 +78,8 @@ export async function proxyLabelGridMedia(request: Request, mediaUrl: string) {
     if (value) headers.set(name, value);
   }
 
-  return new Response(upstream.body, { status: upstream.status, headers });
+  return new Response(method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    headers,
+  });
 }
