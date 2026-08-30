@@ -8,7 +8,7 @@ import { PAYOUT_METHODS } from "@/lib/payout-settings";
 const money = z.string().regex(/^\d+(\.\d{1,6})?$/);
 const percentage = money.refine((value) => Number(value) <= 100, "Percentage fee cannot exceed 100.");
 const methodSchema = z.object({ enabled: z.boolean(), minimum: money, fixedFee: money, percentageFee: percentage, instructions: z.string().trim().max(1000), processingText: z.string().trim().max(500) });
-const schema = z.object({ currency: z.enum(["USD"]), availabilityRules: z.string().trim().max(2000), methods: z.object({ wise: methodSchema, paypal: methodSchema, payoneer: methodSchema }) });
+const schema = z.object({ currency: z.enum(["USD"]), availabilityRules: z.string().trim().max(2000), methods: z.object({ wise: methodSchema, paypal: methodSchema, payoneer: methodSchema, bank_transfer: methodSchema }) });
 
 export async function PATCH(request: Request) {
   const gate = await requirePermissionApi("settings.manage");

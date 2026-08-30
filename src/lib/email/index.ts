@@ -199,15 +199,29 @@ export async function notifyWithdrawalStatusChanged(input: {
   currency: string;
   status: string;
   reason?: string | null;
+  /** Settlement breakdown entered by the admin — only present when status is "paid". */
+  settlement?: {
+    payoutAmount: string;
+    taxWithholding: string;
+    fee: string;
+    paidAmount: string;
+  };
 }) {
+  let message = `Hi ${input.name}, your withdrawal of ${input.amount} ${input.currency} is now ${input.status}.`;
+  if (input.settlement) {
+    message +=
+      `\n\nPayout amount: ${input.settlement.payoutAmount} ${input.currency}` +
+      `\nTax withholding: -${input.settlement.taxWithholding} ${input.currency}` +
+      `\nFee: -${input.settlement.fee} ${input.currency}` +
+      `\nNet amount paid: ${input.settlement.paidAmount} ${input.currency}`;
+  }
+  if (input.reason) message += `\n\n${input.reason}`;
   return sendBrandedEmail({
     to: input.to,
     subject: `Withdrawal ${input.status}: ${input.amount} ${input.currency}`,
     preheader: `Your withdrawal request is now ${input.status}.`,
     heading: `Withdrawal ${input.status}`,
-    message:
-      `Hi ${input.name}, your withdrawal of ${input.amount} ${input.currency} is now ${input.status}.` +
-      (input.reason ? `\n\n${input.reason}` : ""),
+    message,
     actionUrl: appUrl("/dashboard/wallet"),
     actionLabel: "View wallet",
   });

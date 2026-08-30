@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
-export const PAYOUT_METHODS = ["wise", "paypal", "payoneer"] as const;
+export const PAYOUT_METHODS = ["wise", "paypal", "payoneer", "bank_transfer"] as const;
 export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 
 export type PayoutPolicy = {
@@ -33,6 +33,7 @@ export const DEFAULT_PAYOUT_POLICY: PayoutPolicy = {
     wise: { ...DEFAULT_METHOD, enabled: true },
     paypal: { ...DEFAULT_METHOD, enabled: true },
     payoneer: { ...DEFAULT_METHOD },
+    bank_transfer: { ...DEFAULT_METHOD, enabled: true },
   },
 };
 

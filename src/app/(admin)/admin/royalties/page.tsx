@@ -226,6 +226,8 @@ export default async function AdminRoyaltiesPage() {
                     id={withdrawal.id}
                     current={withdrawal.status}
                     reference={withdrawal.reference}
+                    amount={withdrawal.amount.toString()}
+                    currency={withdrawal.currency}
                   />
                 ) : (
                   <span className="text-xs capitalize text-muted-foreground">

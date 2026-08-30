@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { requirePermissionApi } from "@/lib/auth/admin";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { prisma } from "@/lib/db";
 import { notifyWithdrawalStatusChanged } from "@/lib/email";
+
+const money = z
+  .string()
+  .trim()
+  .regex(/^\d+(\.\d{1,12})?$/, "Enter a valid non-negative amount.");
 
 const schema = z.object({
   status: z.enum(["processing", "paid", "declined"]),
   reference: z.string().trim().max(100).optional(),
   reason: z.string().trim().max(500).optional(),
   note: z.string().trim().max(1000).optional(),
+  // Settlement breakdown — only used (and meaningful) when marking paid.
+  payoutAmount: money.optional(),
+  taxWithholding: money.optional(),
+  fee: money.optional(),
 });
 
 export async function PATCH(
@@ -41,6 +51,26 @@ export async function PATCH(
       return NextResponse.json({ error: `A ${existing.status} withdrawal cannot be marked ${input.status}.` }, { status: 409 });
     if (input.status === "declined" && !input.reason)
       return NextResponse.json({ error: "A decline reason is required." }, { status: 400 });
+
+    let settlement: {
+      payoutAmount: Prisma.Decimal;
+      taxWithholding: Prisma.Decimal;
+      fee: Prisma.Decimal;
+      paidAmount: Prisma.Decimal;
+    } | null = null;
+    if (input.status === "paid") {
+      const payoutAmount = new Prisma.Decimal(input.payoutAmount ?? existing.amount.toString());
+      const taxWithholding = new Prisma.Decimal(input.taxWithholding ?? "0");
+      const fee = new Prisma.Decimal(input.fee ?? "0");
+      const paidAmount = payoutAmount.minus(taxWithholding).minus(fee);
+      if (paidAmount.isNegative())
+        return NextResponse.json(
+          { error: "Tax withholding and fee cannot exceed the payout amount." },
+          { status: 400 },
+        );
+      settlement = { payoutAmount, taxWithholding, fee, paidAmount };
+    }
+
     const processedAt = ["paid", "declined"].includes(input.status)
       ? new Date()
       : null;
@@ -55,6 +85,14 @@ export async function PATCH(
               ? input.reason || "Declined by RDISTRO finance"
               : null,
           ...(input.reference ? { reference: input.reference } : {}),
+          ...(settlement
+            ? {
+                payoutAmount: settlement.payoutAmount,
+                taxWithholding: settlement.taxWithholding,
+                fee: settlement.fee,
+                paidAmount: settlement.paidAmount,
+              }
+            : {}),
         },
       });
       await tx.walletTransaction.update({
@@ -76,6 +114,14 @@ export async function PATCH(
         reference: withdrawal.reference,
         reason: input.reason,
         note: input.note,
+        ...(settlement
+          ? {
+              payoutAmount: settlement.payoutAmount.toString(),
+              taxWithholding: settlement.taxWithholding.toString(),
+              fee: settlement.fee.toString(),
+              paidAmount: settlement.paidAmount.toString(),
+            }
+          : {}),
       },
     });
     await notifyWithdrawalStatusChanged({
@@ -85,6 +131,14 @@ export async function PATCH(
       currency: existing.currency,
       status: input.status,
       reason: input.status === "declined" ? withdrawal.failureReason : null,
+      settlement: settlement
+        ? {
+            payoutAmount: settlement.payoutAmount.toString(),
+            taxWithholding: settlement.taxWithholding.toString(),
+            fee: settlement.fee.toString(),
+            paidAmount: settlement.paidAmount.toString(),
+          }
+        : undefined,
     });
     return NextResponse.json({ ok: true, withdrawal });
   } catch (error) {

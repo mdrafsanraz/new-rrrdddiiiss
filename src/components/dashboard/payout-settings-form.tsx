@@ -10,6 +10,7 @@ const METHODS = [
   { id: "paypal", label: "PayPal", note: "Send to your PayPal account", icon: PaypalLogo },
   { id: "wise", label: "Wise", note: "International payout via Wise", icon: CurrencyDollar },
   { id: "payoneer", label: "Payoneer", note: "Send to your Payoneer account", icon: Bank },
+  { id: "bank_transfer", label: "Bank transfer", note: "Wire to your bank account", icon: Bank },
 ] as const;
 
 export type PayoutInitial = {
@@ -26,7 +27,7 @@ export type PayoutInitial = {
   swiftBic: string;
 };
 
-export function PayoutSettingsForm({ initial, enabledMethods = ["wise", "paypal", "payoneer"], currency = "USD", minimums }: { initial: PayoutInitial; enabledMethods?: string[]; currency?: string; minimums?: Record<string, string> }) {
+export function PayoutSettingsForm({ initial, enabledMethods = ["wise", "paypal", "payoneer", "bank_transfer"], currency = "USD", minimums }: { initial: PayoutInitial; enabledMethods?: string[]; currency?: string; minimums?: Record<string, string> }) {
   const availableMethods = METHODS.filter((item) => enabledMethods.includes(item.id));
   const [method, setMethod] = useState(initial.method && enabledMethods.includes(initial.method) ? initial.method : availableMethods[0]?.id ?? "wise");
   const [email, setEmail] = useState(initial.email);

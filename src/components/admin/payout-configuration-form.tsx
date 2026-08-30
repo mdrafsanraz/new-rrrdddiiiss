@@ -5,7 +5,7 @@ import { CheckCircle, FloppyDisk } from "@phosphor-icons/react";
 import type { PayoutMethod, PayoutPolicy } from "@/lib/payout-settings";
 import { payoutMethodLabel } from "@/lib/payout-methods";
 
-const methods: PayoutMethod[] = ["wise", "paypal", "payoneer"];
+const methods: PayoutMethod[] = ["wise", "paypal", "payoneer", "bank_transfer"];
 
 export function PayoutConfigurationForm({ initial }: { initial: PayoutPolicy }) {
   const [policy, setPolicy] = useState(initial);

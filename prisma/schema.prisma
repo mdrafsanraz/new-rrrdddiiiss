@@ -947,6 +947,17 @@ model Withdrawal {
   requestedAt   DateTime                @default(now())
   processedAt   DateTime?
   failureReason String?
+  /**
+   * Settlement breakdown, entered by the admin when marking a withdrawal
+   * paid — record-keeping only, never adjusts the wallet ledger (the full
+   * requested `amount` was already reserved/debited at request time).
+   * payoutAmount defaults to `amount` unless the admin overrides it;
+   * paidAmount = payoutAmount - taxWithholding - fee.
+   */
+  payoutAmount    Decimal? @db.Decimal(28, 12)
+  taxWithholding  Decimal? @db.Decimal(28, 12)
+  fee             Decimal? @db.Decimal(28, 12)
+  paidAmount      Decimal? @db.Decimal(28, 12)
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 

@@ -82,8 +82,6 @@ export async function PATCH(request: Request) {
   try {
     const body = schema.parse(await request.json());
     const policy = await getPayoutPolicy();
-    if (body.method === "bank_transfer")
-      return NextResponse.json({ error: "Bank transfer is no longer available for new payout destinations." }, { status: 400 });
     if (!policy.methods[body.method].enabled)
       return NextResponse.json({ error: `${body.method} payouts are currently unavailable.` }, { status: 409 });
     const existing = await prisma.user.findUnique({
