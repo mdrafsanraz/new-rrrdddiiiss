@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 
 export function ProviderArtwork({
   releaseId,
+  labelgridId,
   alt = "",
   className,
 }: {
-  releaseId: string;
+  releaseId?: string;
+  labelgridId?: number;
   alt?: string;
   className?: string;
 }) {
@@ -34,7 +36,7 @@ export function ProviderArtwork({
     // Provider artwork is intentionally served through the authenticated media gateway.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/api/admin/releases/${releaseId}/media/artwork`}
+      src={labelgridId ? `/api/admin/labelgrid/releases/${labelgridId}/artwork` : `/api/admin/releases/${releaseId}/media/artwork`}
       alt={alt}
       className={className}
       onError={() => setFailed(true)}

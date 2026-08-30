@@ -6,9 +6,11 @@ import { useState } from "react";
 export function ProviderAudioPlayer({
   releaseId,
   trackId,
+  labelgridTrackId,
 }: {
-  releaseId: string;
-  trackId: string;
+  releaseId?: string;
+  trackId?: string;
+  labelgridTrackId?: number;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -25,7 +27,7 @@ export function ProviderAudioPlayer({
     <audio
       controls
       preload="metadata"
-      src={`/api/admin/releases/${releaseId}/tracks/${trackId}/audio`}
+      src={labelgridTrackId ? `/api/admin/labelgrid/tracks/${labelgridTrackId}/audio` : `/api/admin/releases/${releaseId}/tracks/${trackId}/audio`}
       onError={() => setFailed(true)}
       className="mt-3 w-full max-w-lg"
     />

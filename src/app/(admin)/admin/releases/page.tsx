@@ -5,12 +5,14 @@ import { adminReleaseWhere, ADMIN_RELEASE_FILTERS, type AdminReleaseFilter } fro
 import { formatShortDate } from "@/lib/admin/format";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
+import { listReleases } from "@/lib/labelgrid";
 import { deliveryStateLabel } from "@/lib/labelgrid/state-labels";
+import type { ReleaseData } from "@/lib/labelgrid/types";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Release operations | Admin" };
 
-type Search = { filter?: string; q?: string; page?: string; user?: string; artist?: string; label?: string; upc?: string; isrc?: string; dateFrom?: string; dateTo?: string; dspStatus?: string; qc?: string; docs?: string };
+type Search = { source?: string; filter?: string; q?: string; page?: string; user?: string; artist?: string; label?: string; upc?: string; isrc?: string; dateFrom?: string; dateTo?: string; dspStatus?: string; qc?: string; docs?: string };
 type Props = { searchParams: Promise<Search> };
 
 const fieldClass = "h-9 w-full border border-border bg-background px-3 text-xs outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-foreground/40";
@@ -35,6 +37,8 @@ export default async function AdminReleasesPage({ searchParams }: Props) {
   const filter = (ADMIN_RELEASE_FILTERS.some((item) => item.value === sp.filter) ? sp.filter : "pending_review") as AdminReleaseFilter;
   const q = clean(sp.q);
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
+  const source = sp.source === "rdistro" || (sp.filter && !sp.source) ? "rdistro" : "labelgrid";
+  if (source === "labelgrid") return <LabelGridCatalogPage page={page} />;
   const pageSize = 40;
   const qc = sp.qc === "yes" || sp.qc === "no" ? sp.qc : undefined;
   const docs = sp.docs === "yes" || sp.docs === "no" ? sp.docs : undefined;
@@ -75,17 +79,20 @@ export default async function AdminReleasesPage({ searchParams }: Props) {
       </div>
     </header>
 
+    <SourceNav active="rdistro" />
+
     <nav aria-label="Release views" className="flex gap-1 overflow-x-auto pb-1">
-      {ADMIN_RELEASE_FILTERS.map((item) => <Link key={item.value} href={href(sp, { filter: item.value, page: undefined })} className={cn("shrink-0 border px-3 py-2 text-[11px] font-semibold transition-colors", filter === item.value ? "border-foreground bg-foreground text-background" : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground")}>{item.label}</Link>)}
+      {ADMIN_RELEASE_FILTERS.map((item) => <Link key={item.value} href={href({ ...sp, source: "rdistro" }, { filter: item.value, page: undefined })} className={cn("shrink-0 border px-3 py-2 text-[11px] font-semibold transition-colors", filter === item.value ? "border-foreground bg-foreground text-background" : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground")}>{item.label}</Link>)}
     </nav>
 
     <section className="border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div><h2 className="text-sm font-semibold">Find a release</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Search identifiers and catalog metadata together, then narrow the result set.</p></div>
-        {q || advancedCount ? <Link href={`/admin/releases?filter=${filter}`} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:underline">Clear filters</Link> : null}
+        {q || advancedCount ? <Link href={`/admin/releases?source=rdistro&filter=${filter}`} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:underline">Clear filters</Link> : null}
       </div>
       <form className="p-4">
         <input type="hidden" name="filter" value={filter} />
+        <input type="hidden" name="source" value="rdistro" />
         <div className="flex flex-col gap-2 sm:flex-row">
           <input name="q" defaultValue={q} placeholder="Title, catalog number, UPC, ISRC, RDISTRO ID, LabelGrid ID, user or email" aria-label="Search releases" className={cn(fieldClass, "h-10 text-sm")} />
           <button type="submit" className="h-10 shrink-0 cursor-pointer bg-foreground px-5 text-xs font-semibold text-background hover:opacity-85">Apply filters</button>
@@ -136,3 +143,28 @@ export default async function AdminReleasesPage({ searchParams }: Props) {
     {pages > 1 ? <nav aria-label="Release pagination" className="flex items-center justify-between border-t border-border pt-4 text-xs"><p className="text-muted-foreground">Page {page.toLocaleString()} of {pages.toLocaleString()}</p><div className="flex gap-2">{page > 1 ? <Link href={href(sp, { filter, page: page - 1 })} className="border border-border px-3 py-2 font-semibold hover:border-foreground">Previous</Link> : null}{page < pages ? <Link href={href(sp, { filter, page: page + 1 })} className="border border-border px-3 py-2 font-semibold hover:border-foreground">Next</Link> : null}</div></nav> : null}
   </div>;
 }
+
+async function LabelGridCatalogPage({ page }: { page: number }) {
+  let response;
+  try { response = await listReleases(page, 50); }
+  catch (error) {
+    console.error("[admin/releases] LabelGrid catalog fetch failed", error);
+    return <div className="space-y-5"><CatalogHeader /><SourceNav active="labelgrid" /><section className="border border-amber-300 bg-amber-50 p-6"><h2 className="font-semibold text-amber-950">LabelGrid catalog unavailable</h2><p className="mt-2 text-sm text-amber-900">The provider did not return the release catalog. No local data is substituted into this view.</p><Link href="/admin/releases?source=rdistro" className="mt-4 inline-flex h-9 items-center border border-amber-400 px-4 text-xs font-semibold text-amber-950">Open RDISTRO workflow</Link></section></div>;
+  }
+  const rows = response.data ?? [];
+  const ids = rows.map((release) => String(release.id));
+  const mappings = ids.length ? await prisma.release.findMany({ where: { labelgridId: { in: ids } }, select: { id: true, labelgridId: true, title: true, user: { select: { name: true, email: true } } } }) : [];
+  const mappingByProviderId = new Map(mappings.map((mapping) => [mapping.labelgridId, mapping]));
+  const total = response.meta?.total ?? rows.length;
+  const pages = response.meta?.last_page ?? 1;
+  const from = total ? (page - 1) * (response.meta?.per_page ?? 50) + 1 : 0;
+  const to = Math.min(total, from + rows.length - 1);
+
+  return <div className="space-y-5"><CatalogHeader /><SourceNav active="labelgrid" /><section className="grid border border-border bg-card sm:grid-cols-3"><Metric label="Provider releases" value={total.toLocaleString()} /><Metric label="Mapped on this page" value={mappings.length.toLocaleString()} /><Metric label="Unmapped on this page" value={(rows.length - mappings.length).toLocaleString()} alert={rows.length > mappings.length} /></section><div className="flex justify-between border-y border-border py-2 text-xs"><p><span className="font-semibold">{total.toLocaleString()}</span> <span className="text-muted-foreground">releases returned by LabelGrid</span></p><p className="text-muted-foreground">Showing {from.toLocaleString()} to {to.toLocaleString()}</p></div><section className="overflow-hidden border border-border bg-card"><div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-left text-sm"><thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Release</th><th className="px-3 py-3">Provider catalog</th><th className="px-3 py-3">Review</th><th className="px-3 py-3">RDISTRO mapping</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-border">{rows.map((release) => { const mapping = mappingByProviderId.get(String(release.id)); return <tr key={release.id} className="align-top hover:bg-muted/25"><td className="px-4 py-3"><div className="flex gap-3"><ProviderArtwork labelgridId={release.id} className="size-11 shrink-0 object-cover" /><div className="min-w-0"><p className="max-w-72 truncate font-semibold">{providerTitle(release)}</p><p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">{providerArtists(release)}</p></div></div></td><td className="px-3 py-3 text-xs"><p>LG {release.id}</p><p className="mt-1 text-[10px] text-muted-foreground">UPC {release.barcode_number ?? "Not assigned"}</p><p className="text-[10px] text-muted-foreground">CAT {release.cat ?? "Not assigned"}</p></td><td className="px-3 py-3 text-xs"><p className="font-semibold capitalize">{release.review_status?.replaceAll("_", " ") ?? "Not supplied"}</p><p className="mt-1 text-[10px] text-muted-foreground">Release {release.release_date ?? "not scheduled"}</p></td><td className="px-3 py-3">{mapping ? <><Link href={`/admin/releases/${mapping.id}`} className="text-xs font-semibold hover:underline">{mapping.title}</Link><p className="mt-1 text-[10px] text-muted-foreground">{mapping.user.name} / {mapping.user.email}</p></> : <span className="bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-900">Unmapped</span>}</td><td className="px-4 py-3 text-right"><Link href={mapping ? `/admin/releases/${mapping.id}` : `/admin/releases/labelgrid/${release.id}`} className="inline-flex h-8 items-center border border-border px-3 text-[11px] font-semibold hover:border-foreground hover:bg-foreground hover:text-background">{mapping ? "View release" : "View and map"}</Link></td></tr>; })}</tbody></table></div></section>{pages > 1 ? <nav className="flex items-center justify-between border-t border-border pt-4 text-xs"><p className="text-muted-foreground">Page {page} of {pages}</p><div className="flex gap-2">{page > 1 ? <Link href={`/admin/releases?page=${page - 1}`} className="border border-border px-3 py-2 font-semibold">Previous</Link> : null}{page < pages ? <Link href={`/admin/releases?page=${page + 1}`} className="border border-border px-3 py-2 font-semibold">Next</Link> : null}</div></nav> : null}</div>;
+}
+
+function CatalogHeader() { return <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider catalog</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Release workspace</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Every release returned by the LabelGrid account, including catalog records not yet mapped to an RDISTRO user.</p></div><Link href="/admin/review-queue" className="inline-flex h-9 items-center border border-foreground bg-foreground px-4 text-xs font-semibold text-background">Open review queue</Link></header>; }
+function SourceNav({ active }: { active: "labelgrid" | "rdistro" }) { return <nav aria-label="Catalog source" className="flex border-b border-border"><Link href="/admin/releases" className={cn("border-b-2 px-4 py-2 text-xs font-semibold", active === "labelgrid" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground")}>LabelGrid catalog</Link><Link href="/admin/releases?source=rdistro" className={cn("border-b-2 px-4 py-2 text-xs font-semibold", active === "rdistro" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground")}>RDISTRO workflow</Link></nav>; }
+function Metric({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) { return <div className="border-b border-border p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className={cn("mt-2 text-2xl font-semibold", alert && "text-amber-800")}>{value}</p></div>; }
+function providerTitle(release: ReleaseData) { return release.title?.trim() || release.titles?.[0]?.text?.trim() || "Untitled release"; }
+function providerArtists(release: ReleaseData) { const names = release.artists?.map((row) => row.artist?.artist_name?.trim()).filter(Boolean) ?? []; return names.length ? names.join(", ") : "Artist not supplied"; }
