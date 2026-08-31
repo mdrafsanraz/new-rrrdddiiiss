@@ -3,8 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { createWriter } from "@/lib/labelgrid";
-import { unwrapLabelGridId } from "@/lib/labelgrid/catalog";
+import { ensureWriter } from "@/lib/labelgrid/catalog";
 
 /**
  * Writer picker backend for the Credits step, mirroring LabelGrid's own
@@ -69,11 +68,10 @@ export async function POST(request: Request) {
     const firstName = body.firstName.trim();
     const lastName = body.lastName.trim();
 
-    const created = await createWriter({
+    const id = await ensureWriter({
       first_name: firstName,
       last_name: lastName,
     });
-    const id = unwrapLabelGridId(created);
 
     await prisma.writerMapping.upsert({
       where: { userId_labelgridId: { userId: user.id, labelgridId: id } },
