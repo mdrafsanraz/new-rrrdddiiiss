@@ -25,8 +25,8 @@ export default async function FeaturesPage() {
             Built for the release, not the demo
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-            Stores, analytics, royalties, and review speed. Artist and admin
-            tools connect to LabelGrid next.
+            Stores, analytics, royalties, and review tools brought together in
+            one focused workflow.
           </p>
         </Reveal>
       </section>

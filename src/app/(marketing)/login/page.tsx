@@ -22,8 +22,8 @@ export default async function LoginPage() {
           Back to the catalog.
         </h1>
         <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-muted-foreground">
-          The artist dashboard wires to LabelGrid next. This screen is ready
-          for that token.
+          Manage your catalog, track every release, and keep your music moving
+          from one place.
         </p>
         <AnalyticsIllustration className="mt-10 hidden max-w-md lg:block" />
       </Reveal>

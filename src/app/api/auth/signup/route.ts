@@ -7,11 +7,18 @@ import { sendWelcomeEmail } from "@/lib/email";
 import type { PlanId } from "@prisma/client";
 
 const schema = z.object({
-  name: z.string().min(1).max(80),
-  email: z.string().email().max(120),
-  password: z.string().min(8).max(128),
+  name: z.string().min(1, "Enter your name.").max(80, "Name is too long."),
+  email: z.string().email("Enter a valid email address.").max(120, "Email is too long."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(128, "Password must be under 128 characters."),
   planId: z.enum(["free", "starter", "pro"]).default("free"),
-  artistName: z.string().min(2).max(64).optional(),
+  artistName: z
+    .string()
+    .min(2, "Artist name must be at least 2 characters.")
+    .max(64, "Artist name is too long.")
+    .optional(),
 });
 
 export async function POST(request: Request) {

@@ -1,7 +1,7 @@
 export const site = {
   name: "RDISTRO",
   tagline: "Get your music on every store.",
-  email: "hello@rdistro.com",
+  email: "support@rdistro.net",
 };
 
 export const navLinks = [

@@ -9,8 +9,11 @@ import {
 import { setSessionCookie } from "@/lib/auth/session";
 
 const schema = z.object({
-  token: z.string().min(1),
-  password: z.string().min(8).max(128),
+  token: z.string().min(1, "Reset link is missing its token."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(128, "Password must be under 128 characters."),
 });
 
 export async function POST(request: Request) {

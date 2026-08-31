@@ -5,7 +5,7 @@ import { createPasswordResetToken } from "@/lib/auth/password-reset";
 import { emailUrl, sendPasswordResetEmail } from "@/lib/email";
 
 const schema = z.object({
-  email: z.string().email(),
+  email: z.string().email("Enter a valid email address."),
 });
 
 /** Always returns 200 with the same message, whether or not the email is on file, so this can't be used to enumerate accounts. */

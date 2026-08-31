@@ -167,6 +167,7 @@ type BrandedEmail = {
   message: string;
   actionUrl?: string;
   actionLabel?: string;
+  replyTo?: string;
 };
 
 /** Shared plain-notice template for account-lifecycle emails (welcome, subscription, profile, wallet). */
@@ -183,6 +184,7 @@ async function sendBrandedEmail(input: BrandedEmail) {
     const { error } = await resend.emails.send({
       from: fromAddress(),
       to: input.to,
+      replyTo: input.replyTo,
       subject: input.subject,
       html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><div style="margin-top:16px;white-space:pre-wrap;font-size:14px;line-height:1.65;color:#3f3f46">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO. Visit <a href="${emailUrl()}" style="color:#71717a">rdistro.net</a>.</p></div></body></html>`,
     });
@@ -191,6 +193,22 @@ async function sendBrandedEmail(input: BrandedEmail) {
     // Account operations stay successful even when the email provider is unavailable.
     console.error(`[email] Resend request failed for email to ${input.to}:`, error);
   }
+}
+
+/** Marketing site contact form → forwarded to support, reply-to set to the visitor so staff can just hit reply. */
+export async function notifyContactMessage(input: {
+  name: string;
+  email: string;
+  message: string;
+}) {
+  return sendBrandedEmail({
+    to: "support@rdistro.net",
+    replyTo: input.email,
+    subject: `Contact form: ${input.name}`,
+    preheader: `New message from ${input.name} (${input.email})`,
+    heading: "New contact message",
+    message: `From: ${input.name} <${input.email}>\n\n${input.message}`,
+  });
 }
 
 export async function sendWelcomeEmail(to: string, name: string) {

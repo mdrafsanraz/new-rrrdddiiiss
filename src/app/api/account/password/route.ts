@@ -5,8 +5,11 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
 const schema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(128),
+  currentPassword: z.string().min(1, "Enter your current password."),
+  newPassword: z
+    .string()
+    .min(8, "New password must be at least 8 characters.")
+    .max(128, "New password must be under 128 characters."),
 });
 
 export async function POST(request: Request) {
