@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
@@ -11,7 +11,7 @@ import {
   canUserSubmitRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
-import { markReleaseAcrPending, runReleaseAcrScan } from "@/lib/acrcloud/release-scan";
+import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
@@ -220,15 +220,7 @@ export async function POST(_request: Request, { params }: Params) {
     include: { artist: true, tracks: true },
   });
 
-  if (await markReleaseAcrPending(id)) {
-    after(async () => {
-      await runReleaseAcrScan({
-        releaseId: id,
-        actorUserId: user.id,
-        source: "submission",
-      }).catch((error) => console.error("[acrcloud/auto-scan]", error));
-    });
-  }
+  await markReleaseAcrPending(id);
 
   return NextResponse.json({ release: fresh, labelgrid });
 }

@@ -21,6 +21,8 @@ export type AcrReleaseReport = {
   results: AcrTrackResult[];
 };
 
+const AUTOMATIC_SCAN_LEASE_MS = 10 * 60 * 1000;
+
 export function parseAcrReport(value: string | null | undefined): AcrReleaseReport | null {
   if (!value) return null;
   try {
@@ -35,9 +37,10 @@ export function parseAcrReport(value: string | null | undefined): AcrReleaseRepo
 
 export async function markReleaseAcrPending(releaseId: string): Promise<boolean> {
   if (!isAcrCloudConfigured()) return false;
+  const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);
   await prisma.release.update({
     where: { id: releaseId },
-    data: { acrStatus: "pending", acrError: null },
+    data: { acrStatus: "pending", acrScheduledAt: scheduledAt, acrError: null },
   });
   return true;
 }
@@ -50,7 +53,14 @@ export async function runReleaseAcrScan(input: {
   if (!isAcrCloudConfigured()) throw new Error("ACRCloud is not configured.");
   await prisma.release.update({
     where: { id: input.releaseId },
-    data: { acrStatus: "running", acrError: null },
+    data: {
+      acrStatus: "running",
+      acrScheduledAt:
+        input.source === "manual_refresh"
+          ? null
+          : new Date(Date.now() + AUTOMATIC_SCAN_LEASE_MS),
+      acrError: null,
+    },
   });
 
   try {
@@ -119,6 +129,7 @@ export async function runReleaseAcrScan(input: {
         acrStatus: status,
         acrReportJson: JSON.stringify(report),
         acrFetchedAt: new Date(report.generatedAt),
+        acrScheduledAt: null,
         acrError: failures ? `${failures} of ${results.length} track scans failed.` : null,
       },
     });
@@ -139,7 +150,12 @@ export async function runReleaseAcrScan(input: {
     const message = error instanceof Error ? error.message : "ACRCloud scan failed.";
     await prisma.release.update({
       where: { id: input.releaseId },
-      data: { acrStatus: "failed", acrError: message, acrFetchedAt: new Date() },
+      data: {
+        acrStatus: "failed",
+        acrScheduledAt: null,
+        acrError: message,
+        acrFetchedAt: new Date(),
+      },
     });
     throw error;
   }

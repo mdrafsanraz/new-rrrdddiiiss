@@ -54,6 +54,7 @@ If your Postgres service has a different name, pick that service’s `DATABASE_U
 | `S3_BUCKET` | from your Bucket service's **Connect** panel |
 | `S3_ACCESS_KEY_ID` | from your Bucket service's **Connect** panel |
 | `S3_SECRET_ACCESS_KEY` | from your Bucket service's **Connect** panel |
+| `CRON_SECRET` | a separate long random string used by the delayed ACR worker |
 
 5. **Document storage (required for review-issue uploads)**
 
@@ -69,6 +70,11 @@ Without these set, document uploads fall back to local disk, which does **not** 
 6. **Redeploy** the web service
 
 On start, the app runs `prisma db push` to create tables in Postgres (no migration step).
+
+The same service also starts a lightweight ACR worker when `CRON_SECRET` and all
+three `ACRCLOUD_*` credentials are present. A submitted release is persisted in
+Postgres with a due time five minutes ahead; the worker picks it up within about
+ten seconds of that time. No separate Railway cron service is required.
 
 ### 3. Deploy settings
 
