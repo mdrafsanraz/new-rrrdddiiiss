@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AnalyticsIllustration } from "@/components/site/illustrations";
 import { LoginForm } from "@/components/site/login-form";
@@ -27,7 +28,26 @@ export default async function LoginPage() {
         <AnalyticsIllustration className="mt-10 hidden max-w-md lg:block" />
       </Reveal>
       <Reveal delay={0.1}>
-        <LoginForm />
+        <div className="grid gap-4">
+          <aside
+            className="border border-amber-500/40 bg-amber-50 px-5 py-4 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
+            aria-labelledby="existing-user-notice"
+          >
+            <p id="existing-user-notice" className="font-semibold">
+              Existing RDISTRO user?
+            </p>
+            <p className="mt-1 text-sm leading-6">
+              Please reset your password before signing in to the new platform.
+            </p>
+            <Link
+              href="/forgot-password"
+              className="mt-3 inline-flex text-sm font-semibold underline underline-offset-4 hover:no-underline"
+            >
+              Reset your password
+            </Link>
+          </aside>
+          <LoginForm />
+        </div>
       </Reveal>
     </section>
   );
