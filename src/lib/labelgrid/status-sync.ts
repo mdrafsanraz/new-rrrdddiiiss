@@ -463,12 +463,15 @@ export async function applyLabelGridDeliveryStatusWebhook(payload: {
   }
 
   const previousStatus = normalizeReleaseStatus(release.status);
-  const eventMapped = mapLabelGridStatusToLocalStatus(
-    release.labelgridReviewStatus,
-    release.deliveryState,
-    false,
-    payload.delivery_status?.trim().toLowerCase() || null
-  );
+  const eventDeliveryStatus = payload.delivery_status?.trim().toLowerCase();
+  const eventMapped = eventDeliveryStatus
+    ? mapLabelGridStatusToLocalStatus(
+        release.labelgridReviewStatus,
+        release.deliveryState,
+        false,
+        eventDeliveryStatus
+      )
+    : null;
 
   let nextStatus = eventMapped;
   if (eventMapped) {

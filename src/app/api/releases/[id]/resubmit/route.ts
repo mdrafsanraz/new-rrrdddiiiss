@@ -7,6 +7,7 @@ import {
   isFinalRejection,
 } from "@/lib/releases/status";
 import { markReleaseAcrPending, runReleaseAcrScan } from "@/lib/acrcloud/release-scan";
+import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
 export const maxDuration = 300;
@@ -89,6 +90,14 @@ export async function POST(_request: Request, { params }: Params) {
     title: "Resubmitted",
     description: "Sent back to RDISTRO review.",
     actorUserId: user.id,
+  });
+
+  await notifyReleaseSubmitted({
+    to: user.email,
+    name: user.name,
+    releaseId: id,
+    releaseTitle: release.title,
+    resubmitted: true,
   });
 
   const fresh = await prisma.release.findUnique({

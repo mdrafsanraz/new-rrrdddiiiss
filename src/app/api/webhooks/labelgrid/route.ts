@@ -38,13 +38,18 @@ function validSignature(rawBody: string, signature: string, secret: string) {
   );
 }
 
-type SupportedEvent = "review_status" | "delivery_completed" | "release_distributed";
+type SupportedEvent =
+  | "review_status"
+  | "delivery_completed"
+  | "release_distributed"
+  | "takedown_completed";
 
 function supportedEvent(event: string): SupportedEvent | null {
   const normalized = event.toLowerCase().replaceAll(/[^a-z]/g, "");
   if (normalized === "releasereviewstatuschanged") return "review_status";
   if (normalized === "deliverycompleted") return "delivery_completed";
   if (normalized === "releasedistributed") return "release_distributed";
+  if (normalized === "takedowncompleted") return "takedown_completed";
   return null;
 }
 

@@ -135,6 +135,25 @@ export async function notifyReleaseStatusChanged(input: {
   });
 }
 
+export async function notifyReleaseSubmitted(input: {
+  to: string;
+  name: string;
+  releaseId: string;
+  releaseTitle: string;
+  resubmitted?: boolean;
+}) {
+  const action = input.resubmitted ? "resubmitted" : "submitted";
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `Release ${action}: ${input.releaseTitle}`,
+    preheader: `${input.releaseTitle} is now in review.`,
+    heading: input.resubmitted ? "Release resubmitted" : "Release submitted",
+    message: `Hi ${input.name}, “${input.releaseTitle}” was successfully ${action} and is now In Review. We’ll notify you when its status changes or if anything needs your attention.`,
+    actionUrl: appUrl(`/dashboard/releases/${input.releaseId}`),
+    actionLabel: "View release",
+  });
+}
+
 type BrandedEmail = {
   to: string;
   subject: string;

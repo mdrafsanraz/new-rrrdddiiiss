@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { getConfiguredPlan } from "@/lib/plans";
+import { notifyReleaseSubmitted } from "@/lib/email";
 import {
   canUserEditRelease,
   canUserSubmitRelease,
@@ -192,6 +193,13 @@ export async function POST(request: Request, { params }: Params) {
         actorUserId: user.id,
       });
       return updated;
+    });
+
+    await notifyReleaseSubmitted({
+      to: user.email,
+      name: user.name,
+      releaseId: release.id,
+      releaseTitle: release.title,
     });
 
     return NextResponse.json({ release });
