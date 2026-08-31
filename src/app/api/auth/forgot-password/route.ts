@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { createPasswordResetToken } from "@/lib/auth/password-reset";
-import { sendPasswordResetEmail } from "@/lib/email";
-import { appUrl } from "@/lib/stripe";
+import { emailUrl, sendPasswordResetEmail } from "@/lib/email";
 
 const schema = z.object({
   email: z.string().email(),
@@ -18,7 +17,7 @@ export async function POST(request: Request) {
 
     if (user) {
       const token = await createPasswordResetToken(user.id);
-      const resetUrl = appUrl(`/reset-password?token=${token}`);
+      const resetUrl = emailUrl(`/reset-password?token=${token}`);
       await sendPasswordResetEmail(user.email, resetUrl);
     }
 

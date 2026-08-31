@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { notifySupportTeam } from "@/lib/email";
+import { emailUrl, notifySupportTeam } from "@/lib/email";
 import { supportCategoryLabel, supportTicketNumber } from "@/lib/support";
 
 const createSchema = z.object({
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         message: `${body.body.trim()}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
         ticketNumber: supportTicketNumber(ticket.id),
         ticketSubject: ticket.subject,
-        actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
+        actionUrl: emailUrl(`/admin/support/${ticket.id}`),
         actionLabel: "Open in support inbox",
         replyTo: user.email,
       });

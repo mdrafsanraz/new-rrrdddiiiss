@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
-import { notifySupportUser } from "@/lib/email";
+import { emailUrl, notifySupportUser } from "@/lib/email";
 import { supportStatusLabel, supportTicketNumber } from "@/lib/support";
 import { writeAuditLog } from "@/lib/admin/audit";
 
@@ -88,7 +88,7 @@ export async function PATCH(request: Request, { params }: Params) {
         message: `Hi ${existing.user.name},\n\nThe status of your support request has changed from ${supportStatusLabel(existing.status)} to ${supportStatusLabel(body.status)}.`,
         ticketNumber: supportTicketNumber(id),
         ticketSubject: existing.subject,
-        actionUrl: `${new URL(request.url).origin}/dashboard/support/${id}`,
+        actionUrl: emailUrl(`/dashboard/support/${id}`),
         actionLabel: "View your ticket",
       });
     }
@@ -150,7 +150,7 @@ export async function POST(request: Request, { params }: Params) {
       message: `Hi ${existing.user.name},\n\n${body.body.trim()}${statusNote}`,
       ticketNumber: supportTicketNumber(id),
       ticketSubject: existing.subject,
-      actionUrl: `${new URL(request.url).origin}/dashboard/support/${id}`,
+      actionUrl: emailUrl(`/dashboard/support/${id}`),
       actionLabel: "Read and reply",
     });
 

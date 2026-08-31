@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { notifySupportTeam } from "@/lib/email";
+import { emailUrl, notifySupportTeam } from "@/lib/email";
 import { supportTicketNumber } from "@/lib/support";
 
 type Params = { params: Promise<{ id: string }> };
@@ -78,7 +78,7 @@ export async function POST(request: Request, { params }: Params) {
       message: `${body.body.trim()}\n\nFrom: ${user.name} (${user.email})`,
       ticketNumber: supportTicketNumber(ticket.id),
       ticketSubject: ticket.subject,
-      actionUrl: `${new URL(request.url).origin}/admin/support/${ticket.id}`,
+      actionUrl: emailUrl(`/admin/support/${ticket.id}`),
       actionLabel: "Review reply",
       replyTo: user.email,
     });

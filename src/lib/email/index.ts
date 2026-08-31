@@ -1,5 +1,10 @@
 import { Resend } from "resend";
-import { appUrl } from "@/lib/stripe";
+
+const EMAIL_APP_ORIGIN = "https://rdistro.net";
+
+export function emailUrl(path = "") {
+  return new URL(path.startsWith("/") ? path : `/${path}`, EMAIL_APP_ORIGIN).toString();
+}
 
 let resendClient: Resend | null = null;
 
@@ -62,7 +67,7 @@ async function sendSupportEmail(input: SupportEmail) {
       to: input.to,
       replyTo: input.replyTo,
       subject: input.subject,
-      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO / SUPPORT</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><p style="margin:0 0 10px;color:#71717a;font-family:monospace;font-size:12px;font-weight:700">${escapeHtml(input.ticketNumber)}</p><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><p style="margin:8px 0 0;color:#71717a;font-size:14px">${escapeHtml(input.ticketSubject)}</p><div style="margin-top:24px;padding:18px;border-left:3px solid #18181b;background:#fafafa;white-space:pre-wrap;font-size:14px;line-height:1.65">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO Support.</p></div></body></html>`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO / SUPPORT</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><p style="margin:0 0 10px;color:#71717a;font-family:monospace;font-size:12px;font-weight:700">${escapeHtml(input.ticketNumber)}</p><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><p style="margin:8px 0 0;color:#71717a;font-size:14px">${escapeHtml(input.ticketSubject)}</p><div style="margin-top:24px;padding:18px;border-left:3px solid #18181b;background:#fafafa;white-space:pre-wrap;font-size:14px;line-height:1.65">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO Support. Visit <a href="${emailUrl()}" style="color:#71717a">rdistro.net</a>.</p></div></body></html>`,
     });
     if (error) console.error(`[email] Resend failed to send support email to ${input.to}:`, error);
   } catch (error) {
@@ -107,7 +112,7 @@ export async function notifyReleaseReviewAction(input: ReleaseReviewEmail) {
       from: fromAddress(),
       to: input.to,
       subject,
-      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(heading)} for ${escapeHtml(input.releaseTitle)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO / RELEASE REVIEW</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(heading)}</h1><p style="margin:8px 0 0;color:#71717a;font-size:14px">${escapeHtml(input.releaseTitle)}</p><div style="margin-top:24px;padding:18px;border-left:3px solid #18181b;background:#fafafa;white-space:pre-wrap;font-size:14px;line-height:1.65">${escapeHtml(input.message)}</div><a href="${escapeHtml(input.releaseUrl)}" style="display:inline-block;margin-top:24px;padding:12px 18px;border-radius:10px;background:#18181b;color:#fff;text-decoration:none;font-weight:600">View release</a></div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO.</p></div></body></html>`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(heading)} for ${escapeHtml(input.releaseTitle)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO / RELEASE REVIEW</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(heading)}</h1><p style="margin:8px 0 0;color:#71717a;font-size:14px">${escapeHtml(input.releaseTitle)}</p><div style="margin-top:24px;padding:18px;border-left:3px solid #18181b;background:#fafafa;white-space:pre-wrap;font-size:14px;line-height:1.65">${escapeHtml(input.message)}</div><a href="${escapeHtml(input.releaseUrl)}" style="display:inline-block;margin-top:24px;padding:12px 18px;border-radius:10px;background:#18181b;color:#fff;text-decoration:none;font-weight:600">View release</a></div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO. Visit <a href="${emailUrl()}" style="color:#71717a">rdistro.net</a>.</p></div></body></html>`,
     });
     if (error) console.error(`[email] Resend failed to send release review email to ${input.to}:`, error);
   } catch (error) {
@@ -130,7 +135,7 @@ export async function notifyReleaseStatusChanged(input: {
     preheader: `The status of ${input.releaseTitle} changed to ${input.statusLabel}.`,
     heading: `Release ${input.statusLabel}`,
     message: `Hi ${input.name}, the status of “${input.releaseTitle}” is now ${input.statusLabel}.\n\n${input.statusDescription}`,
-    actionUrl: appUrl(`/dashboard/releases/${input.releaseId}`),
+    actionUrl: emailUrl(`/dashboard/releases/${input.releaseId}`),
     actionLabel: "View release",
   });
 }
@@ -149,7 +154,7 @@ export async function notifyReleaseSubmitted(input: {
     preheader: `${input.releaseTitle} is now in review.`,
     heading: input.resubmitted ? "Release resubmitted" : "Release submitted",
     message: `Hi ${input.name}, “${input.releaseTitle}” was successfully ${action} and is now In Review. We’ll notify you when its status changes or if anything needs your attention.`,
-    actionUrl: appUrl(`/dashboard/releases/${input.releaseId}`),
+    actionUrl: emailUrl(`/dashboard/releases/${input.releaseId}`),
     actionLabel: "View release",
   });
 }
@@ -179,7 +184,7 @@ async function sendBrandedEmail(input: BrandedEmail) {
       from: fromAddress(),
       to: input.to,
       subject: input.subject,
-      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><div style="margin-top:16px;white-space:pre-wrap;font-size:14px;line-height:1.65;color:#3f3f46">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO.</p></div></body></html>`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b"><div style="display:none">${escapeHtml(input.preheader)}</div><div style="max-width:620px;margin:0 auto;padding:40px 20px"><div style="margin-bottom:18px;font-size:13px;font-weight:800;letter-spacing:.18em">RDISTRO</div><div style="border:1px solid #e4e4e7;border-radius:18px;background:#fff;padding:32px"><h1 style="margin:0;font-size:26px;line-height:1.2">${escapeHtml(input.heading)}</h1><div style="margin-top:16px;white-space:pre-wrap;font-size:14px;line-height:1.65;color:#3f3f46">${escapeHtml(input.message)}</div>${action}</div><p style="margin:18px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">This is an automated notification from RDISTRO. Visit <a href="${emailUrl()}" style="color:#71717a">rdistro.net</a>.</p></div></body></html>`,
     });
     if (error) console.error(`[email] Resend failed to send email to ${input.to}:`, error);
   } catch (error) {
@@ -196,7 +201,7 @@ export async function sendWelcomeEmail(to: string, name: string) {
     heading: `Welcome, ${name}`,
     message:
       "Your RDISTRO account is set up. Add an artist and create your first release whenever you're ready.",
-    actionUrl: appUrl("/dashboard"),
+    actionUrl: emailUrl("/dashboard"),
     actionLabel: "Go to dashboard",
   });
 }
@@ -213,7 +218,7 @@ export async function notifySubscriptionChanged(input: {
     preheader: `Your RDISTRO subscription changed to ${input.planLabel}.`,
     heading: "Subscription updated",
     message: `Hi ${input.name}, your plan is now ${input.planLabel} (status: ${input.status}).`,
-    actionUrl: appUrl("/dashboard/settings/subscription"),
+    actionUrl: emailUrl("/dashboard/settings/subscription"),
     actionLabel: "View subscription",
   });
 }
@@ -225,7 +230,7 @@ export async function notifyProfileUpdated(to: string, name: string) {
     preheader: "Your account profile details were just changed.",
     heading: "Profile updated",
     message: `Hi ${name}, your account profile details were just updated. If this wasn't you, contact support immediately.`,
-    actionUrl: appUrl("/dashboard/settings"),
+    actionUrl: emailUrl("/dashboard/settings"),
     actionLabel: "Review profile",
   });
 }
@@ -260,7 +265,7 @@ export async function notifyWithdrawalStatusChanged(input: {
     preheader: `Your withdrawal request is now ${input.status}.`,
     heading: `Withdrawal ${input.status}`,
     message,
-    actionUrl: appUrl("/dashboard/wallet"),
+    actionUrl: emailUrl("/dashboard/wallet"),
     actionLabel: "View wallet",
   });
 }
@@ -280,7 +285,7 @@ export async function notifyWalletAdjustment(input: {
     preheader: `A manual adjustment was made to your wallet.`,
     heading: `Wallet ${verb}`,
     message: `Hi ${input.name}, ${input.amount} ${input.currency} was ${verb} to your wallet.\n\n${input.reason}`,
-    actionUrl: appUrl("/dashboard/wallet"),
+    actionUrl: emailUrl("/dashboard/wallet"),
     actionLabel: "View wallet",
   });
 }
@@ -298,7 +303,7 @@ export async function notifyRoyaltyCredited(input: {
     preheader: "A new royalty credit was added to your wallet.",
     heading: "Royalty credited",
     message: `Hi ${input.name}, ${input.amount} ${input.currency} was just added to your wallet for ${input.periodLabel}.`,
-    actionUrl: appUrl("/dashboard/wallet"),
+    actionUrl: emailUrl("/dashboard/wallet"),
     actionLabel: "View wallet",
   });
 }
@@ -323,6 +328,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
       <p>We received a request to reset your RDISTRO password.</p>
       <p><a href="${resetUrl}">Click here to choose a new password</a></p>
       <p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+      <p>Sign in and manage your catalog at <a href="${emailUrl()}">rdistro.net</a>.</p>
     `,
   });
   if (error) {

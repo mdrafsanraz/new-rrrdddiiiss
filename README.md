@@ -90,19 +90,18 @@ If Railway still builds with Docker, clear **Settings → Build → Dockerfile p
 
 The production domain for this app is `https://rdistro.net`.
 
-1. Web service → **Settings → Networking → Custom Domain** → enter `rdistro.net` (and `www.rdistro.net` if you want the www variant too — add it as a second custom domain)
-2. Railway shows a DNS record to add (typically a `CNAME` pointing at your Railway-generated `*.up.railway.app` target; for an apex/root domain like `rdistro.net` Railway may instead ask for an `A`/`ALIAS`/`ANAME` record depending on what your DNS provider supports — follow exactly what Railway's panel displays for this project, since the target hostname is unique per service)
+1. Web service → **Settings → Networking → Custom Domain** → enter `rdistro.net` (and `www.rdistro.net` as a second custom domain if needed)
+2. Add the exact DNS record Railway displays for the service
 3. Add that record at whichever registrar/DNS provider manages `rdistro.net`
 4. Wait for DNS to propagate and for Railway to show the domain as verified (usually minutes, can take longer depending on DNS TTLs)
 5. Once verified, set `NEXT_PUBLIC_APP_URL=https://rdistro.net` in the web service's Variables (see table above) and redeploy
 
-`NEXT_PUBLIC_APP_URL` is what every email this app sends (welcome, password reset, release status, withdrawal, etc.) uses to build links back into the dashboard — until it's updated, those links still point at the old Railway URL even after the domain itself resolves.
-
-I can't do the DNS/Railway dashboard steps myself — they need your access to both. Let me know once the domain is verified and I'll help confirm everything (webhook URL below, `NEXT_PUBLIC_APP_URL`, email links) is consistent.
+`NEXT_PUBLIC_APP_URL` configures browser and Stripe return URLs. Outbound email
+links are pinned to `https://rdistro.net/` in the email service.
 
 ### 5. Stripe webhook (when ready)
 
-Endpoint: `https://rdistro.net/api/stripe/webhook`  
+Endpoint: `https://rdistro.net/api/stripe/webhook`
 Events: `checkout.session.completed`, `customer.subscription.*`
 
 ## Scripts
