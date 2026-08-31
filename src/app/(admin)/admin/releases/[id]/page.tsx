@@ -25,6 +25,8 @@ import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { ProviderAudioPlayer } from "@/components/admin/provider-audio-player";
 import { DocumentReviewForm } from "@/components/admin/document-review-form";
 import { fetchLiveRelease, type LiveRelease } from "@/lib/labelgrid/live-release";
+import { ReleaseAcrPanel } from "@/components/admin/release-acr-panel";
+import { isAcrCloudConfigured } from "@/lib/acrcloud/client";
 
 type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
@@ -274,7 +276,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
       </section>
 
       <nav aria-label="Release sections" className="flex gap-1 overflow-x-auto border-b border-border pb-2">
-        {["Overview", "Tracks", "Artwork", "Rights", "QC", "Documents", "LabelGrid", "Delivery", "History"].map((label) => (
+        {["Overview", "Tracks", "Artwork", "Rights", "ACR", "QC", "Documents", "LabelGrid", "Delivery", "History"].map((label) => (
           <a key={label} href={`#${label.toLowerCase()}`} className="shrink-0 border border-border px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground hover:border-foreground hover:text-foreground">{label}</a>
         ))}
       </nav>
@@ -481,6 +483,8 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
               })}
             </ul>
           </Section>
+
+          <ReleaseAcrPanel releaseId={release.id} configured={isAcrCloudConfigured()} canRun={hasPermission(admin.role, "releases.qc")} />
 
           <section id="qc" className="scroll-mt-20"><ReleaseQcPanel
             releaseId={release.id}

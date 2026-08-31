@@ -85,6 +85,7 @@ enum AuditAction {
   takedown_requested
   takedown_submitted
   labelgrid_sync
+  release_acr_scan
   staff_role_changed
   settings_changed
   payout_action
