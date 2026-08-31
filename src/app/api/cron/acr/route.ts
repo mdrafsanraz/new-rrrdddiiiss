@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { runReleaseAcrScan } from "@/lib/acrcloud/release-scan";
@@ -29,11 +30,15 @@ async function processDueScans(request: Request) {
   }
 
   const now = new Date();
+  const dueWhere: Prisma.ReleaseWhereInput = {
+    acrStatus: { in: ["pending", "running"] },
+    OR: [
+      { acrScheduledAt: { lte: now } },
+      { acrStatus: "pending", acrScheduledAt: null },
+    ],
+  };
   const due = await prisma.release.findMany({
-    where: {
-      acrStatus: { in: ["pending", "running"] },
-      acrScheduledAt: { lte: now },
-    },
+    where: dueWhere,
     orderBy: { acrScheduledAt: "asc" },
     take: BATCH_SIZE,
     select: { id: true },
@@ -44,8 +49,7 @@ async function processDueScans(request: Request) {
     const claimed = await prisma.release.updateMany({
       where: {
         id: release.id,
-        acrStatus: { in: ["pending", "running"] },
-        acrScheduledAt: { lte: now },
+        ...dueWhere,
       },
       data: { acrScheduledAt: new Date(Date.now() + LEASE_MS) },
     });

@@ -1,5 +1,9 @@
 const port = process.env.PORT || "3000";
-const baseUrl = process.env.ACR_WORKER_APP_URL || `http://127.0.0.1:${port}`;
+const baseUrl = (
+  process.env.ACR_WORKER_APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  `http://127.0.0.1:${port}`
+).replace(/\/+$/, "");
 const secret = process.env.CRON_SECRET?.trim();
 const configuredPollMs = Number(process.env.ACR_WORKER_POLL_MS || 10_000);
 const pollMs = Number.isFinite(configuredPollMs)
@@ -30,9 +34,12 @@ async function poll() {
       console.log(`[acr-worker] processed ${result.processed} queued release(s)`);
     }
   } catch (error) {
+    const cause = error instanceof Error && error.cause instanceof Error
+      ? ` (${error.cause.message})`
+      : "";
     console.error(
       "[acr-worker] poll failed:",
-      error instanceof Error ? error.message : error
+      error instanceof Error ? `${error.message}${cause}` : error
     );
   }
 }
