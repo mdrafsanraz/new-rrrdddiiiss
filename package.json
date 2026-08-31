@@ -9,6 +9,7 @@
     "start": "sh scripts/start.sh",
     "lint": "eslint",
     "test:royalties": "tsx --test src/lib/royalties/royalties.test.ts",
+    "import:migrated-users": "node scripts/import-migrated-users.mjs",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",

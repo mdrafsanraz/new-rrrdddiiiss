@@ -1,0 +1,4 @@
+ALTER TABLE "User"
+ADD COLUMN "mustResetPassword" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "migrationNotice" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "migratedAt" TIMESTAMP(3);

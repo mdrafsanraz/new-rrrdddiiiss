@@ -270,6 +270,12 @@ model User {
   email                         String             @unique
   name                          String
   passwordHash                  String
+  /**
+   * Legacy account imported during the platform migration.
+   */
+  mustResetPassword             Boolean            @default(false)
+  migrationNotice               Boolean            @default(false)
+  migratedAt                    DateTime?
   role                          UserRole           @default(user)
   planId                        PlanId             @default(free)
   stripeCustomerId              String?            @unique

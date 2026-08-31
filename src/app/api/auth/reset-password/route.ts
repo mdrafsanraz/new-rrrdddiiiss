@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(body.password, 12);
     const user = await prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash },
+      data: { passwordHash, mustResetPassword: false },
     });
     await consumePasswordResetToken(record.id);
     await setSessionCookie(user.id, user.email);

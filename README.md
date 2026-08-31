@@ -102,6 +102,27 @@ Events: `checkout.session.completed`, `customer.subscription.*`
 | `npm run db:deploy` | Apply migrations (CI / Railway) |
 | `npm run db:migrate` | Create migrations locally |
 
+### Import migrated users
+
+The migration workbook stays outside Git because it contains customer emails.
+Validate it without writing to the database:
+
+```bash
+npm run import:migrated-users -- /path/to/rdistro_user_list-migrate.xlsx
+```
+
+Run the import against the intended database only after the migration flags have
+been deployed:
+
+```bash
+npm run import:migrated-users -- /path/to/rdistro_user_list-migrate.xlsx --apply
+```
+
+The importer is repeatable. It preserves an existing user’s name and password,
+applies the workbook plan, requires a password reset, and enables the catalog
+migration notice. Newly created accounts receive an unusable random password
+hash and must use the emailed reset flow.
+
 ## Architecture notes
 
 See `important.md`: RDISTRO owns users/plans/ownership; LabelGrid is one distributor account; Free release limits count **submitted** releases only.

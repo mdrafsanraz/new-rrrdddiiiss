@@ -23,6 +23,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (user.mustResetPassword) {
+      return NextResponse.json(
+        {
+          code: "PASSWORD_RESET_REQUIRED",
+          error:
+            "Your account has moved to our new platform. Reset your password before signing in.",
+        },
+        { status: 403 }
+      );
+    }
+
     const ok = await bcrypt.compare(body.password, user.passwordHash);
     if (!ok) {
       return NextResponse.json(

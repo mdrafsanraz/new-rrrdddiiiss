@@ -11,6 +11,8 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [resetRequired, setResetRequired] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading">("idle");
 
   return (
@@ -19,6 +21,8 @@ export function LoginForm() {
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
+        setResetRequired(false);
+        setResetSent(false);
         setStatus("loading");
         try {
           const res = await fetch("/api/auth/login", {
@@ -29,6 +33,7 @@ export function LoginForm() {
           const data = await res.json();
           if (!res.ok) {
             setError(data.error ?? "Login failed");
+            setResetRequired(data.code === "PASSWORD_RESET_REQUIRED");
             setStatus("idle");
             return;
           }
@@ -67,9 +72,45 @@ export function LoginForm() {
         </Link>
       </div>
       {error ? (
-        <p className="text-sm font-medium text-red-700" role="alert">
-          {error}
-        </p>
+        <div
+          className="grid gap-3 border-l-2 border-amber-500 bg-amber-500/10 px-4 py-3"
+          role="alert"
+        >
+          <p className="text-sm font-medium text-foreground">{error}</p>
+          {resetRequired ? (
+            resetSent ? (
+              <p className="text-sm text-muted-foreground">
+                Check your inbox for the password reset link.
+              </p>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-fit"
+                onClick={async () => {
+                  setStatus("loading");
+                  try {
+                    const response = await fetch("/api/auth/forgot-password", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email }),
+                    });
+                    setResetSent(response.ok);
+                    if (!response.ok) {
+                      setError("Could not send the reset link. Please try again.");
+                    }
+                  } catch {
+                    setError("Network error. Try again.");
+                  } finally {
+                    setStatus("idle");
+                  }
+                }}
+              >
+                Send password reset link
+              </Button>
+            )
+          ) : null}
+        </div>
       ) : null}
       <Button type="submit" className="h-12" disabled={status === "loading"}>
         {status === "loading" ? "Signing in…" : "Login"}
