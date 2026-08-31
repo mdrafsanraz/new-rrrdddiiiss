@@ -1,0 +1,146 @@
+import { writeAuditLog } from "@/lib/admin/audit";
+import { prisma } from "@/lib/db";
+import { identifyLabelGridAudio, isAcrCloudConfigured, type AcrCloudMatch } from "@/lib/acrcloud/client";
+import { resolveReleaseTrackLabelGridId, resolveTrackAudioUrl } from "@/lib/labelgrid/track-audio";
+
+export type AcrTrackResult = {
+  trackId: string;
+  labelgridTrackId: string | null;
+  trackNumber: number;
+  submittedTitle: string;
+  submittedIsrc: string | null;
+  recognized: boolean;
+  message: string;
+  matches: AcrCloudMatch[];
+  error: string | null;
+};
+
+export type AcrReleaseReport = {
+  status: "completed" | "partial" | "failed";
+  generatedAt: string;
+  results: AcrTrackResult[];
+};
+
+export function parseAcrReport(value: string | null | undefined): AcrReleaseReport | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<AcrReleaseReport>;
+    return parsed.generatedAt && Array.isArray(parsed.results) && parsed.status
+      ? (parsed as AcrReleaseReport)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function markReleaseAcrPending(releaseId: string): Promise<boolean> {
+  if (!isAcrCloudConfigured()) return false;
+  await prisma.release.update({
+    where: { id: releaseId },
+    data: { acrStatus: "pending", acrError: null },
+  });
+  return true;
+}
+
+export async function runReleaseAcrScan(input: {
+  releaseId: string;
+  actorUserId?: string | null;
+  source: "submission" | "resubmission" | "manual_refresh";
+}): Promise<AcrReleaseReport> {
+  if (!isAcrCloudConfigured()) throw new Error("ACRCloud is not configured.");
+  await prisma.release.update({
+    where: { id: input.releaseId },
+    data: { acrStatus: "running", acrError: null },
+  });
+
+  try {
+    const release = await prisma.release.findUnique({
+      where: { id: input.releaseId },
+      select: {
+        labelgridId: true,
+        tracks: {
+          orderBy: { trackNumber: "asc" },
+          select: { id: true, title: true, trackNumber: true, isrc: true, labelgridId: true },
+        },
+      },
+    });
+    if (!release) throw new Error("Release not found.");
+    if (!release.labelgridId) throw new Error("Release is not synced to LabelGrid.");
+
+    const results: AcrTrackResult[] = [];
+    for (const track of release.tracks) {
+      let resolvedTrackId: string | null = track.labelgridId;
+      try {
+        resolvedTrackId = await resolveReleaseTrackLabelGridId({
+          releaseLabelGridId: release.labelgridId,
+          trackLabelGridId: track.labelgridId,
+          trackNumber: track.trackNumber,
+          isrc: track.isrc,
+        });
+        if (!resolvedTrackId) throw new Error("LabelGrid track mapping was not found.");
+        const audio = await resolveTrackAudioUrl(resolvedTrackId);
+        if (!audio.ok) throw new Error("LabelGrid audio is unavailable.");
+        const identification = await identifyLabelGridAudio(audio.url);
+        results.push({
+          trackId: track.id,
+          labelgridTrackId: resolvedTrackId,
+          trackNumber: track.trackNumber,
+          submittedTitle: track.title,
+          submittedIsrc: track.isrc,
+          ...identification,
+          error: null,
+        });
+      } catch (error) {
+        results.push({
+          trackId: track.id,
+          labelgridTrackId: resolvedTrackId,
+          trackNumber: track.trackNumber,
+          submittedTitle: track.title,
+          submittedIsrc: track.isrc,
+          recognized: false,
+          message: "Scan failed",
+          matches: [],
+          error: error instanceof Error ? error.message : "ACR scan failed.",
+        });
+      }
+    }
+
+    const failures = results.filter((result) => result.error).length;
+    const status: AcrReleaseReport["status"] =
+      failures === 0 ? "completed" : failures === results.length ? "failed" : "partial";
+    const report: AcrReleaseReport = {
+      status,
+      generatedAt: new Date().toISOString(),
+      results,
+    };
+    await prisma.release.update({
+      where: { id: input.releaseId },
+      data: {
+        acrStatus: status,
+        acrReportJson: JSON.stringify(report),
+        acrFetchedAt: new Date(report.generatedAt),
+        acrError: failures ? `${failures} of ${results.length} track scans failed.` : null,
+      },
+    });
+    await writeAuditLog({
+      actorUserId: input.actorUserId ?? null,
+      action: "release_acr_scan",
+      targetType: "release",
+      targetId: input.releaseId,
+      summary: `${input.source === "manual_refresh" ? "Refreshed" : "Automatically ran"} ACRCloud recognition for ${results.length} track(s)`,
+      metadata: {
+        source: input.source,
+        recognized: results.filter((result) => result.recognized).length,
+        failed: failures,
+      },
+    });
+    return report;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ACRCloud scan failed.";
+    await prisma.release.update({
+      where: { id: input.releaseId },
+      data: { acrStatus: "failed", acrError: message, acrFetchedAt: new Date() },
+    });
+    throw error;
+  }
+}

@@ -535,6 +535,11 @@ model Release {
   qcStale                 Boolean       @default(false)
   qcEnabled               Boolean       @default(true)
   qcChecksInProgress      Boolean       @default(false)
+  /** Cached ACRCloud identification report for admin review. */
+  acrStatus               String?
+  acrReportJson           String        @default("{}")
+  acrFetchedAt            DateTime?
+  acrError                String?
   /**
    * Internal hold — not a LabelGrid state.
    */

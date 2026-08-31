@@ -27,6 +27,7 @@ import { DocumentReviewForm } from "@/components/admin/document-review-form";
 import { fetchLiveRelease, type LiveRelease } from "@/lib/labelgrid/live-release";
 import { ReleaseAcrPanel } from "@/components/admin/release-acr-panel";
 import { isAcrCloudConfigured } from "@/lib/acrcloud/client";
+import { parseAcrReport } from "@/lib/acrcloud/release-scan";
 
 type Props = { params: Promise<{ id: string }>; searchParams?: Promise<{ queue?: string }> };
 
@@ -112,6 +113,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
 
   const meta = parseJsonObject(release.metadataJson) as Record<string, unknown>;
   const qc = parseCachedQcReport(release.qcReportJson);
+  const acrReport = parseAcrReport(release.acrReportJson);
   const stores = safeJsonArray(release.storesJson);
   const territories = safeJsonArray(release.territoriesJson);
   let delivery: Record<string, unknown> | null = null;
@@ -484,7 +486,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
             </ul>
           </Section>
 
-          <ReleaseAcrPanel releaseId={release.id} configured={isAcrCloudConfigured()} canRun={hasPermission(admin.role, "releases.qc")} />
+          <ReleaseAcrPanel releaseId={release.id} configured={isAcrCloudConfigured()} canRun={hasPermission(admin.role, "releases.qc")} initialReport={acrReport} initialStatus={release.acrStatus} fetchedAt={release.acrFetchedAt?.toISOString() ?? null} initialError={release.acrError} />
 
           <section id="qc" className="scroll-mt-20"><ReleaseQcPanel
             releaseId={release.id}

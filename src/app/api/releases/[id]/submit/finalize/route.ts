@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { assertCanSubmitRelease } from "@/lib/entitlements/server";
 import { getConfiguredPlan } from "@/lib/plans";
 import { logReleaseActivity } from "@/lib/releases/activity";
@@ -6,8 +6,10 @@ import { isFinalRejection } from "@/lib/releases/status";
 import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { prisma } from "@/lib/db";
+import { markReleaseAcrPending, runReleaseAcrScan } from "@/lib/acrcloud/release-scan";
 
 type Params = { params: Promise<{ id: string }> };
+export const maxDuration = 300;
 
 /**
  * Stage 8 (Finalize). By the time this runs, Stages 2-7 have already
@@ -140,6 +142,16 @@ export async function POST(_request: Request, { params }: Params) {
     where: { id },
     include: { artist: true, tracks: true },
   });
+
+  if (await markReleaseAcrPending(id)) {
+    after(async () => {
+      await runReleaseAcrScan({
+        releaseId: id,
+        actorUserId: user.id,
+        source: "submission",
+      }).catch((error) => console.error("[acrcloud/auto-scan]", error));
+    });
+  }
 
   return NextResponse.json({ release: fresh });
 }
