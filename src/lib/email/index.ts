@@ -116,6 +116,25 @@ export async function notifyReleaseReviewAction(input: ReleaseReviewEmail) {
   }
 }
 
+export async function notifyReleaseStatusChanged(input: {
+  to: string;
+  name: string;
+  releaseId: string;
+  releaseTitle: string;
+  statusLabel: string;
+  statusDescription: string;
+}) {
+  return sendBrandedEmail({
+    to: input.to,
+    subject: `Release update: ${input.releaseTitle} is ${input.statusLabel}`,
+    preheader: `The status of ${input.releaseTitle} changed to ${input.statusLabel}.`,
+    heading: `Release ${input.statusLabel}`,
+    message: `Hi ${input.name}, the status of “${input.releaseTitle}” is now ${input.statusLabel}.\n\n${input.statusDescription}`,
+    actionUrl: appUrl(`/dashboard/releases/${input.releaseId}`),
+    actionLabel: "View release",
+  });
+}
+
 type BrandedEmail = {
   to: string;
   subject: string;

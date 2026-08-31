@@ -4,6 +4,7 @@ import { getRelease } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import {
+  getUserFacingReleaseStatus,
   mapLabelGridStatusToLocalStatus,
   normalizeReleaseStatus,
   type ReleaseStatusValue,
@@ -372,13 +373,149 @@ export async function applyLabelGridReviewStatusWebhook(payload: {
   const providerReleaseId = String(payload.release_id);
   const release = await prisma.release.findFirst({
     where: { labelgridId: providerReleaseId },
+    include: { user: { select: { name: true, email: true } } },
   });
   if (!release) {
     return { ok: false as const, error: "Release not found for LabelGrid id" };
   }
 
-  return reconcileLabelGridReleaseStatus(release.id, {
-    deep: true,
-    forceLog: true,
+  const reviewStatus = payload.new_status?.trim().toLowerCase() || null;
+  const mapped = mapLabelGridStatusToLocalStatus(reviewStatus);
+  if (!mapped) {
+    await prisma.release.update({
+      where: { id: release.id },
+      data: { labelgridReviewStatus: reviewStatus, lastSyncedAt: new Date() },
+    });
+    return {
+      ok: true as const,
+      release,
+      status: normalizeReleaseStatus(release.status),
+      userStatusChanged: false,
+    };
+  }
+
+  const previousStatus = normalizeReleaseStatus(release.status);
+  const userStatusChanged =
+    getUserFacingReleaseStatus(previousStatus) !==
+    getUserFacingReleaseStatus(mapped);
+
+  await prisma.release.update({
+    where: { id: release.id },
+    data: {
+      status: mapped,
+      labelgridReviewStatus: reviewStatus,
+      lastSyncedAt: new Date(),
+      permanentlyLocked:
+        mapped === "labelgrid_rejected" ? true : release.permanentlyLocked,
+      syncError: null,
+    },
   });
+
+  if (previousStatus !== mapped) {
+    await logReleaseActivity({
+      releaseId: release.id,
+      type:
+        mapped === "labelgrid_changes_required"
+          ? "labelgrid_changes_required"
+          : mapped === "labelgrid_rejected"
+            ? "labelgrid_rejected"
+            : mapped === "labelgrid_approved"
+              ? "labelgrid_approved"
+              : "labelgrid_in_review",
+      title: titleForStatus(mapped),
+      description: "Distribution review status updated.",
+      metadata: {
+        previousReviewStatus: payload.previous_status ?? null,
+        reviewStatus,
+        source: "labelgrid_webhook",
+      },
+    });
+  }
+
+  if (reviewStatus === "require_changes" || reviewStatus === "rejected") {
+    try {
+      await syncLabelGridReviewIssues(release.id, providerReleaseId);
+    } catch (error) {
+      console.error("[labelgrid-webhook] Review issue sync failed", error);
+    }
+  }
+
+  return {
+    ok: true as const,
+    release,
+    status: mapped,
+    userStatusChanged,
+  };
+}
+
+/** Apply release-level delivery events while keeping one local/user-facing status. */
+export async function applyLabelGridDeliveryStatusWebhook(payload: {
+  release_id: number | string;
+  delivery_status?: string | null;
+}) {
+  const providerReleaseId = String(payload.release_id);
+  const release = await prisma.release.findFirst({
+    where: { labelgridId: providerReleaseId },
+    include: { user: { select: { name: true, email: true } } },
+  });
+  if (!release) {
+    return { ok: false as const, error: "Release not found for LabelGrid id" };
+  }
+
+  const previousStatus = normalizeReleaseStatus(release.status);
+  const eventMapped = mapLabelGridStatusToLocalStatus(
+    release.labelgridReviewStatus,
+    release.deliveryState,
+    false,
+    payload.delivery_status?.trim().toLowerCase() || null
+  );
+
+  let nextStatus = eventMapped;
+  if (eventMapped) {
+    await prisma.release.update({
+      where: { id: release.id },
+      data: {
+        status: eventMapped,
+        lastSyncedAt: new Date(),
+        syncError: null,
+      },
+    });
+  } else {
+    const reconciled = await reconcileLabelGridReleaseStatus(release.id, {
+      deep: true,
+    });
+    if (!reconciled.ok || !reconciled.status) {
+      return {
+        ok: false as const,
+        error: reconciled.error ?? "Delivery status reconciliation failed",
+      };
+    }
+    nextStatus = reconciled.status;
+  }
+
+  if (!nextStatus) {
+    return { ok: false as const, error: "Delivery event had no usable status" };
+  }
+
+  if (eventMapped && previousStatus !== nextStatus) {
+    await logReleaseActivity({
+      releaseId: release.id,
+      type: nextStatus === "live" ? "live" : "delivering",
+      title: titleForStatus(nextStatus),
+      description: "Distribution delivery status updated.",
+      metadata: {
+        deliveryStatus: payload.delivery_status ?? null,
+        source: "labelgrid_webhook",
+      },
+    });
+  }
+
+  return {
+    ok: true as const,
+    release,
+    status: nextStatus,
+    userStatusChanged:
+      getUserFacingReleaseStatus(previousStatus) !==
+      getUserFacingReleaseStatus(nextStatus),
+  };
 }
