@@ -6,7 +6,7 @@ import { withdrawReleaseFromReview } from "@/lib/labelgrid";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/admin/audit";
 import { logReleaseActivity } from "@/lib/releases/activity";
-import { emailUrl, notifyReleaseReviewAction } from "@/lib/email";
+import { emailUrl, notifyReleaseReviewAction, notifyReleaseStatusChanged } from "@/lib/email";
 import {
   canAdminDecide,
   canAdminSendBackToDraft,
@@ -201,6 +201,7 @@ export async function POST(request: Request, { params }: Params) {
         reviewedById: gate.admin.id,
         labelgridReviewStatus: release.labelgridId ? "draft" : null,
       },
+      include: { user: true },
     });
 
     await logReleaseActivity({
@@ -218,6 +219,16 @@ export async function POST(request: Request, { params }: Params) {
       summary: `Sent ${release.title} back to draft`,
       metadata: { notes: userNotes, kind: "send_back_to_draft" },
     });
+    if (fresh.user.email) {
+      await notifyReleaseStatusChanged({
+        to: fresh.user.email,
+        name: fresh.user.name,
+        releaseId: id,
+        releaseTitle: fresh.title,
+        statusLabel: "back to draft",
+        statusDescription: userNotes,
+      });
+    }
 
     return NextResponse.json({ release: fresh });
   } catch (error) {
