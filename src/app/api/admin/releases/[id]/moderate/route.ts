@@ -188,6 +188,14 @@ export async function POST(request: Request, { params }: Params) {
       body.notes?.trim() ||
       "Your release was sent back to draft. Re-upload artwork and audio, then submit again.";
 
+    // Clear any open review issues (e.g. an outstanding document request) —
+    // otherwise they'd keep gating Edit Release on the view page even
+    // though the release is starting over as a draft.
+    await prisma.releaseReviewIssue.updateMany({
+      where: { releaseId: id, resolved: false },
+      data: { resolved: true, resolvedAt: new Date(), status: "resubmitted" },
+    });
+
     const fresh = await prisma.release.update({
       where: { id },
       data: {
