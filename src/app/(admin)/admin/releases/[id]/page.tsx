@@ -115,6 +115,8 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
   const meta = parseJsonObject(release.metadataJson) as Record<string, unknown>;
   const qc = parseCachedQcReport(release.qcReportJson);
   const acrReport = parseAcrReport(release.acrReportJson);
+  const acrcloudReport = parseAcrReport(release.acrcloudReportJson) ?? acrReport;
+  const auddReport = parseAcrReport(release.auddReportJson) ?? acrReport;
   const stores = safeJsonArray(release.storesJson);
   const territories = safeJsonArray(release.territoriesJson);
   let delivery: Record<string, unknown> | null = null;
@@ -487,7 +489,20 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
             </ul>
           </Section>
 
-          <ReleaseAcrPanel releaseId={release.id} acrConfigured={isAcrCloudConfigured()} auddConfigured={isAuddConfigured()} canRun={hasPermission(admin.role, "releases.qc")} initialReport={acrReport} initialStatus={release.acrStatus} fetchedAt={release.acrFetchedAt?.toISOString() ?? null} initialError={release.acrError} />
+          <ReleaseAcrPanel
+            releaseId={release.id}
+            acrConfigured={isAcrCloudConfigured()}
+            auddConfigured={isAuddConfigured()}
+            canRun={hasPermission(admin.role, "releases.qc")}
+            initialAcrcloudReport={acrcloudReport}
+            initialAuddReport={auddReport}
+            initialAcrcloudStatus={release.acrcloudStatus ?? release.acrStatus}
+            initialAuddStatus={release.auddStatus ?? release.acrStatus}
+            acrcloudFetchedAt={(release.acrcloudFetchedAt ?? release.acrFetchedAt)?.toISOString() ?? null}
+            auddFetchedAt={(release.auddFetchedAt ?? release.acrFetchedAt)?.toISOString() ?? null}
+            initialAcrcloudError={release.acrcloudError ?? release.acrError}
+            initialAuddError={release.auddError ?? release.acrError}
+          />
 
           <section id="qc" className="scroll-mt-20"><ReleaseQcPanel
             releaseId={release.id}

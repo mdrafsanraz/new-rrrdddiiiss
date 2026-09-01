@@ -21,6 +21,10 @@ export type AcrReleaseReport = {
   status: "completed" | "partial" | "failed";
   generatedAt: string;
   results: AcrTrackResult[];
+  providerReports?: {
+    acrcloud: AcrReleaseReport | null;
+    audd: AcrReleaseReport | null;
+  };
 };
 
 const AUTOMATIC_SCAN_LEASE_MS = 10 * 60 * 1000;
@@ -58,9 +62,17 @@ export async function markReleaseAcrPending(
 ): Promise<boolean> {
   if (!isAcrCloudConfigured() && !isAuddConfigured()) return false;
   const scheduledAt = new Date(Date.now() + Math.max(0, delayMs));
+  const acrConfigured = isAcrCloudConfigured();
+  const auddConfigured = isAuddConfigured();
   await prisma.release.update({
     where: { id: releaseId },
-    data: { acrStatus: "pending", acrScheduledAt: scheduledAt, acrError: null },
+    data: {
+      acrStatus: "pending",
+      acrScheduledAt: scheduledAt,
+      acrError: null,
+      ...(acrConfigured ? { acrcloudStatus: "pending", acrcloudError: null } : {}),
+      ...(auddConfigured ? { auddStatus: "pending", auddError: null } : {}),
+    },
   });
   return true;
 }
@@ -83,6 +95,8 @@ export async function runReleaseAcrScan(input: {
       // terminated while waiting on LabelGrid or ACRCloud.
       acrScheduledAt: new Date(Date.now() + AUTOMATIC_SCAN_LEASE_MS),
       acrError: null,
+      ...(acrConfigured ? { acrcloudStatus: "running", acrcloudError: null } : {}),
+      ...(auddConfigured ? { auddStatus: "running", auddError: null } : {}),
     },
   });
 
@@ -180,13 +194,48 @@ export async function runReleaseAcrScan(input: {
       }
     }
 
+    const acrFailures = acrConfigured
+      ? results.filter((result) => Boolean(result.error)).length
+      : 0;
+    const auddFailures = auddConfigured
+      ? results.filter((result) => Boolean(result.audd?.error)).length
+      : 0;
     const failures = results.filter((result) => result.error || result.audd?.error).length;
+    const providerStatus = (failureCount: number): AcrReleaseReport["status"] =>
+      failureCount === 0 ? "completed" : failureCount === results.length ? "failed" : "partial";
     const status: AcrReleaseReport["status"] =
       failures === 0 ? "completed" : failures === results.length ? "failed" : "partial";
+    const generatedAt = new Date().toISOString();
+    const acrcloudReport: AcrReleaseReport | null = acrConfigured
+      ? {
+          status: providerStatus(acrFailures),
+          generatedAt,
+          results: results.map((result) => ({ ...result, audd: null })),
+        }
+      : null;
+    const auddReport: AcrReleaseReport | null = auddConfigured
+      ? {
+          status: providerStatus(auddFailures),
+          generatedAt,
+          results: results.map((result) => ({
+            trackId: result.trackId,
+            labelgridTrackId: result.labelgridTrackId,
+            trackNumber: result.trackNumber,
+            submittedTitle: result.submittedTitle,
+            submittedIsrc: result.submittedIsrc,
+            recognized: false,
+            message: "Stored in the AudD provider result.",
+            matches: [],
+            error: null,
+            audd: result.audd ?? null,
+          })),
+        }
+      : null;
     const report: AcrReleaseReport = {
       status,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       results,
+      providerReports: { acrcloud: acrcloudReport, audd: auddReport },
     };
     await prisma.release.update({
       where: { id: input.releaseId },
@@ -196,6 +245,22 @@ export async function runReleaseAcrScan(input: {
         acrFetchedAt: new Date(report.generatedAt),
         acrScheduledAt: null,
         acrError: failures ? `${failures} of ${results.length} track scans failed.` : null,
+        ...(acrcloudReport
+          ? {
+              acrcloudStatus: acrcloudReport.status,
+              acrcloudReportJson: JSON.stringify(acrcloudReport),
+              acrcloudFetchedAt: new Date(acrcloudReport.generatedAt),
+              acrcloudError: acrFailures ? `${acrFailures} of ${results.length} track scans failed.` : null,
+            }
+          : {}),
+        ...(auddReport
+          ? {
+              auddStatus: auddReport.status,
+              auddReportJson: JSON.stringify(auddReport),
+              auddFetchedAt: new Date(auddReport.generatedAt),
+              auddError: auddFailures ? `${auddFailures} of ${results.length} track scans failed.` : null,
+            }
+          : {}),
       },
     });
     await writeAuditLog({
@@ -221,6 +286,12 @@ export async function runReleaseAcrScan(input: {
         acrScheduledAt: null,
         acrError: message,
         acrFetchedAt: new Date(),
+        ...(acrConfigured
+          ? { acrcloudStatus: "failed", acrcloudError: message, acrcloudFetchedAt: new Date() }
+          : {}),
+        ...(auddConfigured
+          ? { auddStatus: "failed", auddError: message, auddFetchedAt: new Date() }
+          : {}),
       },
     });
     throw error;

@@ -44,17 +44,36 @@ type Result = {
   } | null;
 };
 
-export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canRun, initialReport, initialStatus, fetchedAt, initialError }: { releaseId: string; acrConfigured: boolean; auddConfigured: boolean; canRun: boolean; initialReport: AcrReleaseReport | null; initialStatus: string | null; fetchedAt: string | null; initialError: string | null }) {
+type ReleaseAcrPanelProps = {
+  releaseId: string;
+  acrConfigured: boolean;
+  auddConfigured: boolean;
+  canRun: boolean;
+  initialAcrcloudReport: AcrReleaseReport | null;
+  initialAuddReport: AcrReleaseReport | null;
+  initialAcrcloudStatus: string | null;
+  initialAuddStatus: string | null;
+  acrcloudFetchedAt: string | null;
+  auddFetchedAt: string | null;
+  initialAcrcloudError: string | null;
+  initialAuddError: string | null;
+};
+
+export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canRun, initialAcrcloudReport, initialAuddReport, initialAcrcloudStatus, initialAuddStatus, acrcloudFetchedAt, auddFetchedAt, initialAcrcloudError, initialAuddError }: ReleaseAcrPanelProps) {
   const configured = acrConfigured || auddConfigured;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [results, setResults] = useState<Result[] | null>(initialReport?.results ?? null);
-  const [status, setStatus] = useState(initialStatus);
-  const [completedAt, setCompletedAt] = useState(fetchedAt);
+  const [acrcloudResults, setAcrcloudResults] = useState<Result[] | null>(initialAcrcloudReport?.results ?? null);
+  const [auddResults, setAuddResults] = useState<Result[] | null>(initialAuddReport?.results ?? null);
+  const [acrcloudStatus, setAcrcloudStatus] = useState(initialAcrcloudStatus);
+  const [auddStatus, setAuddStatus] = useState(initialAuddStatus);
+  const [acrcloudCompletedAt, setAcrcloudCompletedAt] = useState(acrcloudFetchedAt);
+  const [auddCompletedAt, setAuddCompletedAt] = useState(auddFetchedAt);
 
   async function run() {
     setBusy(true);
-    setStatus("running");
+    if (acrConfigured) setAcrcloudStatus("running");
+    if (auddConfigured) setAuddStatus("running");
     setError("");
     try {
       const response = await fetch(`/api/admin/releases/${releaseId}/acr`, {
@@ -63,9 +82,19 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "ACRCloud scan failed.");
-      setResults(payload.results);
-      setStatus(payload.report.status);
-      setCompletedAt(payload.report.generatedAt);
+      const providerReports = payload.report.providerReports as AcrReleaseReport["providerReports"] | undefined;
+      const acrcloudReport = providerReports?.acrcloud ?? (acrConfigured ? payload.report : null);
+      const auddReport = providerReports?.audd ?? (auddConfigured ? payload.report : null);
+      if (acrcloudReport) {
+        setAcrcloudResults(acrcloudReport.results);
+        setAcrcloudStatus(acrcloudReport.status);
+        setAcrcloudCompletedAt(acrcloudReport.generatedAt);
+      }
+      if (auddReport) {
+        setAuddResults(auddReport.results);
+        setAuddStatus(auddReport.status);
+        setAuddCompletedAt(auddReport.generatedAt);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "ACRCloud scan failed.");
     } finally {
@@ -80,7 +109,7 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
           <h2 className="text-sm font-semibold">Audio recognition</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Cross-check submitted masters with {acrConfigured && auddConfigured ? "ACRCloud and AudD" : acrConfigured ? "ACRCloud" : "AudD"} before reviewing Preflight QC.</p>
         </div>
-        <div className="flex items-center gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{busy ? "Running" : status?.replaceAll("_", " ") ?? "Not run"}</span>{canRun && configured ? <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={busy} onClick={run}>{busy ? "Scanning tracks…" : "Scan again"}</Button> : null}</div>
+        <div className="flex items-center gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{busy ? "Running" : "Provider caches"}</span>{canRun && configured ? <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={busy} onClick={run}>{busy ? "Scanning tracks…" : "Scan again"}</Button> : null}</div>
       </div>
       <div className="p-4">
         {!configured ? <p className="text-sm text-muted-foreground">Configure ACRCloud and/or AUDD_API_TOKEN to enable recognition.</p> : null}
@@ -90,29 +119,30 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
             <ProviderCard
               provider="ACRCloud"
               configured={acrConfigured}
-              results={results}
-              completedAt={completedAt}
-              status={status}
+              results={acrcloudResults}
+              completedAt={acrcloudCompletedAt}
+              status={acrcloudStatus}
+              cacheError={initialAcrcloudError}
               kind="acrcloud"
             />
             <ProviderCard
               provider="AudD"
               configured={auddConfigured}
-              results={results}
-              completedAt={completedAt}
-              status={status}
+              results={auddResults}
+              completedAt={auddCompletedAt}
+              status={auddStatus}
+              cacheError={initialAuddError}
               kind="audd"
             />
           </div>
         ) : null}
-        {configured && canRun && !results && initialError ? <p className="mt-3 text-sm text-red-800">{initialError}</p> : null}
         {error ? <p className="mt-3 text-sm text-red-800" role="alert">{error}</p> : null}
       </div>
     </section>
   );
 }
 
-function ProviderCard({ provider, configured, results, completedAt, status, kind }: { provider: "ACRCloud" | "AudD"; configured: boolean; results: Result[] | null; completedAt: string | null; status: string | null; kind: "acrcloud" | "audd" }) {
+function ProviderCard({ provider, configured, results, completedAt, status, cacheError, kind }: { provider: "ACRCloud" | "AudD"; configured: boolean; results: Result[] | null; completedAt: string | null; status: string | null; cacheError: string | null; kind: "acrcloud" | "audd" }) {
   const recognized = results?.filter((result) => kind === "acrcloud" ? result.recognized : result.audd?.recognized).length ?? 0;
   const failures = results?.filter((result) => kind === "acrcloud" ? Boolean(result.error) : Boolean(result.audd?.error)).length ?? 0;
 
@@ -142,10 +172,10 @@ function ProviderCard({ provider, configured, results, completedAt, status, kind
           {provider === "ACRCloud" ? "Add the ACRCloud credentials to enable this service." : "Add AUDD_API_TOKEN to enable this service."}
         </p>
       ) : !results ? (
-        <p className="px-4 py-5 text-sm text-muted-foreground">
-          {status === "pending" || status === "running"
+        <p className={cacheError ? "px-4 py-5 text-sm text-red-800" : "px-4 py-5 text-sm text-muted-foreground"}>
+          {cacheError ?? (status === "pending" || status === "running"
             ? "Automatic recognition is running. Results will be cached when it completes."
-            : "No cached result is available yet."}
+            : "No cached result is available yet.")}
         </p>
       ) : (
         <div className="divide-y divide-border">

@@ -550,11 +550,20 @@ model Release {
   qcEnabled               Boolean       @default(true)
   qcChecksInProgress      Boolean       @default(false)
   /**
-   * Cached ACRCloud identification report for admin review.
+   * Combined recognition queue state and legacy report. Provider results are
+   * persisted independently in the ACRCloud and AudD cache fields below.
    */
   acrStatus               String?
   acrReportJson           String        @default("{}")
   acrFetchedAt            DateTime?
+  acrcloudStatus          String?
+  acrcloudReportJson      String        @default("{}")
+  acrcloudFetchedAt       DateTime?
+  acrcloudError           String?
+  auddStatus              String?
+  auddReportJson          String        @default("{}")
+  auddFetchedAt           DateTime?
+  auddError               String?
   /**
    * Due time/lease for the durable webhook-triggered and manual ACR scan queue.
    */
