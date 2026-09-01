@@ -162,11 +162,11 @@ function validateStep(
       ) {
         return "For a single, the release title and track title must match exactly.";
       }
-      if (t.audioProcessingError) {
-        return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}” — please re-upload it.`;
+      if (t.audioProcessingError && !t.audioFile) {
+        return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}”. Select a replacement file; it will upload during submission.`;
       }
       if (!t.audioFile && !t.audioUrl) {
-        return `Please upload audio for “${t.title.trim() || `track ${i + 1}`}”.`;
+        return `Please select audio for “${t.title.trim() || `track ${i + 1}`}”. It will upload during submission.`;
       }
       if (t.licenseType === "cover" && !t.originalTrackLink?.trim()) {
         return `Please add a link to the original recording for “${t.title.trim() || `track ${i + 1}`}” (required for cover licenses).`;

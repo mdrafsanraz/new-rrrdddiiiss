@@ -129,11 +129,13 @@ function TrackAudioDropzone({
         previewUrl={localPreview}
         helper={checking ? "Checking format and bit depth..." : undefined}
         audioStatus={
-          track.audioProcessing
-            ? "processing"
-            : track.audioProcessingError
-              ? "failed"
-              : null
+          track.audioFile
+            ? null
+            : track.audioProcessing
+              ? "processing"
+              : track.audioProcessingError
+                ? "failed"
+                : null
         }
         onFile={(file) => void selectFile(file)}
       />
@@ -362,7 +364,12 @@ export function StepTracks({
                       });
                       return;
                     }
-                    updateTrack(t.clientId, { audioFile: file });
+                    updateTrack(t.clientId, {
+                      audioFile: file,
+                      audioUrl: null,
+                      audioProcessing: false,
+                      audioProcessingError: null,
+                    });
                     const url = URL.createObjectURL(file);
                     const audio = new Audio(url);
                     audio.addEventListener("loadedmetadata", () => {
