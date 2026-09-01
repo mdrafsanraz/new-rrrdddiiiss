@@ -1,4 +1,5 @@
 import {
+  LabelGridApiError,
   labelgridFetch,
   labelgridFetchRaw,
   labelgridUpload,
@@ -40,6 +41,37 @@ export function createArtist(body: {
     method: "POST",
     body,
   });
+}
+
+type CreateArtistInput = Parameters<typeof createArtist>[0];
+
+async function findArtistByExactName(name: string): Promise<ArtistData | null> {
+  const normalizedName = name.trim().toLocaleLowerCase();
+  const response = await listArtists(1, 100, name.trim());
+  return response.data?.find(
+    (candidate) => candidate.artist_name?.trim().toLocaleLowerCase() === normalizedName
+  ) ?? null;
+}
+
+/** Reuse LabelGrid's unique artist-name record, including create race recovery. */
+export async function createOrReuseArtist(body: CreateArtistInput): Promise<{ data: ArtistData }> {
+  const existing = await findArtistByExactName(body.artist_name);
+  if (existing) return { data: existing };
+
+  try {
+    return await createArtist(body);
+  } catch (error) {
+    const duplicateName =
+      error instanceof LabelGridApiError &&
+      error.status === 422 &&
+      error.body !== null &&
+      typeof error.body === "object" &&
+      Array.isArray((error.body as { errors?: { artist_name?: unknown } }).errors?.artist_name);
+    if (!duplicateName) throw error;
+    const raced = await findArtistByExactName(body.artist_name);
+    if (!raced) throw error;
+    return { data: raced };
+  }
 }
 
 export function getArtist(id: number | string) {

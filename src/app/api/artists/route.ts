@@ -6,7 +6,7 @@ import {
   assertCanCreateArtist,
   getUserUsage,
 } from "@/lib/entitlements/server";
-import { createArtist } from "@/lib/labelgrid";
+import { createOrReuseArtist } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
 
 const createSchema = z.object({
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     let labelgridId: string | null = null;
     if (isLabelGridLive()) {
-      const provider = await createArtist({
+      const provider = await createOrReuseArtist({
         artist_name: body.name.trim(),
         ...(body.fullName?.trim() ? { full_name: body.fullName.trim() } : {}),
         ...(body.email?.trim() ? { email: body.email.trim() } : {}),
@@ -55,6 +55,25 @@ export async function POST(request: Request) {
         ...(body.bioShort?.trim() ? { bio_short: body.bioShort.trim() } : {}),
       });
       labelgridId = String(provider.data.id);
+
+      const existing = await prisma.artist.findFirst({
+        where: {
+          userId: user.id,
+          OR: [
+            { labelgridId },
+            { name: { equals: body.name.trim(), mode: "insensitive" } },
+          ],
+        },
+      });
+      if (existing) {
+        const artist = existing.labelgridId
+          ? existing
+          : await prisma.artist.update({
+              where: { id: existing.id },
+              data: { labelgridId },
+            });
+        return NextResponse.json({ artist, reused: true });
+      }
     }
 
     const artist = await prisma.artist.create({
