@@ -83,10 +83,117 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
         <div className="flex items-center gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{busy ? "Running" : status?.replaceAll("_", " ") ?? "Not run"}</span>{canRun && configured ? <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={busy} onClick={run}>{busy ? "Scanning tracks…" : "Scan again"}</Button> : null}</div>
       </div>
       <div className="p-4">
-        {!configured ? <p className="text-sm text-muted-foreground">Configure ACRCloud and/or AUDD_API_TOKEN to enable recognition.</p> : !canRun ? <p className="text-sm text-muted-foreground">You do not have permission to run release QC checks.</p> : !results && (status === "pending" || status === "running") ? <p className="text-sm text-muted-foreground">The audio-transcode webhook queued this scan. Refresh the page shortly to load its report.</p> : !results ? <p className="text-sm text-muted-foreground">{initialError ?? "No cached report yet. A scan starts automatically when LabelGrid confirms audio transcoding; scan again to request a fresh report now."}</p> : <div className="space-y-3"><p className="text-[11px] text-muted-foreground">Cached report{completedAt ? ` from ${new Date(completedAt).toLocaleString()}` : ""}. “Scan again” requests fresh results from every configured provider.</p>{results.map((result) => <article key={result.trackId} className="border border-border p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold">{String(result.trackNumber).padStart(2, "0")} / {result.submittedTitle}</p><p className="mt-0.5 text-xs text-muted-foreground">Submitted ISRC: {result.submittedIsrc ?? "Not assigned"}</p></div></div><div className="mt-3 grid gap-3 lg:grid-cols-2"><div className="bg-muted/25 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide">ACRCloud</p><p className={result.error ? "mt-2 text-xs text-red-800" : "mt-2 text-xs"}>{result.error ?? (result.recognized ? "Match found" : result.message)}</p>{result.matches[0] ? <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><Item label="Title" value={result.matches[0].title} /><Item label="Artist" value={result.matches[0].artists.join(", ")} /><Item label="ISRC" value={result.matches[0].isrc} /><Item label="Score" value={result.matches[0].score === null ? null : `${result.matches[0].score}%`} /></dl> : null}</div><div className="bg-muted/25 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide">AudD</p><p className={result.audd?.error ? "mt-2 text-xs text-red-800" : "mt-2 text-xs"}>{result.audd?.error ?? (result.audd?.recognized ? "Match found" : result.audd?.message ?? "Not configured for this scan")}</p>{result.audd?.match ? <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><Item label="Title" value={result.audd.match.title} /><Item label="Artist" value={result.audd.match.artist} /><Item label="ISRC" value={result.audd.match.isrc} /><Item label="Album" value={result.audd.match.album} /></dl> : null}</div></div></article>)}</div>}
+        {!configured ? <p className="text-sm text-muted-foreground">Configure ACRCloud and/or AUDD_API_TOKEN to enable recognition.</p> : null}
+        {configured && !canRun ? <p className="text-sm text-muted-foreground">You do not have permission to run release QC checks.</p> : null}
+        {configured && canRun ? (
+          <div className="grid items-start gap-4 xl:grid-cols-2">
+            <ProviderCard
+              provider="ACRCloud"
+              configured={acrConfigured}
+              results={results}
+              completedAt={completedAt}
+              status={status}
+              kind="acrcloud"
+            />
+            <ProviderCard
+              provider="AudD"
+              configured={auddConfigured}
+              results={results}
+              completedAt={completedAt}
+              status={status}
+              kind="audd"
+            />
+          </div>
+        ) : null}
+        {configured && canRun && !results && initialError ? <p className="mt-3 text-sm text-red-800">{initialError}</p> : null}
         {error ? <p className="mt-3 text-sm text-red-800" role="alert">{error}</p> : null}
       </div>
     </section>
+  );
+}
+
+function ProviderCard({ provider, configured, results, completedAt, status, kind }: { provider: "ACRCloud" | "AudD"; configured: boolean; results: Result[] | null; completedAt: string | null; status: string | null; kind: "acrcloud" | "audd" }) {
+  const recognized = results?.filter((result) => kind === "acrcloud" ? result.recognized : result.audd?.recognized).length ?? 0;
+  const failures = results?.filter((result) => kind === "acrcloud" ? Boolean(result.error) : Boolean(result.audd?.error)).length ?? 0;
+
+  return (
+    <article className="border border-border bg-background">
+      <header className="border-b border-border px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">{provider}</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {configured ? "Independent recognition results" : "Recognition service is not configured"}
+            </p>
+          </div>
+          <span className="border border-border bg-muted/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {!configured ? "Not configured" : results ? "Cached" : status === "pending" || status === "running" ? "Processing" : "No cache"}
+          </span>
+        </div>
+        <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
+          <Item label="Matches" value={results ? String(recognized) : null} />
+          <Item label="Errors" value={results ? String(failures) : null} />
+          <Item label="Cached at" value={results && completedAt ? new Date(completedAt).toLocaleString() : null} />
+        </dl>
+      </header>
+
+      {!configured ? (
+        <p className="px-4 py-5 text-sm text-muted-foreground">
+          {provider === "ACRCloud" ? "Add the ACRCloud credentials to enable this service." : "Add AUDD_API_TOKEN to enable this service."}
+        </p>
+      ) : !results ? (
+        <p className="px-4 py-5 text-sm text-muted-foreground">
+          {status === "pending" || status === "running"
+            ? "Automatic recognition is running. Results will be cached when it completes."
+            : "No cached result is available yet."}
+        </p>
+      ) : (
+        <div className="divide-y divide-border">
+          {results.map((result) => (
+            <ProviderTrackResult key={result.trackId} result={result} kind={kind} />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function ProviderTrackResult({ result, kind }: { result: Result; kind: "acrcloud" | "audd" }) {
+  const match = kind === "acrcloud" ? result.matches[0] : result.audd?.match;
+  const recognized = kind === "acrcloud" ? result.recognized : Boolean(result.audd?.recognized);
+  const providerError = kind === "acrcloud" ? result.error : result.audd?.error;
+  const message = kind === "acrcloud" ? result.message : result.audd?.message ?? "No result returned";
+
+  return (
+    <div className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">{String(result.trackNumber).padStart(2, "0")} / {result.submittedTitle}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Submitted ISRC: {result.submittedIsrc ?? "Not assigned"}</p>
+        </div>
+        <span className={providerError ? "text-xs font-medium text-red-800" : recognized ? "text-xs font-medium text-emerald-700" : "text-xs font-medium text-muted-foreground"}>
+          {providerError ? "Error" : recognized ? "Match found" : "No match"}
+        </span>
+      </div>
+      {providerError ? <p className="mt-3 text-xs text-red-800">{providerError}</p> : null}
+      {!providerError && !match ? <p className="mt-3 text-xs text-muted-foreground">{message}</p> : null}
+      {kind === "acrcloud" && result.matches[0] ? (
+        <dl className="mt-3 grid gap-3 bg-muted/25 p-3 text-xs sm:grid-cols-2">
+          <Item label="Title" value={result.matches[0].title} />
+          <Item label="Artist" value={result.matches[0].artists.join(", ")} />
+          <Item label="ISRC" value={result.matches[0].isrc} />
+          <Item label="Score" value={result.matches[0].score === null ? null : `${result.matches[0].score}%`} />
+        </dl>
+      ) : null}
+      {kind === "audd" && result.audd?.match ? (
+        <dl className="mt-3 grid gap-3 bg-muted/25 p-3 text-xs sm:grid-cols-2">
+          <Item label="Title" value={result.audd.match.title} />
+          <Item label="Artist" value={result.audd.match.artist} />
+          <Item label="ISRC" value={result.audd.match.isrc} />
+          <Item label="Album" value={result.audd.match.album} />
+        </dl>
+      ) : null}
+    </div>
   );
 }
 
