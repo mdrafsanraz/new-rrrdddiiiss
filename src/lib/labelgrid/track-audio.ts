@@ -7,6 +7,20 @@ export type TrackAudioResolution =
   | { ok: true; url: string }
   | { ok: false; status: 404 | 502 };
 
+/** Publicly reachable transcoded preview, suitable for URL-based recognition. */
+export async function resolveTrackAudioPreviewUrl(
+  labelgridTrackId: number | string,
+): Promise<string | null> {
+  try {
+    const raw = await getTrack(labelgridTrackId);
+    const track = raw?.data ?? (raw as unknown as TrackData);
+    return track.audio_preview_url ?? null;
+  } catch (error) {
+    console.error(`[track-audio] preview lookup failed for track ${labelgridTrackId}`, error);
+    return null;
+  }
+}
+
 /**
  * Prefer the master URL from GET /tracks/{track}/files/stereo. Some catalog
  * tracks do not expose that file endpoint even though LabelGrid can generate

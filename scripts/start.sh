@@ -20,11 +20,11 @@ fi
 echo "[rdistro] syncing database schema (prisma db push)…"
 npx prisma db push --skip-generate
 
-if [ -n "${CRON_SECRET:-}" ] && [ -n "${ACRCLOUD_HOST:-}" ] && [ -n "${ACRCLOUD_ACCESS_KEY:-}" ] && [ -n "${ACRCLOUD_ACCESS_SECRET:-}" ]; then
+if [ -n "${CRON_SECRET:-}" ] && { { [ -n "${ACRCLOUD_HOST:-}" ] && [ -n "${ACRCLOUD_ACCESS_KEY:-}" ] && [ -n "${ACRCLOUD_ACCESS_SECRET:-}" ]; } || [ -n "${AUDD_API_TOKEN:-}" ]; }; then
   echo "[rdistro] starting delayed ACR worker…"
   node scripts/acr-worker.mjs &
 else
-  echo "[rdistro] delayed ACR worker disabled (CRON_SECRET or ACRCloud credentials missing)"
+  echo "[rdistro] audio recognition worker disabled (CRON_SECRET or provider credentials missing)"
 fi
 
 echo "[rdistro] starting Next.js…"

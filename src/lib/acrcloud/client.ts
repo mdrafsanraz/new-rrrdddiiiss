@@ -131,6 +131,15 @@ export async function identifyLabelGridAudio(audioUrl: string): Promise<AcrCloud
   }
 
   const status = (payload.status ?? {}) as Record<string, unknown>;
+  const statusCode = typeof status.code === "number" ? status.code : null;
+  if (statusCode === 1001) {
+    return { recognized: false, message: text(status.msg) ?? "No match", matches: [] };
+  }
+  if (statusCode !== 0) {
+    throw new Error(
+      `ACRCloud error${statusCode === null ? "" : ` ${statusCode}`}: ${text(status.msg) ?? "Recognition failed."}`,
+    );
+  }
   const metadata = (payload.metadata ?? {}) as Record<string, unknown>;
   const music = Array.isArray(metadata.music) ? metadata.music : [];
   const matches = music.map((row): AcrCloudMatch => {
