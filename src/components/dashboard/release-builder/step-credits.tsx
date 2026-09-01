@@ -838,8 +838,9 @@ export function StepCredits({
             id="plineYear"
             label="℗ Year"
             required
+            readOnly
             value={state.plineYear}
-            onChange={(e) => patch({ plineYear: e.target.value })}
+            helper="Automatically set from the selected release date."
           />
           <Field
             id="plineName"
@@ -852,8 +853,9 @@ export function StepCredits({
             id="clineYear"
             label="© Year"
             required
+            readOnly
             value={state.clineYear}
-            onChange={(e) => patch({ clineYear: e.target.value })}
+            helper="Automatically set from the selected release date."
           />
           <Field
             id="clineName"

@@ -108,7 +108,13 @@ export function StepRelease({
               isTransfer: yes,
               ...(yes
                 ? {}
-                : { transferFromDistributor: "", originalReleaseDate: "" }),
+                : {
+                    transferFromDistributor: "",
+                    originalReleaseDate: "",
+                    ...(state.releaseDate
+                      ? { clineYear: state.releaseDate.slice(0, 4), plineYear: state.releaseDate.slice(0, 4) }
+                      : {}),
+                  }),
             })
           }
         />
@@ -130,7 +136,13 @@ export function StepRelease({
               type="date"
               required
               value={state.originalReleaseDate}
-              onChange={(e) => patch({ originalReleaseDate: e.target.value })}
+              onChange={(e) => {
+                const date = e.target.value;
+                patch({
+                  originalReleaseDate: date,
+                  ...(date ? { clineYear: date.slice(0, 4), plineYear: date.slice(0, 4) } : {}),
+                });
+              }}
               helper="The date this release first went live with your previous distributor."
             />
           </div>
@@ -223,7 +235,15 @@ export function StepRelease({
             type="date"
             required
             value={state.releaseDate}
-            onChange={(e) => patch({ releaseDate: e.target.value })}
+            onChange={(e) => {
+              const date = e.target.value;
+              patch({
+                releaseDate: date,
+                ...(!state.isTransfer && date
+                  ? { clineYear: date.slice(0, 4), plineYear: date.slice(0, 4) }
+                  : {}),
+              });
+            }}
           />
           <Field
             id="upc"

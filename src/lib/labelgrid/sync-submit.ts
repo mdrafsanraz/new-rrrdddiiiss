@@ -971,6 +971,10 @@ async function buildReleaseBody(
   }
 ): Promise<Record<string, unknown>> {
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const effectiveReleaseDate = rMeta.originalReleaseDate
+    ? new Date(`${rMeta.originalReleaseDate}T00:00:00.000Z`)
+    : release.releaseDate;
+  const copyrightYear = effectiveReleaseDate?.getUTCFullYear();
 
   const body: Record<string, unknown> = {
     content_type: release.contentType,
@@ -986,16 +990,12 @@ async function buildReleaseBody(
     // (date-only means midnight UTC; toISOString emits the canonical Z
     // form). For distributor transfers the user-entered original date wins
     // over the planned date.
-    release_date: rMeta.originalReleaseDate
-      ? new Date(`${rMeta.originalReleaseDate}T00:00:00.000Z`).toISOString()
-      : release.releaseDate
-        ? release.releaseDate.toISOString()
-        : undefined,
+    release_date: effectiveReleaseDate?.toISOString(),
     explicit: release.explicit,
     transfer_from_distributor: rMeta.transferFromDistributor || undefined,
-    cline_year: rMeta.clineYear ?? undefined,
+    cline_year: copyrightYear,
     cline_name: rMeta.clineName || undefined,
-    pline_year: rMeta.plineYear ?? undefined,
+    pline_year: copyrightYear,
     pline_name: rMeta.plineName || undefined,
     titles: [
       {

@@ -78,15 +78,16 @@ export async function POST(request: Request) {
 
     const catalogNumber = await allocateCatalogNumber();
     const title = fields.title?.trim() || "Untitled release";
-    const year = new Date().getFullYear();
+    const selectedDate = fields.originalReleaseDate || fields.releaseDate;
+    const year = selectedDate ? Number(selectedDate.slice(0, 4)) : new Date().getFullYear();
 
     const meta: ReleaseMetadata = {
       mixVersion: fields.mixVersion || undefined,
       preferredLocalization: fields.preferredLocalization,
       artisticRole: "MainArtist",
-      clineYear: fields.clineYear ? Number(fields.clineYear) : year,
+      clineYear: year,
       clineName: fields.clineName || artist.name,
-      plineYear: fields.plineYear ? Number(fields.plineYear) : year,
+      plineYear: year,
       plineName: fields.plineName || artist.name,
       primaryGenreId: fields.primaryGenreId ?? null,
       transferFromDistributor: fields.transferFromDistributor || undefined,

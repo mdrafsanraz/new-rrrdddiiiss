@@ -8,6 +8,7 @@ type FieldProps = {
   autoComplete?: string;
   required?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   as?: "input" | "textarea" | "select";
   children?: ReactNode;
   helper?: string;
@@ -28,6 +29,7 @@ export function Field({
   autoComplete,
   required,
   disabled,
+  readOnly,
   as = "input",
   children,
   helper,
@@ -42,7 +44,7 @@ export function Field({
     "w-full rounded-lg border border-border bg-background px-3.5 py-3 text-sm text-foreground shadow-sm outline-none transition-colors",
     "placeholder:text-muted-foreground/70",
     "focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/25",
-    disabled && "cursor-not-allowed bg-muted/60 text-muted-foreground"
+    (disabled || readOnly) && "cursor-not-allowed bg-muted/60 text-muted-foreground"
   );
 
   return (
@@ -56,6 +58,7 @@ export function Field({
           name={name ?? id}
           required={required}
           disabled={disabled}
+          readOnly={readOnly}
           rows={5}
           {...(value !== undefined ? { value } : {})}
           onChange={onChange}
@@ -82,6 +85,7 @@ export function Field({
           autoComplete={autoComplete}
           required={required}
           disabled={disabled}
+          readOnly={readOnly}
           {...(value !== undefined ? { value } : {})}
           onChange={onChange}
           placeholder={placeholder}

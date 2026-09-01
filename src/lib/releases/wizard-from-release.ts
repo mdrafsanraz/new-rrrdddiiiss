@@ -150,6 +150,10 @@ export function wizardStateFromRelease(
 
   const year = String(new Date().getFullYear());
   const artworkUrl = live?.coverUrl ?? release.artworkUrl;
+  const selectedReleaseDate =
+    live?.releaseDate?.slice(0, 10) ??
+    (release.releaseDate ? release.releaseDate.toISOString().slice(0, 10) : "");
+  const copyrightYear = (rMeta.originalReleaseDate || selectedReleaseDate).slice(0, 4) || year;
 
   return {
     releaseId: release.id,
@@ -178,11 +182,7 @@ export function wizardStateFromRelease(
     mixVersion: live?.mixVersion ?? rMeta.mixVersion ?? "",
     primaryGenreId: live?.primaryGenreId ?? rMeta.primaryGenreId ?? null,
     primaryGenreName: live?.primaryGenre ?? release.primaryGenre ?? "",
-    releaseDate:
-      live?.releaseDate?.slice(0, 10) ??
-      (release.releaseDate
-        ? release.releaseDate.toISOString().slice(0, 10)
-        : ""),
+    releaseDate: selectedReleaseDate,
     upc: live?.barcodeNumber ?? release.upc ?? "",
     preferredLocalization:
       live?.preferredLocalization ?? rMeta.preferredLocalization ?? "en",
@@ -198,17 +198,9 @@ export function wizardStateFromRelease(
       live?.tracks[0]?.publishers !== undefined
         ? live.tracks[0].publishers.length === 0
         : (rMeta.selfPublished ?? true),
-    clineYear: live?.clineYear
-      ? String(live.clineYear)
-      : rMeta.clineYear
-        ? String(rMeta.clineYear)
-        : year,
+    clineYear: copyrightYear,
     clineName: live?.clineName ?? rMeta.clineName ?? artistName,
-    plineYear: live?.plineYear
-      ? String(live.plineYear)
-      : rMeta.plineYear
-        ? String(rMeta.plineYear)
-        : year,
+    plineYear: copyrightYear,
     plineName: live?.plineName ?? rMeta.plineName ?? artistName,
     rightsConfirmed: false,
   };

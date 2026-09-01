@@ -148,6 +148,14 @@ export async function PATCH(request: Request, { params }: Params) {
     const prevMeta = parseJsonObject<ReleaseMetadata & Record<string, unknown>>(
       existing.metadataJson
     );
+    const effectiveOriginalDate = fields.originalReleaseDate !== undefined
+      ? fields.originalReleaseDate
+      : prevMeta.originalReleaseDate ?? "";
+    const effectiveReleaseDate = fields.releaseDate !== undefined
+      ? fields.releaseDate ?? ""
+      : existing.releaseDate?.toISOString().slice(0, 10) ?? "";
+    const selectedYear = (effectiveOriginalDate || effectiveReleaseDate).slice(0, 4);
+    const copyrightYear = selectedYear ? Number(selectedYear) : undefined;
     const nextMeta = {
       ...prevMeta,
       ...(fields.mixVersion !== undefined
@@ -177,23 +185,11 @@ export async function PATCH(request: Request, { params }: Params) {
       ...(fields.selfPublished !== undefined
         ? { selfPublished: fields.selfPublished }
         : {}),
-      ...(fields.clineYear !== undefined
-        ? {
-            clineYear: fields.clineYear
-              ? Number(fields.clineYear)
-              : prevMeta.clineYear,
-          }
-        : {}),
+      ...(copyrightYear ? { clineYear: copyrightYear } : {}),
       ...(fields.clineName !== undefined
         ? { clineName: fields.clineName || undefined }
         : {}),
-      ...(fields.plineYear !== undefined
-        ? {
-            plineYear: fields.plineYear
-              ? Number(fields.plineYear)
-              : prevMeta.plineYear,
-          }
-        : {}),
+      ...(copyrightYear ? { plineYear: copyrightYear } : {}),
       ...(fields.plineName !== undefined
         ? { plineName: fields.plineName || undefined }
         : {}),
