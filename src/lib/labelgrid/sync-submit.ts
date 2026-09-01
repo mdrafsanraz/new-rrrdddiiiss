@@ -1,6 +1,9 @@
 import type { Artist, Release, Track } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { LabelGridApiError } from "@/lib/labelgrid/client";
+import {
+  LabelGridApiError,
+  labelGridApiErrorMessage,
+} from "@/lib/labelgrid/client";
 import {
   isLabelGridLive,
   LabelGridConfigError,
@@ -56,11 +59,7 @@ function splitName(name: string): { first: string; last: string } {
 
 function formatLgError(error: unknown): string {
   if (error instanceof LabelGridApiError) {
-    const body =
-      typeof error.body === "string"
-        ? error.body
-        : JSON.stringify(error.body);
-    return `${error.message}${body ? ` — ${body.slice(0, 400)}` : ""}`;
+    return labelGridApiErrorMessage(error);
   }
   if (error instanceof LabelGridConfigError) return error.message;
   if (error instanceof Error) return error.message;
@@ -821,7 +820,7 @@ async function uploadAudioForTrack(
   } catch (error) {
     await persistAudioUploadFailure(
       track,
-      error instanceof Error ? error.message : "Audio upload failed"
+      formatLgError(error)
     );
     return { processing: false };
   }
@@ -852,8 +851,7 @@ export async function registerUploadedAudio(
     await persistAudioUploadResult(track, result);
     return { processing: result.processing };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Audio registration failed";
+    const message = formatLgError(error);
     await persistAudioUploadFailure(track, message);
     return { processing: false, error: message };
   }
