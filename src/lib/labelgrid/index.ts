@@ -19,9 +19,13 @@ export function getMe() {
   return labelgridFetch<UserResource>("/me");
 }
 
-export function listArtists(page = 1, perPage = 50) {
+export function listArtists(page = 1, perPage = 50, artistName?: string) {
   return labelgridFetch<Paginated<ArtistData>>("/artists", {
-    searchParams: { page, per_page: perPage },
+    searchParams: {
+      page,
+      per_page: perPage,
+      "filter[artist_name]": artistName,
+    },
   });
 }
 

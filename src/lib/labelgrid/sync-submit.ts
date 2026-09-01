@@ -12,6 +12,7 @@ import {
   createArtist,
   createRelease,
   createTrack,
+  listArtists,
   listContributorRoles,
   listDistroOutlets,
   listGenres,
@@ -329,15 +330,39 @@ export async function ensureLabelGridArtist(artist: Artist): Promise<number> {
     return Number(artist.labelgridId);
   }
 
-  const created = await createArtist({
-    artist_name: artist.name,
-    full_name: artist.fullName ?? undefined,
-    email: artist.email ?? undefined,
-    location: artist.location ?? undefined,
-    bio_short: artist.bioShort ?? undefined,
-  });
+  const normalizedName = artist.name.trim().toLocaleLowerCase();
+  async function findExisting(): Promise<number | null> {
+    const response = await listArtists(1, 100, artist.name.trim());
+    const exact = response.data?.find(
+      (candidate) => candidate.artist_name?.trim().toLocaleLowerCase() === normalizedName
+    );
+    return exact?.id ? Number(exact.id) : null;
+  }
 
-  const id = unwrapId(created);
+  let id = await findExisting();
+  if (!id) {
+    try {
+      const created = await createArtist({
+        artist_name: artist.name,
+        full_name: artist.fullName ?? undefined,
+        email: artist.email ?? undefined,
+        location: artist.location ?? undefined,
+        bio_short: artist.bioShort ?? undefined,
+      });
+      id = unwrapId(created);
+    } catch (error) {
+      const duplicateName =
+        error instanceof LabelGridApiError &&
+        error.status === 422 &&
+        error.body !== null &&
+        typeof error.body === "object" &&
+        Array.isArray((error.body as { errors?: { artist_name?: unknown } }).errors?.artist_name);
+      if (!duplicateName) throw error;
+      id = await findExisting();
+      if (!id) throw error;
+    }
+  }
+
   await prisma.artist.update({
     where: { id: artist.id },
     data: { labelgridId: String(id) },
