@@ -117,10 +117,14 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
-  // "Changes required" and "document requested" are two different asks:
-  //  - changes required → the user must edit and resubmit through the
-  //    builder. Only Edit Release is offered; no standalone Resubmit (that
-  //    only makes sense once the edit is actually done) and no Delete.
+  // "Changes required", "sent back to draft", and "document requested" are
+  // three different asks:
+  //  - changes required (no document) → the user must edit and resubmit
+  //    through the builder. Only Edit Release is offered; no standalone
+  //    Resubmit and no Delete.
+  //  - sent back to draft (ready_to_submit with a prior submittedAt) → same
+  //    as above: Edit Release only. Resubmit happens by finishing the
+  //    builder's submission form, not a standalone button here.
   //  - document requested → no metadata edit needed, just the upload card.
   //    No Edit, no Delete, and no Resubmit until every requested document
   //    has actually been uploaded — then Resubmit is the only action.
@@ -130,9 +134,8 @@ export default async function ReleaseDetailPage({ params }: Props) {
     (i) => ("documents" in i ? i.documents.length : 0) > 0
   );
   const canSubmit = canUserSubmitRelease(release);
-  const canResubmit = documentRequested
-    ? documentProvided && canUserResubmitRelease(release)
-    : !needsChanges && canUserResubmitRelease(release);
+  const canResubmit =
+    documentRequested && documentProvided && canUserResubmitRelease(release);
   const canEdit = canUserEditRelease(release) && !documentRequested;
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
@@ -321,9 +324,6 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-6">
             {canSubmit ? <SubmitReleaseButton releaseId={release.id} /> : null}
-            {canResubmit && !documentRequested ? (
-              <ResubmitReleaseButton releaseId={release.id} />
-            ) : null}
             {!finalReject ? (
               <ReleaseActions
                 releaseId={release.id}
