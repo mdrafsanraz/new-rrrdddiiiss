@@ -31,6 +31,10 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
+import {
+  convertAudioTo16BitWav,
+  inspectAudioCompatibility,
+} from "@/lib/audio/compatibility";
 
 type ItemStatus = "waiting" | "processing" | "completed" | "failed";
 
@@ -211,6 +215,9 @@ export function SubmissionProgress({
   const [succeeded, setSucceeded] = useState(false);
   const [running, setRunning] = useState(false);
   const [pendingFile, setPendingFile] = useState<PendingFileRequest | null>(null);
+  const [pendingAudioError, setPendingAudioError] = useState<string | null>(null);
+  const [pendingRejectedAudio, setPendingRejectedAudio] = useState<File | null>(null);
+  const [convertingPendingAudio, setConvertingPendingAudio] = useState(false);
 
   const [tracksState, setTracksState] = useState<TrackRuntime[]>(() =>
     trackInputs.map((t) => ({
@@ -246,10 +253,45 @@ export function SubmissionProgress({
     setTracksState(tracksRef.current);
   }
 
+  function resumeWithAudioFile(trackId: string, file: File) {
+    patchTrack(trackId, { audioFile: file });
+    setPendingAudioError(null);
+    setPendingRejectedAudio(null);
+    setPendingFile(null);
+    void runSubmission();
+  }
+
+  async function selectPendingAudio(trackId: string, file: File) {
+    setPendingAudioError(null);
+    const compatibility = await inspectAudioCompatibility(file);
+    if (!compatibility.compatible) {
+      setPendingRejectedAudio(compatibility.canConvert ? file : null);
+      setPendingAudioError(compatibility.error);
+      return;
+    }
+    resumeWithAudioFile(trackId, file);
+  }
+
+  async function convertPendingAudio(trackId: string) {
+    if (!pendingRejectedAudio) return;
+    setConvertingPendingAudio(true);
+    setPendingAudioError(null);
+    try {
+      const converted = await convertAudioTo16BitWav(pendingRejectedAudio);
+      resumeWithAudioFile(trackId, converted);
+    } catch (error) {
+      setPendingAudioError(error instanceof Error ? error.message : "Audio conversion failed.");
+    } finally {
+      setConvertingPendingAudio(false);
+    }
+  }
+
   async function runSubmission() {
     if (running) return;
     setRunning(true);
     setPendingFile(null);
+    setPendingAudioError(null);
+    setPendingRejectedAudio(null);
     const myRun = ++runIdRef.current;
     const stale = () => myRun !== runIdRef.current;
 
@@ -803,13 +845,32 @@ export function SubmissionProgress({
                 if (!file) return;
                 if (pendingFile.kind === "artwork") {
                   artworkFileRef.current = file;
+                  setPendingFile(null);
+                  void runSubmission();
                 } else {
-                  patchTrack(pendingFile.trackId, { audioFile: file });
+                  void selectPendingAudio(pendingFile.trackId, file).catch(() => {
+                    setPendingAudioError("Could not inspect this audio file. Select a valid WAV or FLAC file.");
+                  });
                 }
-                setPendingFile(null);
-                void runSubmission();
               }}
             />
+            {pendingFile.kind === "audio" && pendingAudioError ? (
+              <div className="mt-3 border-l-2 border-destructive pl-3">
+                <p className="text-sm text-destructive">{pendingAudioError}</p>
+                {pendingRejectedAudio ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 h-9 px-3"
+                    disabled={convertingPendingAudio}
+                    onClick={() => void convertPendingAudio(pendingFile.trackId)}
+                  >
+                    {convertingPendingAudio ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : null}
+                    {convertingPendingAudio ? "Converting audio..." : "Convert to 16-bit WAV"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </Callout>
         </div>
       ) : null}

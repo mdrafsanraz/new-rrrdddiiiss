@@ -10,11 +10,16 @@
  * and the cover/sample license document when clearance is required.
  */
 
-import { useEffect, useMemo, useRef } from "react";
-import { PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleNotch, PencilSimple, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Field } from "@/components/site/field";
+import {
+  convertAudioTo16BitWav,
+  inspectAudioCompatibility,
+} from "@/lib/audio/compatibility";
 import { cn } from "@/lib/utils";
 import {
   ARTWORK_AI_USAGE,
@@ -55,6 +60,10 @@ function TrackAudioDropzone({
   track: WizardTrack;
   onFile: (file: File | null) => void;
 }) {
+  const [rejectedFile, setRejectedFile] = useState<File | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [converting, setConverting] = useState(false);
   const localPreview = useMemo(() => {
     if (!track.audioFile) return null;
     return URL.createObjectURL(track.audioFile);
@@ -66,25 +75,87 @@ function TrackAudioDropzone({
     };
   }, [localPreview]);
 
-  return (
-    <MediaDropzone
-      id={`audio-${track.clientId}`}
-      label="Audio"
-      required
-      accept="audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,.wav,.flac"
-      kind="audio"
-      file={track.audioFile}
-      audioUrl={track.audioUrl}
-      previewUrl={localPreview}
-      audioStatus={
-        track.audioProcessing
-          ? "processing"
-          : track.audioProcessingError
-            ? "failed"
-            : null
+  async function selectFile(file: File | null) {
+    if (!file) {
+      setRejectedFile(null);
+      setValidationError(null);
+      onFile(null);
+      return;
+    }
+    setChecking(true);
+    setValidationError(null);
+    try {
+      const result = await inspectAudioCompatibility(file);
+      if (!result.compatible) {
+        setRejectedFile(result.canConvert ? file : null);
+        setValidationError(result.error);
+        return;
       }
-      onFile={onFile}
-    />
+      setRejectedFile(null);
+      onFile(file);
+    } catch {
+      setRejectedFile(null);
+      setValidationError("Could not inspect this audio file. Select a valid WAV or FLAC file.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function convertRejectedFile() {
+    if (!rejectedFile) return;
+    setConverting(true);
+    setValidationError(null);
+    try {
+      const converted = await convertAudioTo16BitWav(rejectedFile);
+      setRejectedFile(null);
+      onFile(converted);
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : "Audio conversion failed.");
+    } finally {
+      setConverting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <MediaDropzone
+        id={`audio-${track.clientId}`}
+        label="Audio"
+        required
+        accept="audio/wav,audio/x-wav,audio/wave,audio/flac,audio/x-flac,.wav,.flac"
+        kind="audio"
+        file={track.audioFile}
+        audioUrl={track.audioUrl}
+        previewUrl={localPreview}
+        helper={checking ? "Checking format and bit depth..." : undefined}
+        audioStatus={
+          track.audioProcessing
+            ? "processing"
+            : track.audioProcessingError
+              ? "failed"
+              : null
+        }
+        onFile={(file) => void selectFile(file)}
+      />
+      {validationError ? (
+        <Callout tone="danger" icon={<WarningCircle size={18} weight="fill" aria-hidden />}>
+          <p className="font-medium">Audio file is not compatible</p>
+          <p className="mt-1 text-sm">{validationError}</p>
+          {rejectedFile ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 h-9 px-3"
+              disabled={converting}
+              onClick={() => void convertRejectedFile()}
+            >
+              {converting ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : null}
+              {converting ? "Converting audio..." : "Convert to 16-bit WAV"}
+            </Button>
+          ) : null}
+        </Callout>
+      ) : null}
+    </div>
   );
 }
 

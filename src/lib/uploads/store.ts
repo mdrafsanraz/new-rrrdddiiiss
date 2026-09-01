@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { readImageDimensions } from "@/lib/uploads/image-dimensions";
 import { getObject, isS3Configured, putObject } from "@/lib/uploads/s3";
+import { inspectAudioBytes } from "@/lib/audio/compatibility";
 
 /** LabelGrid cover art requirement — exact square, no exceptions. */
 export const REQUIRED_ARTWORK_SIZE = 3000;
@@ -132,6 +133,11 @@ async function validateFile(
       throw new Error(
         `Artwork must be exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px (got ${got}).`
       );
+    }
+  } else {
+    const compatibility = inspectAudioBytes(buf, file.name, file.type);
+    if (!compatibility.compatible) {
+      throw new Error(compatibility.error ?? "Audio file is not compatible.");
     }
   }
 
