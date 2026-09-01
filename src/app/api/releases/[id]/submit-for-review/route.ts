@@ -11,7 +11,6 @@ import {
   canUserSubmitRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
-import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
@@ -219,8 +218,6 @@ export async function POST(_request: Request, { params }: Params) {
     where: { id },
     include: { artist: true, tracks: true },
   });
-
-  await markReleaseAcrPending(id);
 
   return NextResponse.json({ release: fresh, labelgrid });
 }

@@ -556,7 +556,7 @@ model Release {
   acrReportJson           String        @default("{}")
   acrFetchedAt            DateTime?
   /**
-   * Due time for the durable automatic ACR scan queue. Null for manual scans.
+   * Due time/lease for the durable webhook-triggered and manual ACR scan queue.
    */
   acrScheduledAt          DateTime?
   acrError                String?

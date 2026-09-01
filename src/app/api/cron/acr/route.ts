@@ -34,7 +34,8 @@ async function processDueScans(request: Request) {
     acrStatus: { in: ["pending", "running"] },
     OR: [
       { acrScheduledAt: { lte: now } },
-      { acrStatus: "pending", acrScheduledAt: null },
+      // Recover legacy queued/manual scans created before leases were added.
+      { acrScheduledAt: null },
     ],
   };
   const due = await prisma.release.findMany({
@@ -58,7 +59,7 @@ async function processDueScans(request: Request) {
     try {
       await runReleaseAcrScan({
         releaseId: release.id,
-        source: "submission",
+        source: "transcode_webhook",
       });
       results.push({ releaseId: release.id, ok: true });
     } catch (error) {

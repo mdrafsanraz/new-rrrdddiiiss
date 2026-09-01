@@ -2,6 +2,8 @@ import { createHmac } from "node:crypto";
 
 const IDENTIFY_PATH = "/v1/identify";
 const MAX_SAMPLE_BYTES = 2 * 1024 * 1024;
+const AUDIO_DOWNLOAD_TIMEOUT_MS = 30_000;
+const IDENTIFICATION_TIMEOUT_MS = 60_000;
 
 export type AcrCloudMatch = {
   acrId: string | null;
@@ -41,13 +43,22 @@ function config() {
 }
 
 async function audioSample(audioUrl: string): Promise<Uint8Array> {
-  const response = await fetch(audioUrl, {
-    headers: {
-      Accept: "audio/*, */*;q=0.8",
-      Range: `bytes=0-${MAX_SAMPLE_BYTES - 1}`,
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(audioUrl, {
+      headers: {
+        Accept: "audio/*, */*;q=0.8",
+        Range: `bytes=0-${MAX_SAMPLE_BYTES - 1}`,
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(AUDIO_DOWNLOAD_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error("LabelGrid audio download timed out.");
+    }
+    throw error;
+  }
   if (!response.ok || !response.body) {
     throw new Error(`LabelGrid audio returned ${response.status}.`);
   }
@@ -99,12 +110,21 @@ export async function identifyLabelGridAudio(audioUrl: string): Promise<AcrCloud
   form.set("signature_version", signatureVersion);
   form.set("timestamp", timestamp);
 
-  const response = await fetch(`${origin}${IDENTIFY_PATH}`, {
-    method: "POST",
-    body: form,
-    headers: { Accept: "application/json" },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${origin}${IDENTIFY_PATH}`, {
+      method: "POST",
+      body: form,
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(IDENTIFICATION_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error("ACRCloud identification timed out.");
+    }
+    throw error;
+  }
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok || !payload) {
     throw new Error(`ACRCloud identification returned ${response.status}.`);

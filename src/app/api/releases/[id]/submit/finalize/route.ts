@@ -6,7 +6,6 @@ import { isFinalRejection } from "@/lib/releases/status";
 import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { prisma } from "@/lib/db";
-import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
@@ -151,8 +150,6 @@ export async function POST(_request: Request, { params }: Params) {
     where: { id },
     include: { artist: true, tracks: true },
   });
-
-  await markReleaseAcrPending(id);
 
   return NextResponse.json({ release: fresh });
 }

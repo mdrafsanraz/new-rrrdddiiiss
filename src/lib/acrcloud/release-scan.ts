@@ -22,6 +22,21 @@ export type AcrReleaseReport = {
 };
 
 const AUTOMATIC_SCAN_LEASE_MS = 10 * 60 * 1000;
+const LABELGRID_LOOKUP_TIMEOUT_MS = 30_000;
+
+async function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), LABELGRID_LOOKUP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export function parseAcrReport(value: string | null | undefined): AcrReleaseReport | null {
   if (!value) return null;
@@ -35,9 +50,12 @@ export function parseAcrReport(value: string | null | undefined): AcrReleaseRepo
   }
 }
 
-export async function markReleaseAcrPending(releaseId: string): Promise<boolean> {
+export async function markReleaseAcrPending(
+  releaseId: string,
+  delayMs = 0,
+): Promise<boolean> {
   if (!isAcrCloudConfigured()) return false;
-  const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);
+  const scheduledAt = new Date(Date.now() + Math.max(0, delayMs));
   await prisma.release.update({
     where: { id: releaseId },
     data: { acrStatus: "pending", acrScheduledAt: scheduledAt, acrError: null },
@@ -48,17 +66,16 @@ export async function markReleaseAcrPending(releaseId: string): Promise<boolean>
 export async function runReleaseAcrScan(input: {
   releaseId: string;
   actorUserId?: string | null;
-  source: "submission" | "resubmission" | "manual_refresh";
+  source: "transcode_webhook" | "manual_refresh";
 }): Promise<AcrReleaseReport> {
   if (!isAcrCloudConfigured()) throw new Error("ACRCloud is not configured.");
   await prisma.release.update({
     where: { id: input.releaseId },
     data: {
       acrStatus: "running",
-      acrScheduledAt:
-        input.source === "manual_refresh"
-          ? null
-          : new Date(Date.now() + AUTOMATIC_SCAN_LEASE_MS),
+      // A lease lets the durable worker recover any scan whose request is
+      // terminated while waiting on LabelGrid or ACRCloud.
+      acrScheduledAt: new Date(Date.now() + AUTOMATIC_SCAN_LEASE_MS),
       acrError: null,
     },
   });
@@ -81,14 +98,20 @@ export async function runReleaseAcrScan(input: {
     for (const track of release.tracks) {
       let resolvedTrackId: string | null = track.labelgridId;
       try {
-        resolvedTrackId = await resolveReleaseTrackLabelGridId({
-          releaseLabelGridId: release.labelgridId,
-          trackLabelGridId: track.labelgridId,
-          trackNumber: track.trackNumber,
-          isrc: track.isrc,
-        });
+        resolvedTrackId = await withTimeout(
+          resolveReleaseTrackLabelGridId({
+            releaseLabelGridId: release.labelgridId,
+            trackLabelGridId: track.labelgridId,
+            trackNumber: track.trackNumber,
+            isrc: track.isrc,
+          }),
+          "LabelGrid track lookup timed out.",
+        );
         if (!resolvedTrackId) throw new Error("LabelGrid track mapping was not found.");
-        const audio = await resolveTrackAudioUrl(resolvedTrackId);
+        const audio = await withTimeout(
+          resolveTrackAudioUrl(resolvedTrackId),
+          "LabelGrid audio lookup timed out.",
+        );
         if (!audio.ok) throw new Error("LabelGrid audio is unavailable.");
         const identification = await identifyLabelGridAudio(audio.url);
         results.push({
