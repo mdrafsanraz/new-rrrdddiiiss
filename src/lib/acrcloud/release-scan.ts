@@ -81,12 +81,13 @@ export async function runReleaseAcrScan(input: {
   releaseId: string;
   actorUserId?: string | null;
   source: "transcode_webhook" | "manual_refresh";
+  provider?: "acrcloud" | "audd";
 }): Promise<AcrReleaseReport> {
   const acrConfigured = isAcrCloudConfigured();
   const auddConfigured = isAuddConfigured();
-  if (!acrConfigured && !auddConfigured) {
-    throw new Error("No audio recognition provider is configured.");
-  }
+  const runAcrcloud = acrConfigured && (!input.provider || input.provider === "acrcloud");
+  const runAudd = auddConfigured && (!input.provider || input.provider === "audd");
+  if (!runAcrcloud && !runAudd) throw new Error(`${input.provider === "audd" ? "AudD" : "ACRCloud"} is not configured.`);
   await prisma.release.update({
     where: { id: input.releaseId },
     data: {
@@ -95,8 +96,8 @@ export async function runReleaseAcrScan(input: {
       // terminated while waiting on LabelGrid or ACRCloud.
       acrScheduledAt: new Date(Date.now() + AUTOMATIC_SCAN_LEASE_MS),
       acrError: null,
-      ...(acrConfigured ? { acrcloudStatus: "running", acrcloudError: null } : {}),
-      ...(auddConfigured ? { auddStatus: "running", auddError: null } : {}),
+      ...(runAcrcloud ? { acrcloudStatus: "running", acrcloudError: null } : {}),
+      ...(runAudd ? { auddStatus: "running", auddError: null } : {}),
     },
   });
 
@@ -133,22 +134,22 @@ export async function runReleaseAcrScan(input: {
           "LabelGrid audio lookup timed out.",
         );
         if (!audio.ok) throw new Error("LabelGrid audio is unavailable.");
-        const previewUrl = auddConfigured
+        const previewUrl = runAudd
           ? await withTimeout(
               resolveTrackAudioPreviewUrl(resolvedTrackId),
               "LabelGrid preview lookup timed out.",
             )
           : null;
         const [acrResult, auddResult] = await Promise.allSettled([
-          acrConfigured ? identifyLabelGridAudio(audio.url) : Promise.resolve(null),
-          auddConfigured
+          runAcrcloud ? identifyLabelGridAudio(audio.url) : Promise.resolve(null),
+          runAudd
             ? identifyAudioUrlWithAudd(previewUrl ?? audio.url)
             : Promise.resolve(null),
         ]);
         const identification =
           acrResult.status === "fulfilled" && acrResult.value
             ? acrResult.value
-            : { recognized: false, message: acrConfigured ? "Scan failed" : "Not configured", matches: [] };
+            : { recognized: false, message: runAcrcloud ? "Scan failed" : "Not run", matches: [] };
         const acrError =
           acrResult.status === "rejected"
             ? acrResult.reason instanceof Error
@@ -186,18 +187,18 @@ export async function runReleaseAcrScan(input: {
           recognized: false,
           message: "Scan failed",
           matches: [],
-          error: error instanceof Error ? error.message : "ACR scan failed.",
-          audd: auddConfigured
+          error: runAcrcloud ? (error instanceof Error ? error.message : "ACR scan failed.") : null,
+          audd: runAudd
             ? { recognized: false, message: "Scan failed", match: null, error: error instanceof Error ? error.message : "AudD scan failed." }
             : null,
         });
       }
     }
 
-    const acrFailures = acrConfigured
+    const acrFailures = runAcrcloud
       ? results.filter((result) => Boolean(result.error)).length
       : 0;
-    const auddFailures = auddConfigured
+    const auddFailures = runAudd
       ? results.filter((result) => Boolean(result.audd?.error)).length
       : 0;
     const failures = results.filter((result) => result.error || result.audd?.error).length;
@@ -206,14 +207,14 @@ export async function runReleaseAcrScan(input: {
     const status: AcrReleaseReport["status"] =
       failures === 0 ? "completed" : failures === results.length ? "failed" : "partial";
     const generatedAt = new Date().toISOString();
-    const acrcloudReport: AcrReleaseReport | null = acrConfigured
+    const acrcloudReport: AcrReleaseReport | null = runAcrcloud
       ? {
           status: providerStatus(acrFailures),
           generatedAt,
           results: results.map((result) => ({ ...result, audd: null })),
         }
       : null;
-    const auddReport: AcrReleaseReport | null = auddConfigured
+    const auddReport: AcrReleaseReport | null = runAudd
       ? {
           status: providerStatus(auddFailures),
           generatedAt,
@@ -241,10 +242,14 @@ export async function runReleaseAcrScan(input: {
       where: { id: input.releaseId },
       data: {
         acrStatus: status,
-        acrReportJson: JSON.stringify(report),
-        acrFetchedAt: new Date(report.generatedAt),
         acrScheduledAt: null,
         acrError: failures ? `${failures} of ${results.length} track scans failed.` : null,
+        ...(!input.provider
+          ? {
+              acrReportJson: JSON.stringify(report),
+              acrFetchedAt: new Date(report.generatedAt),
+            }
+          : {}),
         ...(acrcloudReport
           ? {
               acrcloudStatus: acrcloudReport.status,
@@ -285,11 +290,11 @@ export async function runReleaseAcrScan(input: {
         acrStatus: "failed",
         acrScheduledAt: null,
         acrError: message,
-        acrFetchedAt: new Date(),
-        ...(acrConfigured
+        ...(!input.provider ? { acrFetchedAt: new Date() } : {}),
+        ...(runAcrcloud
           ? { acrcloudStatus: "failed", acrcloudError: message, acrcloudFetchedAt: new Date() }
           : {}),
-        ...(auddConfigured
+        ...(runAudd
           ? { auddStatus: "failed", auddError: message, auddFetchedAt: new Date() }
           : {}),
       },

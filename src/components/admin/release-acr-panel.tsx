@@ -59,9 +59,11 @@ type ReleaseAcrPanelProps = {
   initialAuddError: string | null;
 };
 
+type RecognitionProvider = "acrcloud" | "audd";
+
 export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canRun, initialAcrcloudReport, initialAuddReport, initialAcrcloudStatus, initialAuddStatus, acrcloudFetchedAt, auddFetchedAt, initialAcrcloudError, initialAuddError }: ReleaseAcrPanelProps) {
   const configured = acrConfigured || auddConfigured;
-  const [busy, setBusy] = useState(false);
+  const [busyProvider, setBusyProvider] = useState<RecognitionProvider | null>(null);
   const [error, setError] = useState("");
   const [acrcloudResults, setAcrcloudResults] = useState<Result[] | null>(initialAcrcloudReport?.results ?? null);
   const [auddResults, setAuddResults] = useState<Result[] | null>(initialAuddReport?.results ?? null);
@@ -70,21 +72,23 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
   const [acrcloudCompletedAt, setAcrcloudCompletedAt] = useState(acrcloudFetchedAt);
   const [auddCompletedAt, setAuddCompletedAt] = useState(auddFetchedAt);
 
-  async function run() {
-    setBusy(true);
-    if (acrConfigured) setAcrcloudStatus("running");
-    if (auddConfigured) setAuddStatus("running");
+  async function run(provider: RecognitionProvider) {
+    setBusyProvider(provider);
+    if (provider === "acrcloud") setAcrcloudStatus("running");
+    if (provider === "audd") setAuddStatus("running");
     setError("");
     try {
       const response = await fetch(`/api/admin/releases/${releaseId}/acr`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
         cache: "no-store",
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "ACRCloud scan failed.");
       const providerReports = payload.report.providerReports as AcrReleaseReport["providerReports"] | undefined;
-      const acrcloudReport = providerReports?.acrcloud ?? (acrConfigured ? payload.report : null);
-      const auddReport = providerReports?.audd ?? (auddConfigured ? payload.report : null);
+      const acrcloudReport = providerReports?.acrcloud ?? (provider === "acrcloud" ? payload.report : null);
+      const auddReport = providerReports?.audd ?? (provider === "audd" ? payload.report : null);
       if (acrcloudReport) {
         setAcrcloudResults(acrcloudReport.results);
         setAcrcloudStatus(acrcloudReport.status);
@@ -96,9 +100,11 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
         setAuddCompletedAt(auddReport.generatedAt);
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "ACRCloud scan failed.");
+      if (provider === "acrcloud") setAcrcloudStatus("failed");
+      if (provider === "audd") setAuddStatus("failed");
+      setError(cause instanceof Error ? cause.message : "Recognition scan failed.");
     } finally {
-      setBusy(false);
+      setBusyProvider(null);
     }
   }
 
@@ -109,7 +115,7 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
           <h2 className="text-sm font-semibold">Audio recognition</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Cross-check submitted masters with {acrConfigured && auddConfigured ? "ACRCloud and AudD" : acrConfigured ? "ACRCloud" : "AudD"} before reviewing Preflight QC.</p>
         </div>
-        <div className="flex items-center gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{busy ? "Running" : "Provider caches"}</span>{canRun && configured ? <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={busy} onClick={run}>{busy ? "Scanning tracks…" : "Scan again"}</Button> : null}</div>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Provider caches</span>
       </div>
       <div className="p-4">
         {!configured ? <p className="text-sm text-muted-foreground">Configure ACRCloud and/or AUDD_API_TOKEN to enable recognition.</p> : null}
@@ -124,6 +130,10 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
               status={acrcloudStatus}
               cacheError={initialAcrcloudError}
               kind="acrcloud"
+              canRun={canRun}
+              scanInProgress={busyProvider !== null}
+              busy={busyProvider === "acrcloud"}
+              onRun={() => void run("acrcloud")}
             />
             <ProviderCard
               provider="AudD"
@@ -133,6 +143,10 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
               status={auddStatus}
               cacheError={initialAuddError}
               kind="audd"
+              canRun={canRun}
+              scanInProgress={busyProvider !== null}
+              busy={busyProvider === "audd"}
+              onRun={() => void run("audd")}
             />
           </div>
         ) : null}
@@ -142,7 +156,7 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
   );
 }
 
-function ProviderCard({ provider, configured, results, completedAt, status, cacheError, kind }: { provider: "ACRCloud" | "AudD"; configured: boolean; results: Result[] | null; completedAt: string | null; status: string | null; cacheError: string | null; kind: "acrcloud" | "audd" }) {
+function ProviderCard({ provider, configured, results, completedAt, status, cacheError, kind, canRun, scanInProgress, busy, onRun }: { provider: "ACRCloud" | "AudD"; configured: boolean; results: Result[] | null; completedAt: string | null; status: string | null; cacheError: string | null; kind: RecognitionProvider; canRun: boolean; scanInProgress: boolean; busy: boolean; onRun: () => void }) {
   const recognized = results?.filter((result) => kind === "acrcloud" ? result.recognized : result.audd?.recognized).length ?? 0;
   const failures = results?.filter((result) => kind === "acrcloud" ? Boolean(result.error) : Boolean(result.audd?.error)).length ?? 0;
 
@@ -156,9 +170,16 @@ function ProviderCard({ provider, configured, results, completedAt, status, cach
               {configured ? "Independent recognition results" : "Recognition service is not configured"}
             </p>
           </div>
-          <span className="border border-border bg-muted/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {!configured ? "Not configured" : results ? "Cached" : status === "pending" || status === "running" ? "Processing" : "No cache"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="border border-border bg-muted/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {!configured ? "Not configured" : results ? "Cached" : status === "pending" || status === "running" ? "Processing" : "No cache"}
+            </span>
+            {configured && canRun ? (
+              <Button type="button" variant="outline" className="h-8 px-3 text-xs" disabled={scanInProgress} onClick={onRun}>
+                {busy ? "Scanning..." : "Run again"}
+              </Button>
+            ) : null}
+          </div>
         </div>
         <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
           <Item label="Matches" value={results ? String(recognized) : null} />
