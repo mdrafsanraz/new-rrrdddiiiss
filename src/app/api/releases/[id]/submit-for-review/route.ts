@@ -11,7 +11,6 @@ import {
   canUserSubmitRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
-import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
 export const maxDuration = 300;
@@ -161,14 +160,6 @@ export async function POST(_request: Request, { params }: Params) {
     title: "Submitted to RDISTRO review",
     description: "Your release is in review.",
     actorUserId: user.id,
-  });
-
-  await notifyReleaseSubmitted({
-    to: user.email,
-    name: user.name,
-    releaseId: id,
-    releaseTitle: release.title,
-    resubmitted: !isFirstSubmit,
   });
 
   let labelgrid: {

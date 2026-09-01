@@ -6,7 +6,6 @@ import { isFinalRejection } from "@/lib/releases/status";
 import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { prisma } from "@/lib/db";
-import { notifyReleaseSubmitted } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
 export const maxDuration = 300;
@@ -136,14 +135,6 @@ export async function POST(_request: Request, { params }: Params) {
     title: "Submitted to RDISTRO review",
     description: "Your release is in review.",
     actorUserId: user.id,
-  });
-
-  await notifyReleaseSubmitted({
-    to: user.email,
-    name: user.name,
-    releaseId: id,
-    releaseTitle: release.title,
-    resubmitted: !isFirstSubmit,
   });
 
   const fresh = await prisma.release.findUnique({
