@@ -5,15 +5,17 @@ import { prisma } from "@/lib/db";
 import { AdminUserEditForm } from "@/components/admin/user-edit-form";
 import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
 import { WalletAdjustmentDialog } from "@/components/admin/wallet-adjustment-dialog";
+import { UserBanControl } from "@/components/admin/user-ban-control";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { planLabel } from "@/lib/plans";
 import { getWalletBalances } from "@/lib/wallet";
 import { Prisma } from "@prisma/client";
+import { hasPermission } from "@/lib/auth/permissions";
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminUserDetailPage({ params }: Props) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await params;
 
   const user = await prisma.user.findUnique({
@@ -44,6 +46,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
             ← Users
           </Link>
           <h1 className="mt-2 text-2xl font-bold tracking-tight">{user.name}</h1>
+          {user.suspended ? <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-red-700">Banned account</p> : null}
           <p className="mt-1 text-sm text-muted-foreground">
             {user.email} · {planLabel(user.planId)}
             {user.role === "admin" ? " · Admin" : ""}
@@ -53,7 +56,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
             joined {user.createdAt.toLocaleDateString()}
           </p>
         </div>
-        {user.role !== "admin" ? (
+        {user.role === "user" && !user.suspended ? (
           <LoginAsUserButton userId={user.id} userName={user.name} />
         ) : null}
       </div>
@@ -63,6 +66,10 @@ export default async function AdminUserDetailPage({ params }: Props) {
         name={user.name}
         planId={user.planId}
       />
+
+      {user.role === "user" && hasPermission(admin.role, "users.write") ? (
+        <UserBanControl userId={user.id} userName={user.name} suspended={user.suspended} reason={user.suspendedReason} />
+      ) : null}
 
       <section className="border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4"><div><h2 className="text-sm font-semibold">Wallet</h2><p className="mt-1 text-xs text-muted-foreground">Derived from immutable ledger entries. Corrections must create adjustments or reversals.</p></div><div className="flex items-center gap-3"><WalletAdjustmentDialog userId={user.id} /><Link href={`/admin/wallets?q=${encodeURIComponent(user.email)}`} className="text-xs font-semibold hover:underline">Open in global ledger</Link></div></div>

@@ -29,9 +29,9 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-    if (target.terminated) {
+    if (target.suspended || target.terminated) {
       return NextResponse.json(
-        { error: "Cannot impersonate a terminated account" },
+        { error: "Cannot impersonate a banned or terminated account" },
         { status: 403 }
       );
     }

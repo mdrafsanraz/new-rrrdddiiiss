@@ -111,7 +111,7 @@ export default async function AdminUsersPage({ searchParams }: Props) {
                     >
                       Open
                     </Link>
-                    {canImpersonate && !isStaffRole(u.role) ? (
+                    {canImpersonate && !isStaffRole(u.role) && !u.suspended && !u.terminated ? (
                       <LoginAsUserButton userId={u.id} userName={u.name} />
                     ) : null}
                   </div>

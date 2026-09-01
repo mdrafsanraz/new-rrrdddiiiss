@@ -27,6 +27,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const account = await prisma.user.findUnique({ where: { id: record.userId } });
+    if (!account || account.suspended || account.terminated) {
+      return NextResponse.json(
+        { error: "This account is not allowed to sign in. Contact support for assistance." },
+        { status: 403 }
+      );
+    }
+
     const passwordHash = await bcrypt.hash(body.password, 12);
     const user = await prisma.user.update({
       where: { id: record.userId },

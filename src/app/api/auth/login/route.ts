@@ -23,6 +23,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (user.suspended || user.terminated) {
+      return NextResponse.json(
+        { code: "ACCOUNT_BANNED", error: "This account has been banned. Contact support if you believe this is a mistake." },
+        { status: 403 }
+      );
+    }
+
     if (user.mustResetPassword) {
       return NextResponse.json(
         {

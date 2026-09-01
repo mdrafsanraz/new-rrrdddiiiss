@@ -84,7 +84,7 @@ export async function getSessionContext(): Promise<SessionContext> {
   }
 
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user) {
+  if (!user || user.suspended || user.terminated) {
     return { user: null, impersonator: null, isImpersonating: false };
   }
 
