@@ -9,7 +9,7 @@ export async function getUserUsage(userId: string, planId: PlanId) {
   start.setUTCDate(1);
   start.setUTCHours(0, 0, 0, 0);
 
-  const [artistsUsed, releasesSubmittedThisMonth, totalReleases, totalTracks, limits] =
+  const [artistsUsed, releasesSubmittedThisMonth, totalReleases, totalTracks, limits, user] =
     await Promise.all([
       prisma.artist.count({ where: { userId } }),
       prisma.release.count({
@@ -21,10 +21,24 @@ export async function getUserUsage(userId: string, planId: PlanId) {
       prisma.release.count({ where: { userId } }),
       prisma.track.count({ where: { userId } }),
       getConfiguredPlan(planId),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { artistLimitOverride: true },
+      }),
     ]);
 
+  const effectiveLimits = {
+    ...limits,
+    artists: user?.artistLimitOverride ?? limits.artists,
+  };
+
   return {
-    ...buildUsageSnapshot(planId, artistsUsed, releasesSubmittedThisMonth, limits),
+    ...buildUsageSnapshot(
+      planId,
+      artistsUsed,
+      releasesSubmittedThisMonth,
+      effectiveLimits
+    ),
     totalReleases,
     totalTracks,
   };

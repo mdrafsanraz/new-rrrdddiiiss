@@ -9,14 +9,21 @@ export function AdminUserEditForm({
   userId,
   name,
   planId,
+  artistLimitOverride,
+  planArtistLimits,
 }: {
   userId: string;
   name: string;
   planId: string;
+  artistLimitOverride: number | null;
+  planArtistLimits: Record<string, number | null>;
 }) {
   const router = useRouter();
   const [formName, setFormName] = useState(name);
   const [formPlan, setFormPlan] = useState(planId);
+  const [formArtistLimit, setFormArtistLimit] = useState(
+    artistLimitOverride === null ? "" : String(artistLimitOverride)
+  );
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
@@ -36,6 +43,8 @@ export function AdminUserEditForm({
             body: JSON.stringify({
               name: formName,
               planId: formPlan,
+              artistLimitOverride:
+                formArtistLimit === "" ? null : Number(formArtistLimit),
             }),
           });
           const data = await res.json();
@@ -79,6 +88,21 @@ export function AdminUserEditForm({
         <option value="starter">Starter</option>
         <option value="pro">Pro</option>
       </Field>
+      <Field
+        id="artistLimitOverride"
+        label="Artist limit override"
+        type="number"
+        min={0}
+        inputMode="numeric"
+        value={formArtistLimit}
+        placeholder={
+          planArtistLimits[formPlan] === null
+            ? "Plan: Unlimited"
+            : `Plan: ${planArtistLimits[formPlan]}`
+        }
+        helper="Leave blank to use the selected plan's artist limit. Set 0 to prevent new artist profiles."
+        onChange={(e) => setFormArtistLimit(e.target.value)}
+      />
       {error ? (
         <p className="text-sm font-medium text-red-700" role="alert">
           {error}

@@ -7,7 +7,7 @@ import { LoginAsUserButton } from "@/components/admin/login-as-user-button";
 import { WalletAdjustmentDialog } from "@/components/admin/wallet-adjustment-dialog";
 import { UserBanControl } from "@/components/admin/user-ban-control";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import { planLabel } from "@/lib/plans";
+import { getPlanCatalog, planLabel } from "@/lib/plans";
 import { getWalletBalances } from "@/lib/wallet";
 import { Prisma } from "@prisma/client";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -32,6 +32,10 @@ export default async function AdminUserDetailPage({ params }: Props) {
     },
   });
   if (!user) notFound();
+  const planCatalog = await getPlanCatalog();
+  const planArtistLimits = Object.fromEntries(
+    planCatalog.map((plan) => [plan.id, plan.artists])
+  );
   const balances = await getWalletBalances(user.id);
   const money = (value: Prisma.Decimal.Value) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value.toString()));
 
@@ -65,6 +69,8 @@ export default async function AdminUserDetailPage({ params }: Props) {
         userId={user.id}
         name={user.name}
         planId={user.planId}
+        artistLimitOverride={user.artistLimitOverride}
+        planArtistLimits={planArtistLimits}
       />
 
       {user.role === "user" && hasPermission(admin.role, "users.write") ? (

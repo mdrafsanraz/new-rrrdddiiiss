@@ -16,6 +16,7 @@ type FieldProps = {
   name?: string;
   placeholder?: string;
   inputMode?: "text" | "numeric" | "decimal" | "tel" | "search" | "email" | "url";
+  min?: number | string;
   maxLength?: number;
   onChange?: ChangeEventHandler<
     HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -37,6 +38,7 @@ export function Field({
   name,
   placeholder,
   inputMode,
+  min,
   maxLength,
   onChange,
 }: FieldProps) {
@@ -90,6 +92,7 @@ export function Field({
           onChange={onChange}
           placeholder={placeholder}
           inputMode={inputMode}
+          min={min}
           maxLength={maxLength}
           className={controlClass}
         />

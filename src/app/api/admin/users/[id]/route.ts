@@ -7,6 +7,7 @@ import type { PlanId } from "@prisma/client";
 const patchSchema = z.object({
   planId: z.enum(["free", "starter", "pro"]).optional(),
   name: z.string().min(1).max(120).optional(),
+  artistLimitOverride: z.number().int().min(0).nullable().optional(),
 });
 
 type Params = { params: Promise<{ id: string }> };
@@ -42,9 +43,16 @@ export async function PATCH(request: Request, { params }: Params) {
 
   try {
     const body = patchSchema.parse(await request.json());
-    const data: { planId?: PlanId; name?: string } = {};
+    const data: {
+      planId?: PlanId;
+      name?: string;
+      artistLimitOverride?: number | null;
+    } = {};
     if (body.planId) data.planId = body.planId;
     if (body.name) data.name = body.name.trim();
+    if (body.artistLimitOverride !== undefined) {
+      data.artistLimitOverride = body.artistLimitOverride;
+    }
 
     const user = await prisma.user.update({
       where: { id },

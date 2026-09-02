@@ -278,6 +278,8 @@ model User {
   migratedAt                    DateTime?
   role                          UserRole           @default(user)
   planId                        PlanId             @default(free)
+  /** Optional admin-set artist allowance. Null inherits the plan limit. */
+  artistLimitOverride           Int?
   stripeCustomerId              String?            @unique
   stripeSubscriptionId          String?            @unique
   stripeStatus                  SubscriptionStatus @default(none)
