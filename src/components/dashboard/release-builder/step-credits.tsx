@@ -107,87 +107,7 @@ function logRoleSelection(scope: "contributor" | "writer-split", role: Contribut
   });
 }
 
-function RoleChip({
-  role,
-  on,
-  title,
-  onToggle,
-}: {
-  role: string;
-  on: boolean;
-  title?: string | null;
-  onToggle: (role: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      title={title ?? undefined}
-      onClick={() => onToggle(role)}
-      className={cn(
-        "cursor-pointer border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ease-[var(--ease-rdistro)]",
-        on
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border hover:border-primary/50"
-      )}
-    >
-      {role}
-    </button>
-  );
-}
-
-/** Role picker grouped under the category headings LabelGrid itself returns. */
-function RoleGroupPicker({
-  catalog,
-  groups,
-  selected,
-  scope,
-  emptyLabel,
-  onToggle,
-}: {
-  catalog: CatalogState<unknown>;
-  groups: RoleGroup[];
-  selected: string[];
-  scope: "contributor" | "writer-split";
-  emptyLabel: string;
-  onToggle: (role: ContributorRole) => void;
-}) {
-  if (!catalog.loaded) {
-    return <p className="text-sm text-muted-foreground">Loading roles…</p>;
-  }
-  if (catalog.error) {
-    return <p className="text-sm text-destructive">{catalog.error}</p>;
-  }
-  if (groups.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
-  }
-  return (
-    <div className="max-h-40 space-y-3 overflow-y-auto pr-1">
-      {groups.map((g) => (
-        <div key={g.category}>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {g.category}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {g.roles.map((r) => (
-              <RoleChip
-                key={r.display_value}
-                role={r.display_value}
-                title={r.description}
-                on={selected.includes(r.display_value)}
-                onToggle={() => {
-                  logRoleSelection(scope, r);
-                  onToggle(r);
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** A selected contributor role, shown as a removable tag. */
+/** A selected contributor or writer role, shown as a removable tag. */
 function SelectedRoleChip({
   role,
   onRemove,
@@ -349,11 +269,6 @@ export function StepCredits({
     () => pickWriterSplitRoles(contributorRoles),
     [contributorRoles]
   );
-  const writerGroups = useMemo(
-    () => groupRolesByCategory(writerEligibleRoles),
-    [writerEligibleRoles]
-  );
-
   const validContributorRoles = useMemo(
     () => new Set(contributorRoles.items.map((r) => r.display_value)),
     [contributorRoles.items]
@@ -664,26 +579,45 @@ export function StepCredits({
             </div>
 
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Role(s) <span className="text-destructive" aria-hidden="true">*</span></p>
-              <RoleGroupPicker
-                catalog={{ ...contributorRoles, items: writerEligibleRoles }}
-                groups={writerGroups}
-                selected={w.roles}
-                scope="writer-split"
-                emptyLabel="Composer/Lyricist roles not available yet."
-                onToggle={(role) =>
-                  setState((prev) => ({
-                    ...prev,
-                    writerSplits: prev.writerSplits.map((x) => {
-                      if (x.id !== w.id) return x;
-                      const roles = x.roles.includes(role.display_value)
-                        ? x.roles.filter((r) => r !== role.display_value)
-                        : [...x.roles, role.display_value];
-                      return { ...x, roles };
-                    }),
-                  }))
-                }
-              />
+              <p className="text-sm font-medium">Roles <span className="text-destructive" aria-hidden="true">*</span></p>
+              <div className="flex flex-wrap items-center gap-2">
+                {w.roles.map((role) => (
+                  <SelectedRoleChip
+                    key={role}
+                    role={role}
+                    onRemove={() =>
+                      setState((prev) => ({
+                        ...prev,
+                        writerSplits: prev.writerSplits.map((x) =>
+                          x.id === w.id
+                            ? { ...x, roles: x.roles.filter((r) => r !== role) }
+                            : x
+                        ),
+                      }))
+                    }
+                  />
+                ))}
+                <AddRoleDropdown
+                  catalog={{ ...contributorRoles, items: writerEligibleRoles }}
+                  selected={w.roles}
+                  scope="writer-split"
+                  onAdd={(role) =>
+                    setState((prev) => ({
+                      ...prev,
+                      writerSplits: prev.writerSplits.map((x) =>
+                        x.id === w.id && !x.roles.includes(role.display_value)
+                          ? { ...x, roles: [...x.roles, role.display_value] }
+                          : x
+                      ),
+                    }))
+                  }
+                />
+              </div>
+              {w.roles.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No roles selected yet — use “+ Add role” above.
+                </p>
+              ) : null}
             </div>
 
             <button

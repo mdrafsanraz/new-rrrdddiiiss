@@ -72,7 +72,6 @@ export default async function EditReleasePage({ params }: Props) {
 
   const initialWizard = wizardStateFromRelease(
     release,
-    release.artist?.name ?? "",
     live
   );
 

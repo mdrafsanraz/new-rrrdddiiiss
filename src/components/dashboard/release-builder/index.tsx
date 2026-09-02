@@ -66,7 +66,6 @@ function initialState(
     defaultArtistId && artists.some((a) => a.id === defaultArtistId)
       ? defaultArtistId
       : (artists[0]?.id ?? "");
-  const artistName = artists.find((a) => a.id === artistId)?.name ?? "";
   return {
     releaseId: null,
     step: 0,
@@ -96,9 +95,9 @@ function initialState(
     publisherSplits: [],
     selfPublished: true,
     clineYear: String(currentYear),
-    clineName: artistName,
+    clineName: "",
     plineYear: String(currentYear),
-    plineName: artistName,
+    plineName: "",
     rightsConfirmed: false,
   };
 }

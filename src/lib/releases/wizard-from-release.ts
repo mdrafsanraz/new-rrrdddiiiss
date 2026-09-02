@@ -33,7 +33,6 @@ function personName(name: string) {
  */
 export function wizardStateFromRelease(
   release: ReleaseWithTracks,
-  artistName: string,
   live?: LiveRelease | null
 ): WizardState {
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
@@ -199,9 +198,9 @@ export function wizardStateFromRelease(
         ? live.tracks[0].publishers.length === 0
         : (rMeta.selfPublished ?? true),
     clineYear: copyrightYear,
-    clineName: live?.clineName ?? rMeta.clineName ?? artistName,
+    clineName: live?.clineName ?? rMeta.clineName ?? "",
     plineYear: copyrightYear,
-    plineName: live?.plineName ?? rMeta.plineName ?? artistName,
+    plineName: live?.plineName ?? rMeta.plineName ?? "",
     rightsConfirmed: false,
   };
 }
