@@ -66,6 +66,7 @@ export function validateReleaseForSubmit(
   }
 
   let anyContributor = false;
+  let instrumentalHasLyricist = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
     if (!t.title.trim()) {
@@ -87,12 +88,38 @@ export function validateReleaseForSubmit(
     if (tMeta.contributors?.some((c) => c.writerId && c.roles.length > 0)) {
       anyContributor = true;
     }
+    if (
+      tMeta.audioLanguage === "zxx" &&
+      tMeta.contributors?.some((contributor) =>
+        contributor.roles.some(
+          (role) => role.trim().toLowerCase() === "lyricist"
+        )
+      )
+    ) {
+      instrumentalHasLyricist = true;
+    }
   }
   if (!anyContributor) {
     errors.push("Add at least one contributor with a writer and at least one role.");
   }
 
   const writerSplits = rMeta.writerSplits ?? [];
+  if (
+    release.tracks.some(
+      (track) =>
+        parseJsonObject<TrackMetadata>(track.metadataJson).audioLanguage === "zxx"
+    ) &&
+    writerSplits.some((writer) =>
+      writer.roles.some((role) => role.trim().toLowerCase() === "lyricist")
+    )
+  ) {
+    instrumentalHasLyricist = true;
+  }
+  if (instrumentalHasLyricist) {
+    errors.push(
+      "An instrumental track cannot credit a Lyricist. Remove the Lyricist role, or select the track's vocal audio language."
+    );
+  }
   if (writerSplits.length > 0) {
     for (const w of writerSplits) {
       if (!w.writerId) errors.push("Every publishing split needs a writer.");

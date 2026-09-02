@@ -134,7 +134,7 @@ export const WRITER_SPLIT_ROLE_ALLOWLIST = ["Composer", "Lyricist"] as const;
  * value in this app — if the live catalog doesn't have one of these three,
  * it's simply not preselected rather than sent unresolved.
  */
-export const DEFAULT_CONTRIBUTOR_ROLES = ["Artist", "Lyricist", "Producer"] as const;
+export const DEFAULT_CONTRIBUTOR_ROLES = ["Artist", "Composer", "Producer"] as const;
 
 export type ContributorDraft = {
   id: string;

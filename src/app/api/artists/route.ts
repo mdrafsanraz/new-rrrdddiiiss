@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         ...(body.location?.trim() ? { location: body.location.trim() } : {}),
         ...(body.bioShort?.trim() ? { bio_short: body.bioShort.trim() } : {}),
       });
-      labelgridId = String(provider.data.id);
+      labelgridId = String(provider.id);
 
       const existing = await prisma.artist.findFirst({
         where: {

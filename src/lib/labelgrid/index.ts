@@ -37,7 +37,7 @@ export function createArtist(body: {
   location?: string;
   bio_short?: string;
 }) {
-  return labelgridFetch<{ data: ArtistData }>("/artists", {
+  return labelgridFetch<ArtistData>("/artists", {
     method: "POST",
     body,
   });
@@ -54,9 +54,9 @@ async function findArtistByExactName(name: string): Promise<ArtistData | null> {
 }
 
 /** Reuse LabelGrid's unique artist-name record, including create race recovery. */
-export async function createOrReuseArtist(body: CreateArtistInput): Promise<{ data: ArtistData }> {
+export async function createOrReuseArtist(body: CreateArtistInput): Promise<ArtistData> {
   const existing = await findArtistByExactName(body.artist_name);
-  if (existing) return { data: existing };
+  if (existing) return existing;
 
   try {
     return await createArtist(body);
@@ -70,12 +70,12 @@ export async function createOrReuseArtist(body: CreateArtistInput): Promise<{ da
     if (!duplicateName) throw error;
     const raced = await findArtistByExactName(body.artist_name);
     if (!raced) throw error;
-    return { data: raced };
+    return raced;
   }
 }
 
 export function getArtist(id: number | string) {
-  return labelgridFetch<{ data: ArtistData }>(`/artists/${id}`);
+  return labelgridFetch<ArtistData>(`/artists/${id}`);
 }
 
 export function updateArtist(
@@ -88,7 +88,7 @@ export function updateArtist(
     bio_short: string;
   }>
 ) {
-  return labelgridFetch<{ data: ArtistData }>(`/artists/${id}`, {
+  return labelgridFetch<ArtistData>(`/artists/${id}`, {
     method: "PATCH",
     body,
   });

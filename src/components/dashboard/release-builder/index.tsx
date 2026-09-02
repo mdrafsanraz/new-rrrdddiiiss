@@ -185,6 +185,18 @@ function validateStep(
         return `Pick at least one role for ${c.firstName} ${c.lastName}.`;
       }
     }
+    const hasInstrumentalTrack = state.tracks.some(
+      (track) => track.audioLanguage === "zxx"
+    );
+    const contributorHasLyricist = state.contributors.some((contributor) =>
+      contributor.roles.some((role) => role.trim().toLowerCase() === "lyricist")
+    );
+    const writerHasLyricist = state.writerSplits.some((writer) =>
+      writer.roles.some((role) => role.trim().toLowerCase() === "lyricist")
+    );
+    if (hasInstrumentalTrack && (contributorHasLyricist || writerHasLyricist)) {
+      return "An instrumental track cannot credit a Lyricist. Remove the Lyricist role, or select the track's vocal audio language.";
+    }
     // Category coverage: LabelGrid rejects tracks whose contributors don't
     // span all required categories. Only checkable once the live catalog
     // (role → category) has loaded; the server still enforces it.

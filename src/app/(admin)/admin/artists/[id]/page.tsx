@@ -27,7 +27,7 @@ export default async function AdminArtistDetailPage({ params }: Props) {
   let providerUnavailable = false;
   if (artist.labelgridId && isLabelGridLive()) {
     try {
-      providerArtist = (await getArtist(artist.labelgridId)).data;
+      providerArtist = await getArtist(artist.labelgridId);
     } catch (error) {
       providerUnavailable = true;
       console.error("[admin/artists/detail] LabelGrid artist fetch failed", error);
