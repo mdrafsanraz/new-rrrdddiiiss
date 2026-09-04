@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseStatusChanged } from "@/lib/email";
 import { prisma } from "@/lib/db";
@@ -258,6 +258,13 @@ export async function POST(request: Request) {
     );
   }
 
-  after(() => processWebhook(payload, rawBody, event, eventKind, releaseId));
+  // Railway runs the standalone Node server as a long-lived process. Schedule
+  // all database/provider/email work for the next event-loop turn so the 200
+  // response is handed to LabelGrid before processing begins. `after()` can be
+  // held open by some reverse-proxy/runtime combinations, which caused
+  // LabelGrid's 10-second delivery timeout despite returning a response body.
+  setImmediate(() => {
+    void processWebhook(payload, rawBody, event, eventKind, releaseId);
+  });
   return NextResponse.json({ received: true, queued: true });
 }
