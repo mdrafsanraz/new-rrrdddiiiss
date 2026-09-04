@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseStatusChanged } from "@/lib/email";
 import { prisma } from "@/lib/db";
@@ -66,6 +66,134 @@ function supportedEvent(event: string): SupportedEvent | null {
   return null;
 }
 
+async function processWebhook(
+  payload: LabelGridWebhook,
+  rawBody: string,
+  event: string,
+  eventKind: SupportedEvent,
+  releaseId: string | number
+) {
+  let eventRecordId: string | null = null;
+  try {
+    const eventRecord = await prisma.providerWebhookEvent.create({
+      data: {
+        provider: "labelgrid",
+        eventType: event,
+        providerReleaseId: String(releaseId),
+        payloadJson: rawBody,
+      },
+    });
+    eventRecordId = eventRecord.id;
+
+    if (eventKind === "transcode_completed") {
+      const trackId = payload.data?.track_id as string | number;
+      const release = await prisma.release.findFirst({
+        where: { labelgridId: String(releaseId) },
+        select: {
+          id: true,
+          tracks: { select: { labelgridId: true } },
+        },
+      });
+      const mappedTrack = release?.tracks.some(
+        (track) => track.labelgridId === String(trackId)
+      );
+      if (
+        !release ||
+        (!mappedTrack && release.tracks.some((track) => track.labelgridId))
+      ) {
+        await prisma.providerWebhookEvent.update({
+          where: { id: eventRecord.id },
+          data: {
+            processed: true,
+            processedAt: new Date(),
+            error: release
+              ? "LabelGrid track is not mapped"
+              : "LabelGrid release is not mapped",
+          },
+        });
+        return;
+      }
+
+      const acrQueued = await markReleaseAcrPending(release.id);
+      await prisma.providerWebhookEvent.update({
+        where: { id: eventRecord.id },
+        data: {
+          releaseId: release.id,
+          processed: true,
+          processedAt: new Date(),
+          error: acrQueued ? null : "ACRCloud is not configured",
+        },
+      });
+      return;
+    }
+
+    const result =
+      eventKind === "review_status"
+        ? await applyLabelGridReviewStatusWebhook({
+            release_id: releaseId,
+            previous_status:
+              typeof payload.data?.previous_status === "string"
+                ? payload.data.previous_status
+                : null,
+            new_status: payload.data?.new_status as string,
+            review_issues: payload.data?.review_issues,
+            release_title:
+              typeof payload.data?.release_title === "string"
+                ? payload.data.release_title
+                : null,
+          })
+        : await applyLabelGridDeliveryStatusWebhook({
+            release_id: releaseId,
+            delivery_status:
+              typeof payload.data?.delivery_status === "string"
+                ? payload.data.delivery_status
+                : null,
+          });
+
+    if (!result.ok) {
+      await prisma.providerWebhookEvent.update({
+        where: { id: eventRecord.id },
+        data: { processed: true, processedAt: new Date(), error: result.error },
+      });
+      return;
+    }
+
+    if (result.userStatusChanged) {
+      await notifyReleaseStatusChanged({
+        to: result.release.user.email,
+        name: result.release.user.name,
+        releaseId: result.release.id,
+        releaseTitle: result.release.title,
+        statusLabel: getUserFacingStatusLabel(result.status),
+        statusDescription: getUserFacingStatusDescription(result.status),
+      });
+    }
+
+    await prisma.providerWebhookEvent.update({
+      where: { id: eventRecord.id },
+      data: {
+        releaseId: result.release.id,
+        processed: true,
+        processedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Webhook processing failed";
+    if (eventRecordId) {
+      try {
+        await prisma.providerWebhookEvent.update({
+          where: { id: eventRecordId },
+          data: { error: message.slice(0, 2000) },
+        });
+      } catch (updateError) {
+        console.error("[labelgrid-webhook] Failed to record error", updateError);
+      }
+    }
+    console.error("[labelgrid-webhook] Processing failed", error);
+  }
+}
+
 export async function POST(request: Request) {
   const secret = process.env.LABELGRID_WEBHOOK_SECRET?.trim();
   if (!secret) {
@@ -130,111 +258,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const eventRecord = await prisma.providerWebhookEvent.create({
-    data: {
-      provider: "labelgrid",
-      eventType: event,
-      providerReleaseId: String(releaseId),
-      payloadJson: rawBody,
-    },
-  });
-
-  try {
-    if (eventKind === "transcode_completed") {
-      const release = await prisma.release.findFirst({
-        where: { labelgridId: String(releaseId) },
-        select: {
-          id: true,
-          tracks: { select: { labelgridId: true } },
-        },
-      });
-      const mappedTrack = release?.tracks.some(
-        (track) => track.labelgridId === String(trackId),
-      );
-      if (!release || (!mappedTrack && release.tracks.some((track) => track.labelgridId))) {
-        await prisma.providerWebhookEvent.update({
-          where: { id: eventRecord.id },
-          data: {
-            processed: true,
-            processedAt: new Date(),
-            error: release ? "LabelGrid track is not mapped" : "LabelGrid release is not mapped",
-          },
-        });
-        return NextResponse.json({ received: true, mapped: false });
-      }
-
-      const acrQueued = await markReleaseAcrPending(release.id);
-      await prisma.providerWebhookEvent.update({
-        where: { id: eventRecord.id },
-        data: {
-          releaseId: release.id,
-          processed: true,
-          processedAt: new Date(),
-          error: acrQueued ? null : "ACRCloud is not configured",
-        },
-      });
-      return NextResponse.json({ received: true, mapped: true, acrQueued });
-    }
-
-    const result =
-      eventKind === "review_status"
-        ? await applyLabelGridReviewStatusWebhook({
-            release_id: releaseId,
-            previous_status:
-              typeof payload.data?.previous_status === "string"
-                ? payload.data.previous_status
-                : null,
-            new_status: newStatus as string,
-            review_issues: payload.data?.review_issues,
-            release_title:
-              typeof payload.data?.release_title === "string"
-                ? payload.data.release_title
-                : null,
-          })
-        : await applyLabelGridDeliveryStatusWebhook({
-            release_id: releaseId,
-            delivery_status:
-              typeof payload.data?.delivery_status === "string"
-                ? payload.data.delivery_status
-                : null,
-          });
-
-    if (!result.ok) {
-      await prisma.providerWebhookEvent.update({
-        where: { id: eventRecord.id },
-        data: { processed: true, processedAt: new Date(), error: result.error },
-      });
-      return NextResponse.json({ received: true, mapped: false });
-    }
-
-    if (result.userStatusChanged) {
-      await notifyReleaseStatusChanged({
-        to: result.release.user.email,
-        name: result.release.user.name,
-        releaseId: result.release.id,
-        releaseTitle: result.release.title,
-        statusLabel: getUserFacingStatusLabel(result.status),
-        statusDescription: getUserFacingStatusDescription(result.status),
-      });
-    }
-
-    await prisma.providerWebhookEvent.update({
-      where: { id: eventRecord.id },
-      data: {
-        releaseId: result.release.id,
-        processed: true,
-        processedAt: new Date(),
-      },
-    });
-    return NextResponse.json({ received: true, mapped: true });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Webhook processing failed";
-    await prisma.providerWebhookEvent.update({
-      where: { id: eventRecord.id },
-      data: { error: message.slice(0, 2000) },
-    });
-    console.error("[labelgrid-webhook] Processing failed", error);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
-  }
+  after(() => processWebhook(payload, rawBody, event, eventKind, releaseId));
+  return NextResponse.json({ received: true, queued: true });
 }
