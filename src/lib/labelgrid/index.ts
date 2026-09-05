@@ -126,7 +126,7 @@ export function deleteRelease(id: number | string) {
 }
 
 export function validateRelease(id: number | string) {
-  return labelgridFetch<unknown>(`/releases/${id}/validate`, {
+  return labelgridFetch<{ result: "OK" | "ERROR"; errors?: string[]; warnings?: string[] }>(`/releases/${id}/validate`, {
     method: "POST",
   });
 }

@@ -1316,14 +1316,17 @@ export async function submitLabelGridDraftForReview(input: {
       };
     }
 
-    // Best-effort validation before submit-for-review.
-    try {
-      await validateRelease(lgReleaseId);
-    } catch (error) {
-      console.warn(
-        "[labelgrid/validate]",
-        lgReleaseId,
-        formatLgError(error)
+    // HTTP 200 can contain result: ERROR. Distribution requires an explicit
+    // successful validation; warnings are advisory and must not block it.
+    const validation = await validateRelease(lgReleaseId);
+    if (validation?.result !== "OK") {
+      const errors = Array.isArray(validation?.errors)
+        ? validation.errors.filter((error) => typeof error === "string" && error.trim())
+        : [];
+      throw new Error(
+        errors.length
+          ? `Release validation failed: ${errors.join("; ")}`
+          : "LabelGrid did not confirm successful release validation. Please retry validation before approval."
       );
     }
 
