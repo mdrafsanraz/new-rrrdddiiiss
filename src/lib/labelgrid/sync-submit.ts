@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { validateMetadataLanguage } from "./languages";
 import { prisma } from "@/lib/db";
 import {
   LabelGridApiError,
@@ -1042,7 +1043,7 @@ async function ensureLabelGridReleaseMetadata(
   const primaryGenreId =
     rMeta.primaryGenreId ?? (await requireGenreId(release.primaryGenre));
 
-  const locale = rMeta.preferredLocalization || "en";
+  const locale = await validateMetadataLanguage(rMeta.preferredLocalization || "en");
   const artisticRole = rMeta.artisticRole || "MainArtist";
 
   const releaseBody = await buildReleaseBody(release, {
@@ -1113,7 +1114,7 @@ export async function buildTrackSyncContext(
 
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
   const lgArtistId = await ensureLabelGridArtist(release.artist);
-  const locale = rMeta.preferredLocalization || "en";
+  const locale = await validateMetadataLanguage(rMeta.preferredLocalization || "en");
   const artisticRole = rMeta.artisticRole || "MainArtist";
   const splits = await buildSplitArrays(rMeta);
 

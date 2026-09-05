@@ -10,7 +10,7 @@
  */
 
 import { Field } from "@/components/site/field";
-import { LOCALES } from "@/lib/releases/constants";
+import { MetadataLanguage } from "./metadata-language";
 import type { WizardState } from "@/lib/releases/wizard-types";
 import {
   CatalogStatus,
@@ -257,20 +257,7 @@ export function StepRelease({
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field
-            id="language"
-            label="Metadata language"
-            as="select"
-            required
-            value={state.preferredLocalization}
-            onChange={(e) => patch({ preferredLocalization: e.target.value })}
-          >
-            {LOCALES.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
-            ))}
-          </Field>
+          <MetadataLanguage value={state.preferredLocalization} onChange={(value) => patch({ preferredLocalization: value })} />
           <div className="grid gap-2">
             <p className="text-sm font-medium">Label</p>
             <p className="flex h-10 items-center border border-border bg-muted px-3 text-sm text-muted-foreground">
