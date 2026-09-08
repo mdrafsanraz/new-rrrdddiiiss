@@ -69,6 +69,15 @@ export function validateReleaseForSubmit(
   let instrumentalHasLyricist = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+    const contributorIds = new Set<number>();
+    for (const contributor of tMeta.contributors ?? []) {
+      if (!contributor.writerId) continue;
+      if (contributorIds.has(contributor.writerId)) {
+        errors.push(`"${t.title}" lists ${contributor.firstName} ${contributor.lastName} more than once in Contributors. Keep one row per person and add all their roles to that row.`);
+        break;
+      }
+      contributorIds.add(contributor.writerId);
+    }
     if (!t.title.trim()) {
       errors.push(`Track ${t.trackNumber} is missing a title.`);
     }

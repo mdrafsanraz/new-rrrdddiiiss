@@ -450,6 +450,7 @@ async function buildDistributionFields(
 }
 
 type TrackSyncContext = {
+  additionalLgArtistIds: number[];
   lgReleaseId: number;
   lgArtistId: number;
   locale: string;
@@ -582,6 +583,9 @@ async function buildTrackContributors(
         last_name: c.lastName.trim(),
         email: artist.email ?? undefined,
       }));
+    if (lgContributors.some((contributor) => contributor.writer_id === writerId)) {
+      throw new Error(`"${track.title}" lists ${c.firstName} ${c.lastName} more than once in Contributors. Keep one row per person and add all their roles to that row.`);
+    }
     lgContributors.push({
       writer_id: writerId,
       roles,
@@ -655,6 +659,7 @@ async function buildTrackBody(
         artistic_role: ctx.artisticRole,
         position: 1,
       },
+      ...ctx.additionalLgArtistIds.map((id, index) => ({ artist_id: id, artistic_role: "MainArtist", position: index + 2 })),
     ],
     contributors,
   };
@@ -961,6 +966,19 @@ export async function uploadArtworkForSubmit(
   return { url: file?.url ?? null };
 }
 
+async function additionalPrimaryArtistIds(release: ReleaseWithRels, primaryId: number): Promise<number[]> {
+  const metadata = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  const ids = [...new Set(metadata.additionalArtistIds ?? [])].filter((id) => id !== release.artistId);
+  const artists = await prisma.artist.findMany({ where: { id: { in: ids }, userId: release.userId } });
+  if (artists.length !== ids.length) throw new Error("One or more selected primary artists are unavailable in your account. Edit the release and select them again.");
+  const providerIds: number[] = [];
+  for (const id of ids) {
+    const providerId = await ensureLabelGridArtist(artists.find((artist) => artist.id === id)!);
+    if (providerId !== primaryId && !providerIds.includes(providerId)) providerIds.push(providerId);
+  }
+  return providerIds;
+}
+
 async function buildReleaseBody(
   release: ReleaseWithRels,
   input: {
@@ -976,6 +994,7 @@ async function buildReleaseBody(
     ? new Date(`${rMeta.originalReleaseDate}T00:00:00.000Z`)
     : release.releaseDate;
   const copyrightYear = effectiveReleaseDate?.getUTCFullYear();
+  const additionalIds = await additionalPrimaryArtistIds(release, input.lgArtistId);
 
   const body: Record<string, unknown> = {
     content_type: release.contentType,
@@ -1011,6 +1030,7 @@ async function buildReleaseBody(
         artistic_role: input.artisticRole,
         position: 1,
       },
+      ...additionalIds.map((id, index) => ({ artist_id: id, artistic_role: "MainArtist", position: index + 2 })),
     ],
   };
 
@@ -1121,6 +1141,7 @@ export async function buildTrackSyncContext(
   return {
     lgReleaseId: Number(release.labelgridId),
     lgArtistId,
+    additionalLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId),
     locale,
     artisticRole,
     releaseExplicit: release.explicit,
@@ -1180,6 +1201,7 @@ export async function syncReleaseToLabelGrid(input: {
     const splits = await buildSplitArrays(rMeta);
 
     const ctx: TrackSyncContext = {
+      additionalLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId),
       lgReleaseId,
       lgArtistId,
       locale,

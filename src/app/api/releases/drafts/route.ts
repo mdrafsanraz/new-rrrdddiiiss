@@ -12,6 +12,7 @@ import {
 
 const schema = z.object({
   artistId: z.string().min(1),
+  additionalArtistIds: z.array(z.string().min(1)).max(100).optional(),
   title: z.string().min(1).max(200).optional().or(z.literal("")),
   contentType: z.enum(["Single", "EP", "Album"]).default("Single"),
   /** Live LabelGrid genre id + display name (GET /genres). */
@@ -68,6 +69,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing payload" }, { status: 400 });
     }
     const fields = schema.parse(JSON.parse(raw));
+    if (fields.additionalArtistIds?.length) {
+      const ids = [...new Set(fields.additionalArtistIds)];
+      const count = await prisma.artist.count({ where: { id: { in: ids }, userId: user.id } });
+      if (count !== ids.length) return NextResponse.json({ error: "Select primary artists from your own roster." }, { status: 400 });
+    }
 
     const artist = await prisma.artist.findFirst({
       where: { id: fields.artistId, userId: user.id },
@@ -82,6 +88,7 @@ export async function POST(request: Request) {
     const year = selectedDate ? Number(selectedDate.slice(0, 4)) : new Date().getFullYear();
 
     const meta: ReleaseMetadata = {
+      additionalArtistIds: fields.additionalArtistIds ?? [],
       mixVersion: fields.mixVersion || undefined,
       preferredLocalization: fields.preferredLocalization,
       artisticRole: "MainArtist",

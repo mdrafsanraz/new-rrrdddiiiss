@@ -175,6 +175,21 @@ export function StepRelease({
             ))}
           </Field>
 
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Additional primary artists</legend>
+            <p className="text-xs text-muted-foreground">Selected artists will be credited on this release and its tracks.</p>
+            {artists.filter((artist) => artist.id !== state.artistId).map((artist) => (
+              <label key={artist.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={state.additionalArtistIds?.includes(artist.id) ?? false}
+                  onChange={(event) => patch({ additionalArtistIds: event.target.checked
+                    ? [...(state.additionalArtistIds ?? []).filter((id) => id !== state.artistId && id !== artist.id), artist.id]
+                    : (state.additionalArtistIds ?? []).filter((id) => id !== artist.id) })} />
+                {artist.name}
+              </label>
+            ))}
+            {artists.length < 2 ? <p className="text-xs text-muted-foreground">Add another artist profile to your roster to select it here.</p> : null}
+          </fieldset>
+
           <div className="grid gap-2">
             <p className="text-sm font-medium">Release type <span className="text-destructive" aria-hidden="true">*</span></p>
             <ChipGroup

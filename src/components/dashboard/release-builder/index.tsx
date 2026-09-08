@@ -174,6 +174,14 @@ function validateStep(
     return null;
   }
   if (step === STEP_CREDITS) {
+    const contributorIds = new Set<number>();
+    for (const contributor of state.contributors) {
+      if (!contributor.writerId) continue;
+      if (contributorIds.has(contributor.writerId)) {
+        return `${contributor.firstName} ${contributor.lastName} is listed more than once in Contributors. Keep one row per person and add all their roles to that row.`;
+      }
+      contributorIds.add(contributor.writerId);
+    }
     const ok = state.contributors.some(
       (c) => c.writerId && c.roles.length > 0
     );
@@ -257,6 +265,7 @@ function validateStep(
 function releasePayloadFields(state: WizardState) {
   return {
     artistId: state.artistId,
+    additionalArtistIds: (state.additionalArtistIds ?? []).filter((id) => id !== state.artistId),
     title: state.title.trim(),
     contentType: state.contentType,
     primaryGenreId: state.primaryGenreId,
@@ -771,7 +780,7 @@ export function ReleaseBuilder({
               <StepReview
                 state={state}
                 patch={patch}
-                artistName={artist?.name ?? ""}
+                artistName={artists.filter((item) => item.id === state.artistId || state.additionalArtistIds?.includes(item.id)).map((item) => item.name).join(", ")}
                 outlets={outlets}
                 onJump={(step) => patch({ step })}
               />

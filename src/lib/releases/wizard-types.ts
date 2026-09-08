@@ -62,6 +62,7 @@ export type WizardState = {
   originalReleaseDate: string;
   title: string;
   artistId: string;
+  additionalArtistIds?: string[];
   contentType: "Single" | "EP" | "Album";
   mixVersion: string;
   /** Live LabelGrid genre id + display name (GET /genres). */

@@ -172,6 +172,7 @@ export function wizardStateFromRelease(
         ? ""
         : (live?.title ?? release.title),
     artistId: release.artistId ?? "",
+    additionalArtistIds: rMeta.additionalArtistIds ?? [],
     contentType:
       live?.contentType === "Single" ||
       live?.contentType === "EP" ||

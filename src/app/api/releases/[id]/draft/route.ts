@@ -72,6 +72,7 @@ const publisherSplitSchema = z.object({
 const schema = z.object({
   title: z.string().min(1).max(200).optional(),
   artistId: z.string().optional(),
+  additionalArtistIds: z.array(z.string().min(1)).max(100).optional(),
   contentType: z.enum(["Single", "EP", "Album"]).optional(),
   /** Live LabelGrid genre id + display name (GET /genres). */
   primaryGenreId: z.number().int().positive().nullable().optional(),
@@ -135,6 +136,11 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Missing payload" }, { status: 400 });
     }
     const fields = schema.parse(JSON.parse(raw));
+    if (fields.additionalArtistIds?.length) {
+      const ids = [...new Set(fields.additionalArtistIds)];
+      const count = await prisma.artist.count({ where: { id: { in: ids }, userId: user.id } });
+      if (count !== ids.length) return NextResponse.json({ error: "Select primary artists from your own roster." }, { status: 400 });
+    }
 
     if (fields.artistId) {
       const artist = await prisma.artist.findFirst({
@@ -158,6 +164,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const copyrightYear = selectedYear ? Number(selectedYear) : undefined;
     const nextMeta = {
       ...prevMeta,
+      ...(fields.additionalArtistIds !== undefined ? { additionalArtistIds: fields.additionalArtistIds } : {}),
       ...(fields.mixVersion !== undefined
         ? { mixVersion: fields.mixVersion || undefined }
         : {}),

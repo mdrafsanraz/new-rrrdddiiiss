@@ -179,6 +179,7 @@ export type PublisherSplitDraft = {
 };
 
 export type ReleaseMetadata = {
+  additionalArtistIds?: string[];
   mixVersion?: string;
   preferredLocalization?: string;
   artisticRole?: string;
