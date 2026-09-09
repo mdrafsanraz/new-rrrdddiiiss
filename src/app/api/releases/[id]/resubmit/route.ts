@@ -49,6 +49,13 @@ export async function POST(_request: Request, { params }: Params) {
     );
   }
 
+  const missingDocuments = await prisma.releaseReviewIssue.count({
+    where: { releaseId: id, resolved: false, requiresDocument: true, documents: { none: {} } },
+  });
+  if (missingDocuments > 0) {
+    return NextResponse.json({ error: "Upload the requested documents before resubmitting." }, { status: 400 });
+  }
+
   const claimed = await prisma.release.updateMany({
     where: {
       id,

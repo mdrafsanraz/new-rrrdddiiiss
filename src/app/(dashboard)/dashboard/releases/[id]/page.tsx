@@ -30,14 +30,13 @@ import { getReleaseDeliveryStatus } from "@/lib/labelgrid";
 import { computeReleaseLifecycleActions } from "@/lib/labelgrid/release-actions";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
 import {
-  canUserEditRelease,
-  canUserResubmitRelease,
   canUserSubmitRelease,
   getUserFacingReleaseStatus,
   getUserFacingStatusDescription,
   isFinalRejection,
   normalizeReleaseStatus,
 } from "@/lib/releases/status";
+import { getReviewActions, isDocumentRequest } from "@/lib/releases/review-workflow";
 import { ReleaseActions } from "@/components/dashboard/release-view/release-actions";
 import {
   ReleaseTabs,
@@ -117,26 +116,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
-  // "Changes required", "sent back to draft", and "document requested" are
-  // three different asks:
-  //  - changes required (no document) → the user must edit and resubmit
-  //    through the builder. Only Edit Release is offered; no standalone
-  //    Resubmit and no Delete.
-  //  - sent back to draft (ready_to_submit with a prior submittedAt) → same
-  //    as above: Edit Release only. Resubmit happens by finishing the
-  //    builder's submission form, not a standalone button here.
-  //  - document requested → no metadata edit needed, just the upload card.
-  //    No Edit, no Delete, and no Resubmit until every requested document
-  //    has actually been uploaded — then Resubmit is the only action.
-  const documentRequiredIssues = openIssues.filter((i) => i.requiresDocument);
+  // Editing remains available for corrections, including mixed document requests.
+  const documentRequiredIssues = openIssues.filter(isDocumentRequest);
   const documentRequested = documentRequiredIssues.length > 0;
-  const documentProvided = documentRequiredIssues.every(
-    (i) => ("documents" in i ? i.documents.length : 0) > 0
-  );
   const canSubmit = canUserSubmitRelease(release);
-  const canResubmit =
-    documentRequested && documentProvided && canUserResubmitRelease(release);
-  const canEdit = canUserEditRelease(release) && !documentRequested;
+  const { canEdit, canResubmit } = getReviewActions(release, openIssues);
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
     id: d.id,
@@ -403,7 +387,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
                     <span className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
                       {issue.category || "Review"}
                     </span>
-                    {issue.requiresDocument ? (
+                    {isDocumentRequest(issue) ? (
                       <span className="text-[11px] font-medium">Document may be required</span>
                     ) : null}
                   </div>

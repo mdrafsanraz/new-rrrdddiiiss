@@ -133,8 +133,8 @@ export async function syncLabelGridReviewIssues(
       severity: issue.severity,
       isBlocking: issue.is_blocking,
       requiresFeedback: issue.requires_feedback,
-      // OpenAPI has no document-upload endpoint on issues; treat feedback as
-      // potentially needing supporting materials we store locally.
+      // LabelGrid feedback uses the document-and-note response workflow.
+      // RDISTRO metadata corrections remain a separate editor workflow.
       requiresDocument: issue.requires_feedback,
       affectedTrackId,
       providerTrackId,

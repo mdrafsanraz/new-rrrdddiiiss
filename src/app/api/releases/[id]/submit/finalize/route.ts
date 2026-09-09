@@ -41,6 +41,12 @@ export async function POST(_request: Request, { params }: Params) {
   if (errors.length > 0) {
     return NextResponse.json({ error: errors[0], errors }, { status: 400 });
   }
+  const missingDocuments = await prisma.releaseReviewIssue.count({
+    where: { releaseId: id, resolved: false, requiresDocument: true, documents: { none: {} } },
+  });
+  if (missingDocuments > 0) {
+    return NextResponse.json({ error: "Upload the requested documents on the release page before resubmitting." }, { status: 400 });
+  }
   if (!release.labelgridId) {
     return NextResponse.json(
       { error: "Run the Create Release stage first." },
@@ -81,7 +87,8 @@ export async function POST(_request: Request, { params }: Params) {
 
   // Idempotent claim — a retry/double-click after this already landed just
   // reports success again rather than erroring.
-  const claimed = await prisma.release.updateMany({
+  const claimed = await prisma.$transaction(async (tx) => {
+    const result = await tx.release.updateMany({
     where: {
       id,
       userId: user.id,
@@ -109,6 +116,14 @@ export async function POST(_request: Request, { params }: Params) {
         : {}),
       syncError: null,
     },
+    });
+    if (result.count > 0) {
+      await tx.releaseReviewIssue.updateMany({
+        where: { releaseId: id, resolved: false },
+        data: { resolved: true, resolvedAt: new Date(), status: "resubmitted" },
+      });
+    }
+    return result;
   });
 
   if (claimed.count === 0) {
