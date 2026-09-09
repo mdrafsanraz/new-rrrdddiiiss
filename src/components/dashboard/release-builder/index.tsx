@@ -22,6 +22,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
+import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
 import {
   newContributor,
   newTrack,
@@ -174,8 +175,12 @@ function validateStep(
     return null;
   }
   if (step === STEP_CREDITS) {
+    const writerError = requiredWriterSplitsError(state.writerSplits);
+    if (writerError) return writerError;
     const contributorIds = new Set<number>();
     for (const contributor of state.contributors) {
+      const roleError = contributorRoleLimitError(contributor);
+      if (roleError) return roleError;
       if (!contributor.writerId) continue;
       if (contributorIds.has(contributor.writerId)) {
         return `${contributor.firstName} ${contributor.lastName} is listed more than once in Contributors. Keep one row per person and add all their roles to that row.`;

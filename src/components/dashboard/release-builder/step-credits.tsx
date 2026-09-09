@@ -21,6 +21,7 @@ import { Plus, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
+import { MAX_CONTRIBUTOR_ROLES, contributorRoleLimitError } from "@/lib/releases/credit-validation";
 import {
   DEFAULT_CONTRIBUTOR_ROLES,
   WRITER_SPLIT_ROLE_ALLOWLIST,
@@ -170,18 +171,21 @@ function AddRoleDropdown({
     ? available.filter((r) => r.display_value.toLowerCase().includes(q))
     : available;
   const groups = groupRolesByCategory(filtered);
+  const atLimit = scope === "contributor" && selected.length >= MAX_CONTRIBUTOR_ROLES;
 
   return (
     <div ref={containerRef} className="relative inline-block">
       <button
         type="button"
+        disabled={atLimit}
+        title={atLimit ? `Maximum ${MAX_CONTRIBUTOR_ROLES} roles per contributor` : undefined}
         onClick={() => setOpen((o) => !o)}
         className="cursor-pointer border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-150 ease-[var(--ease-rdistro)] hover:border-primary/50 hover:text-foreground"
       >
         + Add role
       </button>
       <DropdownPanel
-        show={open}
+        show={open && !atLimit}
         className="absolute z-20 mt-1 w-64 border border-border bg-card shadow-md"
       >
           <input
@@ -429,7 +433,7 @@ export function StepCredits({
                     setState((prev) => ({
                       ...prev,
                       contributors: prev.contributors.map((x) =>
-                        x.id === c.id && !x.roles.includes(role.display_value)
+                        x.id === c.id && x.roles.length < MAX_CONTRIBUTOR_ROLES && !x.roles.includes(role.display_value)
                           ? { ...x, roles: [...x.roles, role.display_value] }
                           : x
                       ),
@@ -437,6 +441,9 @@ export function StepCredits({
                   }
                 />
               </div>
+              <p className={cn("text-xs", c.roles.length > MAX_CONTRIBUTOR_ROLES ? "text-destructive" : "text-muted-foreground")}>
+                {contributorRoleLimitError(c) ?? `${c.roles.length}/${MAX_CONTRIBUTOR_ROLES} roles selected`}
+              </p>
               {c.roles.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   No roles selected yet — use “+ Add role” above.

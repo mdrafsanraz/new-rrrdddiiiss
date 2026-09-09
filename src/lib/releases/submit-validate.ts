@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { contributorRoleLimitError, requiredWriterSplitsError } from "./credit-validation";
 import {
   parseJsonObject,
   type ReleaseMetadata,
@@ -71,6 +72,8 @@ export function validateReleaseForSubmit(
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
     const contributorIds = new Set<number>();
     for (const contributor of tMeta.contributors ?? []) {
+      const roleError = contributorRoleLimitError(contributor);
+      if (roleError) errors.push(`"${t.title}": ${roleError}`);
       if (!contributor.writerId) continue;
       if (contributorIds.has(contributor.writerId)) {
         errors.push(`"${t.title}" lists ${contributor.firstName} ${contributor.lastName} more than once in Contributors. Keep one row per person and add all their roles to that row.`);
@@ -113,6 +116,8 @@ export function validateReleaseForSubmit(
   }
 
   const writerSplits = rMeta.writerSplits ?? [];
+  const writerError = requiredWriterSplitsError(writerSplits);
+  if (writerError) errors.push(writerError);
   if (
     release.tracks.some(
       (track) =>

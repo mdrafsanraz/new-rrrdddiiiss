@@ -287,7 +287,7 @@ export function ReleaseReviewActions({
               >
                 {statusBusy === "approving"
                   ? "Submitting to LabelGrid..."
-                  : "Approve and submit to LabelGrid review"}
+                  : "Approve and send to LabelGrid"}
               </Button>
             ) : null}
             {canSendBackToDraft ? (

@@ -55,6 +55,7 @@ const CHANGES: ReleaseStatus[] = [
 ];
 const LG_REVIEW: ReleaseStatus[] = [
   "labelgrid_in_review",
+  "labelgrid_preflight",
   "submitting_to_labelgrid",
   "approved",
   "syncing",

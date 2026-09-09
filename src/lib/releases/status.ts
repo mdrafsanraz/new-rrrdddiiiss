@@ -9,6 +9,7 @@ export const RELEASE_STATUSES = [
   "internal_approved",
   "submitting_to_labelgrid",
   "labelgrid_in_review",
+  "labelgrid_preflight",
   "labelgrid_changes_required",
   "labelgrid_rejected",
   "labelgrid_approved",
@@ -109,6 +110,7 @@ export function getUserFacingReleaseStatus(
     case "internal_approved":
     case "submitting_to_labelgrid":
     case "labelgrid_in_review":
+    case "labelgrid_preflight":
       return "in_review";
     case "internal_changes_required":
     case "labelgrid_changes_required":
@@ -277,6 +279,7 @@ export function canAdminSendBackToDraft(
     s === "on_hold" ||
     s === "submitting_to_labelgrid" ||
     s === "labelgrid_in_review" ||
+    s === "labelgrid_preflight" ||
     s === "internal_changes_required" ||
     s === "labelgrid_changes_required"
   );
@@ -308,6 +311,8 @@ export function getAdminStatusLabel(status: string): string {
       return "Approved Internally";
     case "labelgrid_in_review":
       return "LabelGrid Review";
+    case "labelgrid_preflight":
+      return "Preflight QC Hold";
     case "labelgrid_approved":
       return "Approved";
     case "delivering":
@@ -344,6 +349,7 @@ export function statusesForUserFacingFilter(
         "submitting_to_labelgrid",
         "syncing",
         "labelgrid_in_review",
+        "labelgrid_preflight",
         "approved",
       ];
     case "changes_required":
@@ -396,8 +402,9 @@ export function mapLabelGridStatusToLocalStatus(
       return null;
     case "to_review":
     case "audit":
-    case "pending_customer_review":
       return "labelgrid_in_review";
+    case "pending_customer_review":
+      return "labelgrid_preflight";
     case "require_changes":
       return "labelgrid_changes_required";
     case "rejected":

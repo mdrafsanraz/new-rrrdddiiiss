@@ -209,6 +209,7 @@ export async function reconcileLabelGridReleaseStatus(
   const pastInternal =
     local === "submitting_to_labelgrid" ||
     local === "labelgrid_in_review" ||
+    local === "labelgrid_preflight" ||
     local === "labelgrid_changes_required" ||
     local === "labelgrid_rejected" ||
     local === "labelgrid_approved" ||
@@ -338,6 +339,8 @@ export async function reconcileLabelGridReleaseStatus(
 
 function titleForStatus(status: ReleaseStatusValue): string {
   switch (status) {
+    case "labelgrid_preflight":
+      return "Awaiting Preflight QC review";
     case "labelgrid_changes_required":
       return "Changes required";
     case "labelgrid_rejected":

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { markReleaseAcrPending } from "@/lib/acrcloud/release-scan";
 import { notifyReleaseStatusChanged } from "@/lib/email";
 import { prisma } from "@/lib/db";
+import { syncReleaseQualityReport } from "@/lib/labelgrid/quality-report";
 import {
   applyLabelGridDeliveryStatusWebhook,
   applyLabelGridReviewStatusWebhook,
@@ -44,6 +45,7 @@ function validSignature(rawBody: string, signature: string, secret: string) {
 }
 
 type SupportedEvent =
+  | "preflight_ready"
   | "review_status"
   | "delivery_completed"
   | "release_distributed"
@@ -52,6 +54,7 @@ type SupportedEvent =
 
 function supportedEvent(event: string): SupportedEvent | null {
   const normalized = event.toLowerCase().replaceAll(/[^a-z]/g, "");
+  if (normalized === "releasepreflightreportready") return "preflight_ready";
   if (normalized === "releasereviewstatuschanged") return "review_status";
   if (normalized === "deliverycompleted") return "delivery_completed";
   if (normalized === "releasedistributed") return "release_distributed";
@@ -84,6 +87,16 @@ async function processWebhook(
       },
     });
     eventRecordId = eventRecord.id;
+
+    if (eventKind === "preflight_ready") {
+      const release = await prisma.release.findFirst({ where: { labelgridId: String(releaseId) }, select: { id: true } });
+      const result = release ? await syncReleaseQualityReport(release.id) : { ok: false, error: "Release is not mapped" };
+      await prisma.providerWebhookEvent.update({
+        where: { id: eventRecord.id },
+        data: { releaseId: release?.id, processed: result.ok, processedAt: result.ok ? new Date() : null, error: result.ok ? null : result.error },
+      });
+      return;
+    }
 
     if (eventKind === "transcode_completed") {
       const trackId = payload.data?.track_id as string | number;

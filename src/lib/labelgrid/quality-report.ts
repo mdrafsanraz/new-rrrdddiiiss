@@ -3,7 +3,8 @@ import {
   getReleaseQualityReport,
   refreshReleaseQualityReport,
 } from "@/lib/labelgrid";
-import { LabelGridApiError } from "@/lib/labelgrid/client";
+import { LabelGridApiError, labelGridApiErrorMessage } from "@/lib/labelgrid/client";
+import { deriveQcStatus } from "./qc-state";
 
 export type QcIssue = {
   id: string;
@@ -26,26 +27,12 @@ export type QcReportSnapshot = {
   checksInProgress: boolean;
   hold: boolean;
   generatedAt: string | null;
+  reviewStatus?: string | null;
+  releaseStatus?: string | null;
   profile: { name: string; version: number } | null;
   issues: QcIssue[];
   raw: unknown;
 };
-
-function deriveQcStatus(input: {
-  checksInProgress: boolean;
-  issues: QcIssue[];
-}): string {
-  if (input.checksInProgress) return "pending";
-  if (!input.issues.length) return "passed";
-  const blocking = input.issues.some(
-    (i) => i.isBlocking || /block|required|fail/i.test(i.severity)
-  );
-  if (blocking) return "review_required";
-  const warn = input.issues.some((i) =>
-    /warn|review|attention/i.test(i.severity + i.status)
-  );
-  return warn ? "warning" : "review_required";
-}
 
 /**
  * Fetch Preflight QC for a release and cache on the local row.
@@ -82,6 +69,8 @@ export async function syncReleaseQualityReport(localReleaseId: string): Promise<
       checks_in_progress?: boolean;
       stale?: boolean;
       hold?: boolean;
+      review_status?: string | null;
+      release_status?: string | null;
       profile?: { name: string; version: number };
     };
 
@@ -116,6 +105,9 @@ export async function syncReleaseQualityReport(localReleaseId: string): Promise<
 
     const status = deriveQcStatus({
       checksInProgress: Boolean(reportMeta.checks_in_progress),
+      stale: Boolean(reportMeta.stale),
+      hold: Boolean(reportMeta.hold),
+      generatedAt: reportMeta.generated_at ?? null,
       issues,
     });
 
@@ -126,6 +118,8 @@ export async function syncReleaseQualityReport(localReleaseId: string): Promise<
       checksInProgress: Boolean(reportMeta.checks_in_progress),
       hold: Boolean(reportMeta.hold),
       generatedAt: reportMeta.generated_at ?? null,
+      reviewStatus: reportMeta.review_status ?? null,
+      releaseStatus: reportMeta.release_status ?? null,
       profile: reportMeta.profile ?? null,
       issues,
       raw: data,
@@ -152,7 +146,6 @@ export async function syncReleaseQualityReport(localReleaseId: string): Promise<
           ""
       ).toLowerCase();
       if (
-        error.status === 403 ||
         code.includes("pre_review_qc_not_enabled") ||
         code.includes("qc_not_enabled")
       ) {
@@ -186,7 +179,7 @@ export async function syncReleaseQualityReport(localReleaseId: string): Promise<
       }
       return {
         ok: false,
-        error: error.message || `LabelGrid QC error (${error.status})`,
+        error: labelGridApiErrorMessage(error),
       };
     }
     return {
@@ -215,7 +208,7 @@ export async function requestQualityReportRefresh(localReleaseId: string) {
     if (error instanceof LabelGridApiError) {
       return {
         ok: false as const,
-        error: error.message || `Refresh failed (${error.status})`,
+        error: labelGridApiErrorMessage(error),
       };
     }
     return {
@@ -232,11 +225,17 @@ export function parseCachedQcReport(json: string | null | undefined): QcReportSn
     if (!parsed || typeof parsed !== "object") return null;
     return {
       enabled: parsed.enabled !== false,
-      status: parsed.status ?? "not_run",
+      status: parsed.enabled === false ? "not_enabled" : deriveQcStatus({
+        checksInProgress: Boolean(parsed.checksInProgress), stale: Boolean(parsed.stale),
+        hold: Boolean(parsed.hold), generatedAt: parsed.generatedAt ?? null,
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      }),
       stale: Boolean(parsed.stale),
       checksInProgress: Boolean(parsed.checksInProgress),
       hold: Boolean(parsed.hold),
       generatedAt: parsed.generatedAt ?? null,
+      reviewStatus: parsed.reviewStatus ?? null,
+      releaseStatus: parsed.releaseStatus ?? null,
       profile: parsed.profile ?? null,
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       raw: parsed.raw ?? parsed,

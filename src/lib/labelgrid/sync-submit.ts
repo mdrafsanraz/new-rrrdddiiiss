@@ -1,5 +1,6 @@
 import type { Artist, Release, Track } from "@prisma/client";
 import { validateMetadataLanguage } from "./languages";
+import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
 import { prisma } from "@/lib/db";
 import {
   LabelGridApiError,
@@ -526,6 +527,8 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
   }
 
   const publishers: TrackSyncContext["publishers"] = [];
+  const writerError = requiredWriterSplitsError(writers);
+  if (writerError) throw new Error(writerError);
   if (!rMeta.selfPublished) {
     for (const p of rMeta.publisherSplits ?? []) {
       if (!p.publisherId) continue;
@@ -562,6 +565,8 @@ async function buildTrackContributors(
   }> = [];
 
   for (const c of contribList) {
+    const roleError = contributorRoleLimitError(c);
+    if (roleError) throw new Error(`"${track.title}": ${roleError}`);
     // Roles arrive as the exact display_value strings the Credits step
     // fetched live — resolve each to its catalog row. A label that no
     // longer matches the catalog (stale client state) is dropped rather

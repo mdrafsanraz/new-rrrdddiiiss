@@ -33,6 +33,9 @@ export function AdminStatusBadge({ status }: { status: string }) {
 }
 
 export function QcBadge({ status }: { status: string | null | undefined }) {
+  if (status === "not_held" || status === "stale") {
+    return <span className="text-[11px] font-medium text-muted-foreground">{status === "stale" ? "Out of date" : "Not on hold"}</span>;
+  }
   if (!status || status === "not_run") {
     return (
       <span className="text-[11px] text-muted-foreground">Not run</span>

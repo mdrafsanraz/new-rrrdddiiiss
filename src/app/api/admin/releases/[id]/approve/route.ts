@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { submitLabelGridDraftForReview } from "@/lib/labelgrid/sync-submit";
 import { prisma } from "@/lib/db";
+import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
+import { syncReleaseQualityReport } from "@/lib/labelgrid/quality-report";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { writeAuditLog } from "@/lib/admin/audit";
 import {
@@ -50,6 +52,7 @@ export async function POST(request: Request, { params }: Params) {
     // Idempotent: already past distribute.
     if (
       normalized === "labelgrid_in_review" ||
+      normalized === "labelgrid_preflight" ||
       normalized === "labelgrid_approved" ||
       normalized === "delivering" ||
       normalized === "live"
@@ -57,7 +60,8 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({
         release,
         labelgrid: {
-          submittedForReview: true,
+          submittedForReview: normalized !== "labelgrid_preflight",
+          preflightHold: normalized === "labelgrid_preflight",
           releaseId: release.labelgridId
             ? Number(release.labelgridId)
             : undefined,
@@ -132,7 +136,7 @@ export async function POST(request: Request, { params }: Params) {
     await logReleaseActivity({
       releaseId: id,
       type: "submitting_labelgrid",
-      title: "Submitted for distribution review",
+      title: "Sending to LabelGrid for processing",
       actorUserId: gate.admin.id,
     });
 
@@ -163,21 +167,26 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    const fresh = await prisma.release.update({
+    let fresh = await prisma.release.update({
       where: { id },
       data: {
-        status: "labelgrid_in_review",
+        status: "submitting_to_labelgrid",
         labelgridId: String(result.releaseId),
-        labelgridReviewStatus: "to_review",
         syncError: null,
       },
       include: { tracks: true, artist: true, user: true },
     });
 
+    // Distribute may enter a Preflight hold. Never assume it entered review.
+    await reconcileLabelGridReleaseStatus(id, { deep: false });
+    await syncReleaseQualityReport(id);
+    fresh = await prisma.release.findUniqueOrThrow({ where: { id }, include: { tracks: true, artist: true, user: true } });
+    const preflightHold = fresh.labelgridReviewStatus === "pending_customer_review";
+
     await logReleaseActivity({
       releaseId: id,
-      type: "labelgrid_in_review",
-      title: "In distribution review",
+      type: "submitting_labelgrid",
+      title: preflightHold ? "Awaiting Preflight QC review" : "Sent to LabelGrid",
       actorUserId: gate.admin.id,
       metadata: { labelgridReleaseId: result.releaseId },
     });
@@ -187,14 +196,15 @@ export async function POST(request: Request, { params }: Params) {
       action: "release_approved",
       targetType: "release",
       targetId: id,
-      summary: `Approved ${forSync.title} → LabelGrid review`,
+      summary: `Approved ${forSync.title} → ${preflightHold ? "Preflight QC hold" : "LabelGrid"}`,
       metadata: { labelgridReleaseId: result.releaseId },
     });
 
     return NextResponse.json({
       release: fresh,
       labelgrid: {
-        submittedForReview: true,
+        submittedForReview: fresh.status === "labelgrid_in_review",
+        preflightHold,
         releaseId: result.releaseId,
         trackIds: result.trackIds,
       },
