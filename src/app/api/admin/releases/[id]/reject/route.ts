@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { withdrawReleaseFromReview } from "@/lib/labelgrid";
+import { deleteRelease, withdrawReleaseFromReview } from "@/lib/labelgrid";
+import { LabelGridApiError } from "@/lib/labelgrid/client";
 import { prisma } from "@/lib/db";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { emailUrl, notifyReleaseReviewAction } from "@/lib/email";
@@ -92,6 +93,30 @@ export async function POST(request: Request, { params }: Params) {
         ? "labelgrid_changes_required"
         : "internal_changes_required";
 
+    // Rejected for good while still in RDISTRO's own queue: if a LabelGrid
+    // draft was already created for it, remove it there too so it doesn't
+    // linger — this release will never be resubmitted.
+    let deletedFromLabelGrid = false;
+    if (
+      nextStatus === "internal_rejected" &&
+      release.labelgridId &&
+      isLabelGridLive()
+    ) {
+      try {
+        await deleteRelease(release.labelgridId);
+        deletedFromLabelGrid = true;
+      } catch (error) {
+        if (error instanceof LabelGridApiError && error.status === 404) {
+          deletedFromLabelGrid = true;
+        } else {
+          console.warn(
+            "[admin/releases/reject] labelgrid delete failed (continuing)",
+            error
+          );
+        }
+      }
+    }
+
     const fresh = await prisma.release.update({
       where: { id },
       data: {
@@ -102,8 +127,11 @@ export async function POST(request: Request, { params }: Params) {
         reviewedById: gate.admin.id,
         syncError: null,
         permanentlyLocked: isFinalReject,
+        labelgridId: deletedFromLabelGrid ? null : release.labelgridId,
         labelgridReviewStatus: isFinalReject
-          ? release.labelgridReviewStatus
+          ? deletedFromLabelGrid
+            ? null
+            : release.labelgridReviewStatus
           : release.labelgridId
             ? "draft"
             : release.labelgridReviewStatus,
