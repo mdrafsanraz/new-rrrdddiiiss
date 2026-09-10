@@ -504,9 +504,9 @@ export function StepCredits({
               <span className="text-destructive">· Required</span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Writer shares of the composition — only Composer and/or
-              Lyricist are accepted for a publishing split. Totals must
-              equal 100%.
+              Vocal tracks require both Composer and Lyricist across the selected writers.
+              The same writer can hold both roles. No linguistic content (zxx)
+              tracks do not require a Lyricist. Shares must total 100%.
             </p>
           </div>
           <Button

@@ -22,7 +22,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
-import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
+import { contributorRoleLimitError, requiredWriterSplitsError, requiredCompositionRolesError } from "@/lib/releases/credit-validation";
 import {
   newContributor,
   newTrack,
@@ -180,6 +180,8 @@ function validateStep(
   if (step === STEP_CREDITS) {
     const writerError = requiredWriterSplitsError(state.writerSplits);
     if (writerError) return writerError;
+    const compositionError = requiredCompositionRolesError(state.writerSplits, state.tracks);
+    if (compositionError) return compositionError;
     const contributorIds = new Set<number>();
     for (const contributor of state.contributors) {
       const roleError = contributorRoleLimitError(contributor);

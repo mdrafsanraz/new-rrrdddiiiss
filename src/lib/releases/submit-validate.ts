@@ -1,5 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
-import { contributorRoleLimitError, requiredWriterSplitsError } from "./credit-validation";
+import { contributorRoleLimitError, requiredWriterSplitsError, requiredCompositionRolesError } from "./credit-validation";
 import {
   parseJsonObject,
   type ReleaseMetadata,
@@ -121,6 +121,8 @@ export function validateReleaseForSubmit(
   const writerSplits = rMeta.writerSplits ?? [];
   const writerError = requiredWriterSplitsError(writerSplits);
   if (writerError) errors.push(writerError);
+  const compositionError = requiredCompositionRolesError(writerSplits, release.tracks.map((track) => parseJsonObject<TrackMetadata>(track.metadataJson)));
+  if (compositionError) errors.push(compositionError);
   if (
     release.tracks.some(
       (track) =>
