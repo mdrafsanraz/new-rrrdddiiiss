@@ -57,7 +57,7 @@ export function ReleaseDeliveryPanel({
   }
 
   return (
-    <section className="border border-border bg-card">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div>
           <h2 className="text-sm font-semibold">Delivery</h2>

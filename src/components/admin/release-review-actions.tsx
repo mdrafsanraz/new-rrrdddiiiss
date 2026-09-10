@@ -24,6 +24,7 @@ export function ReleaseReviewActions({
   permanentlyLocked,
   hasLabelgridId,
   mediaReady = true,
+  mediaVerified = true,
 }: {
   releaseId: string;
   canDecide: boolean;
@@ -33,6 +34,7 @@ export function ReleaseReviewActions({
   permanentlyLocked: boolean;
   hasLabelgridId: boolean;
   mediaReady?: boolean;
+  mediaVerified?: boolean;
 }) {
   const router = useRouter();
   const [notes, setNotes] = useState("");
@@ -242,16 +244,12 @@ export function ReleaseReviewActions({
   }
 
   return (
-    <div className="space-y-3 border border-border bg-card p-4">
+    <div className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
       <div>
-        <h2 className="text-sm font-semibold">Internal moderation</h2>
+        <h2 className="text-base font-semibold">Review decision</h2>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Approve submits the existing LabelGrid draft for review. Send back to
-          draft lets the user re-upload in the builder. Status: {status}
-          {hasLabelgridId ? "" : ". LG draft not created yet"}
-          {!mediaReady
-            ? ". Cover or audio is missing on LabelGrid; send back to draft or re-upload"
-            : ""}
+          {status === "labelgrid_preflight" ? "Open Recognition & QC to review the current report and confirm into LabelGrid review." : "Approval sends the release to LabelGrid. Preflight QC may hold it for your confirmation before provider review."}
+          {hasLabelgridId ? "" : " A LabelGrid draft has not been created yet."}
         </p>
       </div>
 
@@ -259,7 +257,7 @@ export function ReleaseReviewActions({
         <>
           <Field
             id="reviewNotes"
-            label="Notes"
+            label="Decision note"
             as="textarea"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -272,9 +270,7 @@ export function ReleaseReviewActions({
           ) : null}
           {!mediaReady ? (
             <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Cover and/or audio are not on LabelGrid yet. Use{" "}
-              <strong>Send back to draft</strong> so the user can re-upload in
-              the release builder (uploads go to LabelGrid API), then approve.
+              {mediaVerified ? "Cover or track audio is incomplete on LabelGrid. Check the media before approving; request changes if the user needs to replace files." : "Provider media could not be verified. Refresh release data and retry before approving. Do not request replacement files based only on this lookup failure."}
             </p>
           ) : null}
           <div className="flex flex-col gap-2">
@@ -288,17 +284,6 @@ export function ReleaseReviewActions({
                 {statusBusy === "approving"
                   ? "Submitting to LabelGrid..."
                   : "Approve and send to LabelGrid"}
-              </Button>
-            ) : null}
-            {canSendBackToDraft ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 w-full"
-                disabled={statusBusy !== "idle"}
-                onClick={sendBackToDraft}
-              >
-                {statusBusy === "draft" ? "Sending..." : "Send back to draft"}
               </Button>
             ) : null}
             <Button
@@ -328,6 +313,18 @@ export function ReleaseReviewActions({
             >
               Hold
             </Button>
+            <details className="mt-2 border-t border-border pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">Advanced & final actions</summary><div className="mt-3 space-y-2">
+            {canSendBackToDraft ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full"
+                disabled={statusBusy !== "idle"}
+                onClick={sendBackToDraft}
+              >
+                {statusBusy === "draft" ? "Sending..." : "Send back to draft"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -350,6 +347,7 @@ export function ReleaseReviewActions({
                 {statusBusy === "deleting" ? "Deleting..." : "Delete release"}
               </Button>
             ) : null}
+            </div></details>
           </div>
         </>
       ) : null}

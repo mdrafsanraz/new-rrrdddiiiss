@@ -109,7 +109,7 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
   }
 
   return (
-    <section id="acr" className="scroll-mt-20 border border-border bg-card">
+    <section id="acr" className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold">Audio recognition</h2>
@@ -120,7 +120,7 @@ export function ReleaseAcrPanel({ releaseId, acrConfigured, auddConfigured, canR
       <div className="p-4">
         {!configured ? <p className="text-sm text-muted-foreground">Configure ACRCloud and/or AUDD_API_TOKEN to enable recognition.</p> : null}
         {configured && !canRun ? <p className="text-sm text-muted-foreground">You do not have permission to run release QC checks.</p> : null}
-        {configured && canRun ? (
+        {configured || (acrcloudResults?.length ?? 0) > 0 || (auddResults?.length ?? 0) > 0 ? (
           <div className="grid items-start gap-4 xl:grid-cols-2">
             <ProviderCard
               provider="ACRCloud"

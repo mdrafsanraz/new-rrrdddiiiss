@@ -23,10 +23,10 @@ function dateLabel(value: string | null) {
   return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
 }
 
-export function ReleaseQcPanel({ releaseId, labelgridId, qcStatus, qcChecksInProgress, qcFetchedAt, report, canRefresh }: {
+export function ReleaseQcPanel({ releaseId, labelgridId, qcStatus, qcChecksInProgress, qcFetchedAt, report, canRefresh, canConfirm }: {
   releaseId: string; labelgridId: string | null; qcEnabled: boolean;
   qcStatus: string | null; qcStale: boolean; qcChecksInProgress: boolean;
-  qcFetchedAt: string | null; report: QcReportSnapshot | null; canRefresh: boolean;
+  qcFetchedAt: string | null; report: QcReportSnapshot | null; canRefresh: boolean; canConfirm: boolean;
 }) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(report);
@@ -78,7 +78,7 @@ export function ReleaseQcPanel({ releaseId, labelgridId, qcStatus, qcChecksInPro
   const canRerun = Boolean(snapshot?.enabled && snapshot.hold && !pending);
   const confirmError = snapshot ? qcConfirmationError({ ...snapshot, checksInProgress: pending }) : "Fetch a current report first.";
   return (
-    <section className="overflow-hidden border border-border bg-card" aria-labelledby="preflight-qc-title" aria-busy={busy !== null}>
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" aria-labelledby="preflight-qc-title" aria-busy={busy !== null}>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-4 sm:p-5">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-3"><h2 id="preflight-qc-title" className="text-base font-semibold">Preflight QC</h2><QcBadge status={labelgridId ? status : "not_run"} /></div>
@@ -87,7 +87,7 @@ export function ReleaseQcPanel({ releaseId, labelgridId, qcStatus, qcChecksInPro
         {canRefresh && labelgridId ? <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={busy !== null} onClick={() => void run("sync")}>{busy === "sync" ? "Fetching…" : "Fetch report"}</Button>
           <Button type="button" variant="outline" disabled={busy !== null || !canRerun} title={!canRerun ? "Available only during a QC hold, with no checks running." : undefined} onClick={() => void run("refresh")}>{busy === "refresh" ? "Requesting…" : "Re-run analysis"}</Button>
-          {snapshot?.hold ? <Button type="button" disabled={busy !== null || Boolean(confirmError)} title={confirmError ?? undefined} onClick={() => void run("confirm")}>{busy === "confirm" ? "Confirming…" : "Confirm into LabelGrid Review"}</Button> : null}
+          {snapshot?.hold && canConfirm ? <Button type="button" disabled={busy !== null || Boolean(confirmError)} title={confirmError ?? undefined} onClick={() => void run("confirm")}>{busy === "confirm" ? "Confirming…" : "Confirm into LabelGrid Review"}</Button> : null}
         </div> : null}
       </header>
       <div className="space-y-5 p-4 sm:p-5">
