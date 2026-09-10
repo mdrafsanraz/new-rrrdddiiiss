@@ -92,6 +92,9 @@ export function validateReleaseForSubmit(
         "For a single, the release title and track title must match exactly."
       );
     }
+    if (release.contentType === "Single" && (tMeta.mixVersion ?? "").trim() !== (rMeta.mixVersion ?? "").trim()) {
+      errors.push("For a single, the release and track mix versions must match exactly (including when blank).");
+    }
     if (tMeta.licenseType === "cover" && !tMeta.originalTrackLink?.trim()) {
       errors.push(
         `"${t.title}" needs a link to the original recording (required for cover licenses).`

@@ -27,4 +27,8 @@ test("server rejects missing splits and excessive roles before provider submissi
   fixture.metadataJson = JSON.stringify({ ...JSON.parse(fixture.metadataJson!), writerSplits: [{ writerId: 1, firstName: "Test", lastName: "Writer", roles: ["Composer"], share: 100 }] });
   fixture.tracks[0].metadataJson = JSON.stringify({ contributors: [{ writerId: 1, roles: ["Artist", "Composer", "Producer"] }] });
   assert.deepEqual(validateReleaseForSubmit(fixture), []);
+  fixture.tracks[0].metadataJson = JSON.stringify({ ...JSON.parse(fixture.tracks[0].metadataJson!), mixVersion: "remastered version" });
+  assert.ok(validateReleaseForSubmit(fixture).some((error) => error.includes("mix versions")));
+  fixture.metadataJson = JSON.stringify({ ...JSON.parse(fixture.metadataJson!), mixVersion: "remastered version" });
+  assert.deepEqual(validateReleaseForSubmit(fixture), []);
 });

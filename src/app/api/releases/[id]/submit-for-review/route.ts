@@ -6,6 +6,8 @@ import { isLabelGridLive } from "@/lib/labelgrid/config";
 import { syncReleaseToLabelGrid } from "@/lib/labelgrid/sync-submit";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { getConfiguredPlan } from "@/lib/plans";
+import { verifySubmissionMedia } from "@/lib/releases/submission-media";
+import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import {
   canUserResubmitRelease,
   canUserSubmitRelease,
@@ -103,6 +105,15 @@ export async function POST(_request: Request, { params }: Params) {
         { status: 403 }
       );
     }
+  }
+
+  const errors = validateReleaseForSubmit(release);
+  if (errors.length) {
+    return NextResponse.json({ error: errors[0], errors }, { status: 400 });
+  }
+  const mediaError = await verifySubmissionMedia(release);
+  if (mediaError) {
+    return NextResponse.json({ error: mediaError.error }, { status: mediaError.status });
   }
 
   // Idempotent claim

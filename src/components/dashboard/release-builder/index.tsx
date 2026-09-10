@@ -162,6 +162,9 @@ function validateStep(
       ) {
         return "For a single, the release title and track title must match exactly.";
       }
+      if (state.contentType === "Single" && (t.mixVersion ?? "").trim() !== (state.mixVersion ?? "").trim()) {
+        return "For a single, the release and track mix versions must match exactly (including when blank).";
+      }
       if (t.audioProcessingError && !t.audioFile) {
         return `Audio processing failed for “${t.title.trim() || `track ${i + 1}`}”. Select a replacement file; it will upload during submission.`;
       }

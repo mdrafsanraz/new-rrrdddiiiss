@@ -6,6 +6,7 @@ import { isFinalRejection } from "@/lib/releases/status";
 import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { prisma } from "@/lib/db";
+import { verifySubmissionMedia } from "@/lib/releases/submission-media";
 
 type Params = { params: Promise<{ id: string }> };
 export const maxDuration = 300;
@@ -66,6 +67,11 @@ export async function POST(_request: Request, { params }: Params) {
         { status: 409 }
       );
     }
+  }
+
+  const mediaError = await verifySubmissionMedia(release);
+  if (mediaError) {
+    return NextResponse.json({ error: mediaError.error }, { status: mediaError.status });
   }
 
   const isFirstSubmit = !release.submittedAt;

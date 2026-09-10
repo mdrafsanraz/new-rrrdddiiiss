@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { verifySubmissionMedia } from "@/lib/releases/submission-media";
+import { validateReleaseForSubmit } from "@/lib/releases/submit-validate";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import {
   canUserResubmitRelease,
@@ -24,6 +26,7 @@ export async function POST(_request: Request, { params }: Params) {
   const { id } = await params;
   const release = await prisma.release.findFirst({
     where: { id, userId: user.id },
+    include: { tracks: true, artist: true },
   });
   if (!release) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -54,6 +57,15 @@ export async function POST(_request: Request, { params }: Params) {
   });
   if (missingDocuments > 0) {
     return NextResponse.json({ error: "Upload the requested documents before resubmitting." }, { status: 400 });
+  }
+
+  const errors = validateReleaseForSubmit(release);
+  if (errors.length) {
+    return NextResponse.json({ error: errors[0], errors }, { status: 400 });
+  }
+  const mediaError = await verifySubmissionMedia(release);
+  if (mediaError) {
+    return NextResponse.json({ error: mediaError.error }, { status: mediaError.status });
   }
 
   const claimed = await prisma.release.updateMany({
