@@ -1,5 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
-import { validateMetadataLanguage } from "./languages";
+import { validateAudioLanguage, validateMetadataLanguage } from "./languages";
 import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
 import { prisma } from "@/lib/db";
 import {
@@ -628,6 +628,7 @@ async function buildTrackBody(
   opts: { forUpdate?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   const tMeta = parseJsonObject<TrackMetadata>(track.metadataJson);
+  const audioLanguage = await validateAudioLanguage(tMeta.audioLanguage);
   // Prefer the live genre id picked in Step 1; name lookup is only the
   // legacy-draft fallback.
   const trackPrimaryGenreId =
@@ -643,7 +644,7 @@ async function buildTrackBody(
     audio_ai_usage: tMeta.audioAiUsage || "none",
     composition_ai_usage: tMeta.compositionAiUsage || "none",
     commercial_samples: tMeta.commercialSamples || "no",
-    audio_language: tMeta.audioLanguage || "en",
+    audio_language: audioLanguage,
     preferred_localization: ctx.locale,
     explicit: tMeta.explicit || ctx.releaseExplicit,
     recording_country: tMeta.recordingCountry || undefined,

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { metadataLanguages } from "@/lib/labelgrid/languages";
+import { audioLanguages, metadataLanguages } from "@/lib/labelgrid/languages";
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!await getSessionUser()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    return NextResponse.json({ languages: await metadataLanguages() });
+    const audio = new URL(request.url).searchParams.get("type") === "audio";
+    return NextResponse.json({ languages: await (audio ? audioLanguages() : metadataLanguages()) });
   } catch {
-    return NextResponse.json({ error: "Could not load metadata languages. Please retry." }, { status: 502 });
+    return NextResponse.json({ error: "Could not load supported languages. Please retry." }, { status: 502 });
   }
 }

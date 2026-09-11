@@ -1,4 +1,13 @@
 import { labelgridFetch } from "./client";
+import { supportedAudioLanguage, withInstrumentalLanguage } from "./audio-languages";
+
+export async function audioLanguages() {
+  return withInstrumentalLanguage(await metadataLanguages());
+}
+
+export async function validateAudioLanguage(value: string | undefined) {
+  return supportedAudioLanguage(value, await audioLanguages());
+}
 
 /** LanguageData from document.json GET /languages. */
 export async function metadataLanguages() {

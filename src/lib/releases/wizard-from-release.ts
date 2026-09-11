@@ -69,7 +69,7 @@ export function wizardStateFromRelease(
             commercialSamples:
               (tMeta.commercialSamples as WizardTrack["commercialSamples"]) ??
               "no",
-            audioLanguage: tMeta.audioLanguage ?? "en",
+            audioLanguage: tMeta.audioLanguage ?? "",
             featuredArtistNames: tMeta.featuredArtistNames ?? [],
             hasMechanicalLicense: tMeta.hasMechanicalLicense ?? false,
             lyrics: tMeta.lyrics ?? "",

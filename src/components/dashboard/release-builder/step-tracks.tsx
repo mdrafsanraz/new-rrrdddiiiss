@@ -25,7 +25,6 @@ import {
   ARTWORK_AI_USAGE,
   COMMERCIAL_SAMPLES,
   COMPOSITION_TYPES,
-  LOCALES,
 } from "@/lib/releases/constants";
 import {
   newTrack,
@@ -39,6 +38,7 @@ import {
   Panel,
   ChipGroup,
 } from "./shared";
+import type { LanguageOption } from "@/lib/labelgrid/audio-languages";
 
 const EXPLICIT_FRIENDLY = [
   { value: "off" as const, label: "No" },
@@ -275,8 +275,23 @@ export function StepTracks({
   setEditingTrackId: (id: string | null) => void;
   primaryArtistName: string;
 }) {
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
+  const [languageError, setLanguageError] = useState<string | null>(null);
+  const [languageAttempt, setLanguageAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/labelgrid/languages?type=audio", { signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.languages)) throw new Error(data.error || "Could not load audio languages.");
+        if (!controller.signal.aborted) { setLanguages(data.languages); setLanguageError(null); }
+      })
+      .catch(() => { if (!controller.signal.aborted) setLanguageError("Could not load supported audio languages. Retry before submitting."); });
+    return () => controller.abort();
+  }, [languageAttempt]);
   return (
     <Panel className="space-y-4">
+      {languageError ? <div role="alert" className="text-sm text-destructive">{languageError} <button type="button" className="underline" onClick={() => { setLanguageError(null); setLanguageAttempt((attempt) => attempt + 1); }}>Retry</button></div> : null}
       <div className="space-y-2">
         {state.tracks.map((t, i) => {
           const isEditing = editingTrackId === t.clientId;
@@ -454,12 +469,16 @@ export function StepTracks({
                     label="Audio language"
                     as="select"
                     required
+                    disabled={!languages.length}
                     value={t.audioLanguage}
+                    helper={languages.length && t.audioLanguage && !languages.some((language) => language.value === t.audioLanguage) ? "This saved language is no longer supported. Select a supported language before submitting." : undefined}
                     onChange={(e) =>
                       updateTrack(t.clientId, { audioLanguage: e.target.value })
                     }
                   >
-                    {LOCALES.map((l) => (
+                    <option value="">{languages.length ? "Select audio language" : "Loading supported languages…"}</option>
+                    {t.audioLanguage && !languages.some((language) => language.value === t.audioLanguage) ? <option value={t.audioLanguage}>{t.audioLanguage} — {languages.length ? "unsupported saved value" : "saved value"}</option> : null}
+                    {languages.map((l) => (
                       <option key={l.value} value={l.value}>
                         {l.label}
                       </option>

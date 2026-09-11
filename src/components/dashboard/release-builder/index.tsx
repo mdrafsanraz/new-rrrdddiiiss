@@ -342,7 +342,7 @@ function buildPayload(state: WizardState) {
     audioAiUsage: t.audioAiUsage,
     compositionAiUsage: t.compositionAiUsage,
     commercialSamples: t.commercialSamples,
-    audioLanguage: t.audioLanguage || state.preferredLocalization || "en",
+    audioLanguage: t.audioLanguage,
     featuredArtistNames: t.featuredArtistNames,
     hasMechanicalLicense: t.hasMechanicalLicense,
     lyrics: t.lyrics,

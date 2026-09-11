@@ -70,6 +70,7 @@ export function validateReleaseForSubmit(
   let instrumentalHasLyricist = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+    if (!tMeta.audioLanguage?.trim()) errors.push(`"${t.title}": Select an audio language.`);
     const contributorIds = new Set<number>();
     for (const contributor of tMeta.contributors ?? []) {
       const roleError = contributorRoleLimitError(contributor);
