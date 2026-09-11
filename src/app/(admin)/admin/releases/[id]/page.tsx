@@ -15,6 +15,7 @@ import { parseJsonObject, type ReleaseMetadata } from "@/lib/releases/constants"
 import { ReleaseReviewWorkspace, RefreshReleaseView } from "@/components/admin/release-review-workspace";
 import { adminReviewPipeline } from "@/lib/releases/admin-review-pipeline";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
+import { parseReviewQueueStage, reviewQueueStages } from "@/lib/admin/review-queue";
 import { canAdminDecide, canAdminDeleteRelease, canAdminSendBackToDraft, getAdminStatusLabel } from "@/lib/releases/status";
 import { hasPermission } from "@/lib/auth/permissions";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
@@ -100,12 +101,13 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
   ]);
   const documentPeopleById = new Map(documentPeople.map((person) => [person.id, person]));
 
-  const fromQueue = (await searchParams)?.queue === "pending";
+  const queueStage = parseReviewQueueStage((await searchParams)?.queue);
+  const fromQueue = queueStage !== null;
   let previousQueueId: string | undefined;
   let nextQueueId: string | undefined;
-  if (fromQueue) {
+  if (queueStage) {
     const queue = await prisma.release.findMany({
-      where: { status: { in: ["pending_internal_review", "submitted", "in_review"] } },
+      where: { status: { in: [...reviewQueueStages[queueStage].statuses] } },
       orderBy: [{ priorityReview: "desc" }, { submittedAt: "asc" }, { createdAt: "asc" }],
       select: { id: true },
     });
@@ -202,7 +204,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
         )}
         <div className="min-w-0 flex-1">
           <Link
-            href={fromQueue ? "/admin/review-queue" : "/admin/releases?filter=pending_review"}
+            href={fromQueue ? `/admin/review-queue?stage=${queueStage}` : "/admin/releases?filter=pending_review"}
             className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
           >
             {fromQueue ? "Back to review queue" : "Back to releases"}
@@ -259,8 +261,8 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
         <div className="flex flex-col gap-2">
           <RefreshReleaseView />
           {fromQueue ? <div className="flex gap-2">
-            {previousQueueId ? <Link href={`/admin/releases/${previousQueueId}?queue=pending`} className="h-8 border border-border px-3 py-1.5 text-xs font-semibold hover:border-foreground">Previous</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Previous</span>}
-            {nextQueueId ? <Link href={`/admin/releases/${nextQueueId}?queue=pending`} className="h-8 border border-foreground bg-foreground px-3 py-1.5 text-xs font-semibold text-background hover:opacity-85">Next release</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Next release</span>}
+            {previousQueueId ? <Link href={`/admin/releases/${previousQueueId}?queue=${queueStage}${queueStage === "preflight" ? "#qc" : ""}`} className="h-8 border border-border px-3 py-1.5 text-xs font-semibold hover:border-foreground">Previous</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Previous</span>}
+            {nextQueueId ? <Link href={`/admin/releases/${nextQueueId}?queue=${queueStage}${queueStage === "preflight" ? "#qc" : ""}`} className="h-8 border border-foreground bg-foreground px-3 py-1.5 text-xs font-semibold text-background hover:opacity-85">Next release</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Next release</span>}
           </div> : null}
           {canImpersonate ? (
             <LoginAsUserButton
