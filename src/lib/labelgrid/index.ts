@@ -36,6 +36,8 @@ export function createArtist(body: {
   email?: string;
   location?: string;
   bio_short?: string;
+  spotify_url?: string;
+  applemusic_url?: string;
 }) {
   return labelgridFetch<ArtistData>("/artists", {
     method: "POST",
@@ -86,6 +88,8 @@ export function updateArtist(
     email: string;
     location: string;
     bio_short: string;
+    spotify_url: string;
+    applemusic_url: string;
   }>
 ) {
   return labelgridFetch<ArtistData>(`/artists/${id}`, {

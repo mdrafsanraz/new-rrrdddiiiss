@@ -72,7 +72,7 @@ export default async function ArtistDetailPage({ params }: Props) {
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]">
-        <EditArtistForm artist={{ id: artist.id, name: artist.name, fullName: artist.fullName ?? "", email: artist.email ?? "", location: artist.location ?? "", bioShort: artist.bioShort ?? "", locked: artist.locked }} />
+        <EditArtistForm artist={{ id: artist.id, name: artist.name, fullName: artist.fullName ?? "", email: artist.email ?? "", location: artist.location ?? "", bioShort: artist.bioShort ?? "", spotifyUrl: artist.spotifyUrl ?? "", appleMusicUrl: artist.appleMusicUrl ?? "", locked: artist.locked }} />
         <aside className="rounded-2xl border border-border bg-card p-6"><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Artist note</p><h2 className="mt-3 text-xl font-semibold tracking-tight">Profile story</h2><p className="mt-4 text-sm leading-7 text-muted-foreground">{artist.bioShort || "Add a short bio to keep context about this artist, their sound, and the identity behind the catalog."}</p>{artist.email || artist.fullName ? <div className="mt-7 space-y-3 border-t border-border pt-5 text-sm"><div><p className="text-xs text-muted-foreground">Legal name</p><p className="mt-1 font-medium">{artist.fullName || "Not provided"}</p></div><div><p className="text-xs text-muted-foreground">Contact</p><p className="mt-1 font-medium">{artist.email || "Not provided"}</p></div></div> : null}</aside>
       </div>
 

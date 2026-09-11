@@ -337,6 +337,8 @@ export async function ensureLabelGridArtist(artist: Artist): Promise<number> {
     email: artist.email ?? undefined,
     location: artist.location ?? undefined,
     bio_short: artist.bioShort ?? undefined,
+    spotify_url: artist.spotifyUrl ?? undefined,
+    applemusic_url: artist.appleMusicUrl ?? undefined,
   });
   const id = unwrapId(provider);
 

@@ -7,12 +7,46 @@ import { isLabelGridLive } from "@/lib/labelgrid/config";
 
 type Params = { params: Promise<{ id: string }> };
 
+/** Empty clears the link; otherwise it must be an artist profile URL on the expected host. */
+function isArtistProfileUrl(value: string, host: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  try {
+    const url = new URL(trimmed);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === host || url.hostname.endsWith(`.${host}`)) &&
+      url.pathname.includes("/artist/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 const patchSchema = z.object({
   name: z.string().min(2).max(64).optional(),
   fullName: z.string().max(64).optional().nullable(),
   email: z.string().email().max(64).optional().nullable().or(z.literal("")),
   location: z.string().max(255).optional().nullable(),
   bioShort: z.string().max(2000).optional().nullable(),
+  spotifyUrl: z
+    .string()
+    .max(255)
+    .optional()
+    .nullable()
+    .refine((v) => v == null || isArtistProfileUrl(v, "open.spotify.com"), {
+      message:
+        "Spotify link must be an artist profile URL like https://open.spotify.com/artist/...",
+    }),
+  appleMusicUrl: z
+    .string()
+    .max(255)
+    .optional()
+    .nullable()
+    .refine((v) => v == null || isArtistProfileUrl(v, "music.apple.com"), {
+      message:
+        "Apple Music link must be an artist profile URL like https://music.apple.com/us/artist/...",
+    }),
 });
 
 async function ownedArtist(userId: string, id: string) {
@@ -68,6 +102,8 @@ export async function PATCH(request: Request, { params }: Params) {
       ...(body.email !== undefined ? { email: body.email?.trim() || "" } : {}),
       ...(body.location !== undefined ? { location: body.location?.trim() || "" } : {}),
       ...(body.bioShort !== undefined ? { bio_short: body.bioShort?.trim() || "" } : {}),
+      ...(body.spotifyUrl !== undefined ? { spotify_url: body.spotifyUrl?.trim() || "" } : {}),
+      ...(body.appleMusicUrl !== undefined ? { applemusic_url: body.appleMusicUrl?.trim() || "" } : {}),
     };
     if (existing.labelgridId && isLabelGridLive()) {
       try {
@@ -94,6 +130,12 @@ export async function PATCH(request: Request, { params }: Params) {
           : {}),
         ...(body.bioShort !== undefined
           ? { bioShort: body.bioShort?.trim() || null }
+          : {}),
+        ...(body.spotifyUrl !== undefined
+          ? { spotifyUrl: body.spotifyUrl?.trim() || null }
+          : {}),
+        ...(body.appleMusicUrl !== undefined
+          ? { appleMusicUrl: body.appleMusicUrl?.trim() || null }
           : {}),
       },
     });

@@ -14,6 +14,8 @@ type ArtistFields = {
   email: string;
   location: string;
   bioShort: string;
+  spotifyUrl: string;
+  appleMusicUrl: string;
   locked: boolean;
 };
 
@@ -36,6 +38,8 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           email: form.email,
           location: form.location,
           bioShort: form.bioShort,
+          spotifyUrl: form.spotifyUrl,
+          appleMusicUrl: form.appleMusicUrl,
         };
         const res = await fetch(`/api/artists/${artist.id}`, {
           method: "PATCH",
@@ -102,6 +106,24 @@ export function EditArtistForm({ artist }: { artist: ArtistFields }) {
           onChange={(e) => setForm((f) => ({ ...f, bioShort: e.target.value }))}
         />
       </div>
+      <Field
+        id="spotifyUrl"
+        label="Spotify artist link"
+        type="url"
+        placeholder="https://open.spotify.com/artist/..."
+        helper="Connects releases to your existing Spotify profile."
+        value={form.spotifyUrl}
+        onChange={(e) => setForm((f) => ({ ...f, spotifyUrl: e.target.value }))}
+      />
+      <Field
+        id="appleMusicUrl"
+        label="Apple Music artist link"
+        type="url"
+        placeholder="https://music.apple.com/us/artist/..."
+        helper="Connects releases to your existing Apple Music profile."
+        value={form.appleMusicUrl}
+        onChange={(e) => setForm((f) => ({ ...f, appleMusicUrl: e.target.value }))}
+      />
       {error ? (
         <p className="text-sm font-medium text-destructive md:col-span-2" role="alert">
           {error}
