@@ -791,7 +791,7 @@ async function persistAudioUploadResult(
     data: {
       metadataJson: JSON.stringify(tMeta),
       // LabelGrid's hosted URL is the only record of this file we keep.
-      ...(result.url ? { audioUrl: result.url } : {}),
+      audioUrl: result.url,
     },
   });
 }
@@ -806,7 +806,7 @@ async function persistAudioUploadFailure(
   tMeta.audioProcessingError = message;
   await prisma.track.update({
     where: { id: track.id },
-    data: { metadataJson: JSON.stringify(tMeta) },
+    data: { metadataJson: JSON.stringify(tMeta), audioUrl: null },
   });
 }
 
@@ -815,9 +815,8 @@ async function persistAudioUploadFailure(
  * URL (our only durable record of it — the bytes never touch our disk), and
  * persist the async-processing state (attempt id + processing flag).
  *
- * A per-track audio failure (e.g. LabelGrid's async processing rejected the
- * file) must not abort the whole release sync — other tracks still need to
- * upload. Failures are recorded on the track and surfaced in the UI instead.
+ * Record and propagate failures so a failed replacement cannot pass full
+ * sync using the previous audio still attached on LabelGrid.
  */
 async function uploadAudioForTrack(
   track: Track,
@@ -837,7 +836,7 @@ async function uploadAudioForTrack(
       track,
       formatLgError(error)
     );
-    return { processing: false };
+    throw error;
   }
 }
 

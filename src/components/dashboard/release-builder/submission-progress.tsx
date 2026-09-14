@@ -349,14 +349,14 @@ export function SubmissionProgress({
             ? "completed"
             : processingFailed
               ? "waiting"
-              : t.audioStatus,
+              : s.audioProcessing ? "completed" : "waiting",
           processStatus: t.audioFile
             ? "waiting"
             : s.hasAudioUrl
             ? "completed"
             : processingFailed
               ? "waiting"
-              : t.processStatus,
+              : "waiting",
           processError: processingFailed ? null : t.processError,
           creditsStatus: s.creditsSynced ? "completed" : t.creditsStatus,
         };

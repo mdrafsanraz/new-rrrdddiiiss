@@ -4,6 +4,7 @@ import { requirePermissionApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { getAudioUploadStatus, getTrackFile } from "@/lib/labelgrid";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
+import { getSubmittedAudioUrl } from "@/lib/labelgrid/submitted-audio";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
 
 /** GET /tracks/{track}/files/stereo — best-effort, never throws. */
@@ -83,14 +84,22 @@ export async function POST(_request: Request, { params }: Params) {
     !tMeta.audioUploadAttemptId ||
     !tMeta.audioProcessing
   ) {
+    let verifiedUrl: string | null = null;
+    if (isLabelGridLive() && track.labelgridId && !tMeta.audioProcessingError) {
+      try {
+        verifiedUrl = await getSubmittedAudioUrl(track.labelgridId);
+      } catch {
+        return NextResponse.json({ error: "Could not verify audio with LabelGrid. Please retry." }, { status: 503 });
+      }
+    }
     return NextResponse.json({
       status: tMeta.audioProcessingError
         ? "failed"
-        : track.audioUrl
+        : verifiedUrl
           ? "ready"
           : "none",
       error: tMeta.audioProcessingError ?? null,
-      audioUrl: track.audioUrl ?? null,
+      audioUrl: verifiedUrl,
     });
   }
 
@@ -109,12 +118,12 @@ export async function POST(_request: Request, { params }: Params) {
       tMeta.audioProcessingError = attempt.error?.message ?? "Audio processing failed";
       await prisma.track.update({
         where: { id: track.id },
-        data: { metadataJson: JSON.stringify(tMeta) },
+        data: { metadataJson: JSON.stringify(tMeta), audioUrl: null },
       });
       return NextResponse.json({
         status: "failed",
         error: tMeta.audioProcessingError,
-        audioUrl: track.audioUrl ?? null,
+        audioUrl: null,
       });
     }
 

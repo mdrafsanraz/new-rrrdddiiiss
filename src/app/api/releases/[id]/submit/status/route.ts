@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSubmittedArtworkUrl } from "@/lib/labelgrid/artwork";
+import { getSubmittedAudioUrl } from "@/lib/labelgrid/submitted-audio";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
 
@@ -29,6 +30,17 @@ export async function GET(_request: Request, { params }: Params) {
     }
   }
 
+  const audioReady = new Set<string>();
+  try {
+    await Promise.all(release.tracks.map(async (track) => {
+      const metadata = parseJsonObject<TrackMetadata>(track.metadataJson);
+      if (track.labelgridId && !metadata.audioProcessing && !metadata.audioProcessingError
+        && await getSubmittedAudioUrl(track.labelgridId)) audioReady.add(track.id);
+    }));
+  } catch {
+    return NextResponse.json({ error: "Could not verify audio with LabelGrid. Please retry." }, { status: 503 });
+  }
+
   const isLocked =
     Boolean(release.submissionLockedAt) &&
     Date.now() - release.submissionLockedAt!.getTime() < 90_000;
@@ -45,7 +57,7 @@ export async function GET(_request: Request, { params }: Params) {
         id: t.id,
         title: t.title,
         hasLabelGridId: Boolean(t.labelgridId),
-        hasAudioUrl: Boolean(t.audioUrl),
+        hasAudioUrl: audioReady.has(t.id),
         audioProcessing: Boolean(tMeta.audioProcessing),
         audioProcessingError: tMeta.audioProcessingError ?? null,
         creditsSynced: Boolean(tMeta.creditsSyncedAt),

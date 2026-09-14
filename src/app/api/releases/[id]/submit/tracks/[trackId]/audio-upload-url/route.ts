@@ -12,8 +12,8 @@ const bodySchema = z.object({ filename: z.string().min(1).max(255) });
  * Stage 5a (Upload Audio — request URL). Returns a short-lived presigned
  * URL the browser PUTs the audio bytes to directly — that PUT sends no
  * Authorization header (confirmed against document.json), so the bytes
- * never round-trip through our server at all. Skips (no LabelGrid call)
- * if audioUrl is already set from a prior successful run.
+ * never round-trip through our server at all. A new file must not be
+ * skipped just because a previous upload left a stored URL.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id, trackId } = await params;
@@ -24,9 +24,6 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "LabelGrid is not configured." }, { status: 503 });
   }
 
-  if (track.audioUrl) {
-    return NextResponse.json({ ok: true, skipped: true });
-  }
   if (!track.labelgridId || !/^\d+$/.test(track.labelgridId)) {
     return NextResponse.json(
       { error: "Run the Create Tracks stage first." },
