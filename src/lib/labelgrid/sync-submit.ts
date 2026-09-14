@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { getSubmittedArtworkUrl } from "./artwork";
 import { validateAudioLanguage, validateMetadataLanguage } from "./languages";
 import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
 import { prisma } from "@/lib/db";
@@ -949,9 +950,8 @@ export async function verifyOrSyncTrackCredits(
 /**
  * Stage 3 (Upload Artwork) of the Step-5 submission flow — extracted from
  * the inline block `syncReleaseToLabelGrid` already runs, as its own
- * throwing function (the old inline version treats a cover-art failure as
- * non-fatal to the surrounding release sync; a dedicated submit stage
- * should surface the failure directly to its own caller instead).
+ * throwing function, shared with full sync so artwork failure never
+ * becomes a successful submission stage.
  */
 export async function uploadArtworkForSubmit(
   release: Release,
@@ -962,16 +962,20 @@ export async function uploadArtworkForSubmit(
       "Release has not been created on LabelGrid yet — run the Create Release stage first."
     );
   }
-  const file = await uploadReleasePhoto(
+  await uploadReleasePhoto(
     Number(release.labelgridId),
     new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
     artwork.filename
   );
+  const url = await getSubmittedArtworkUrl(release.labelgridId);
+  if (!url) {
+    throw new Error("LabelGrid has not confirmed the cover artwork. Retry the artwork upload before submitting.");
+  }
   await prisma.release.update({
     where: { id: release.id },
-    data: { artworkUrl: file?.url ?? null },
+    data: { artworkUrl: url },
   });
-  return { url: file?.url ?? null };
+  return { url };
 }
 
 async function additionalPrimaryArtistIds(release: ReleaseWithRels, primaryId: number): Promise<number[]> {
@@ -1232,24 +1236,8 @@ export async function syncReleaseToLabelGrid(input: {
       trackIds.push(await ensureLabelGridTrack(track, ctx));
     }
 
-    let coverArtError: string | null = null;
     if (artwork) {
-      try {
-        const file = await uploadReleasePhoto(
-          lgReleaseId,
-          new Blob([new Uint8Array(artwork.buffer)], { type: artwork.mimeType }),
-          artwork.filename
-        );
-        await prisma.release.update({
-          where: { id: release.id },
-          data: { artworkUrl: file?.url ?? null },
-        });
-      } catch (error) {
-        // Non-fatal: tracks are already created above. Surface the failure
-        // (e.g. LabelGrid rejecting dimensions) without losing track sync.
-        coverArtError = formatLgError(error);
-        console.error("[labelgrid/sync/cover]", release.id, coverArtError);
-      }
+      await uploadArtworkForSubmit({ ...release, labelgridId: String(lgReleaseId) }, artwork);
     }
 
     const processingTrackIds: string[] = [];
@@ -1271,9 +1259,7 @@ export async function syncReleaseToLabelGrid(input: {
     await prisma.release.update({
       where: { id: release.id },
       data: {
-        syncError: coverArtError
-          ? `Cover art: ${coverArtError}`.slice(0, 2000)
-          : null,
+        syncError: null,
         ...(created ? { labelgridReviewStatus: "draft" } : {}),
       },
     });

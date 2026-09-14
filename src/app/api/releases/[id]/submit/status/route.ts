@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSubmittedArtworkUrl } from "@/lib/labelgrid/artwork";
 import { loadOwnedReleaseForSubmit } from "@/lib/releases/submit-auth";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
 
@@ -16,6 +17,18 @@ export async function GET(_request: Request, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!release) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  let hasArtwork = false;
+  if (release.labelgridId) {
+    try {
+      hasArtwork = Boolean(await getSubmittedArtworkUrl(release.labelgridId));
+    } catch {
+      return NextResponse.json(
+        { error: "Could not verify artwork with LabelGrid. Please retry; your release has not been submitted." },
+        { status: 503 },
+      );
+    }
+  }
+
   const isLocked =
     Boolean(release.submissionLockedAt) &&
     Date.now() - release.submissionLockedAt!.getTime() < 90_000;
@@ -24,7 +37,7 @@ export async function GET(_request: Request, { params }: Params) {
     locked: isLocked,
     release: {
       hasLabelGridId: Boolean(release.labelgridId),
-      hasArtwork: Boolean(release.artworkUrl),
+      hasArtwork,
     },
     tracks: release.tracks.map((t) => {
       const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);

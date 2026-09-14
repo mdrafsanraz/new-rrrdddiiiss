@@ -10,8 +10,8 @@ type Params = { params: Promise<{ id: string }> };
 /**
  * Stage 3 (Upload Artwork). The browser sends the artwork bytes it's held
  * in memory since Step 1 — this is the first and only time they're
- * transmitted anywhere. Skips the upload entirely (no network call) if
- * release.artworkUrl is already set from a prior successful run.
+ * transmitted anywhere. A supplied file must always replace the cover,
+ * even when a previous upload left a URL in the local database.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -22,9 +22,6 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "LabelGrid is not configured." }, { status: 503 });
   }
 
-  if (release.artworkUrl) {
-    return NextResponse.json({ ok: true, skipped: true, url: release.artworkUrl });
-  }
   if (!release.labelgridId) {
     return NextResponse.json(
       { error: "Run the Create Release stage first." },
