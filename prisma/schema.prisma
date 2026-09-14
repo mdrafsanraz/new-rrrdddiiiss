@@ -1092,6 +1092,7 @@ model SupportMessage {
   ticketId   String
   authorId   String
   body       String
+  attachmentsJson String @default("[]")
   /**
    * true when the author is staff (admin reply).
    */

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readSupportRequest, saveSupportAttachments } from "@/lib/support-attachments";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -22,6 +23,7 @@ export async function GET(_request: Request, { params }: Params) {
     where: { id, userId: user.id },
     include: {
       messages: {
+        where: { isInternal: false },
         orderBy: { createdAt: "asc" },
         include: { author: { select: { id: true, name: true } } },
       },
@@ -42,7 +44,8 @@ export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
 
   try {
-    const body = replySchema.parse(await request.json());
+    const { fields, files } = await readSupportRequest(request);
+    const body = replySchema.parse(fields);
     const ticket = await prisma.supportTicket.findFirst({
       where: { id, userId: user.id },
     });
@@ -56,6 +59,7 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
+    const attachmentsJson = await saveSupportAttachments(user.id, files);
     const [, message] = await prisma.$transaction([
       prisma.supportTicket.update({
         where: { id },
@@ -65,6 +69,7 @@ export async function POST(request: Request, { params }: Params) {
         data: {
           ticketId: id,
           authorId: user.id,
+          attachmentsJson,
           body: body.body.trim(),
           isStaff: false,
         },
@@ -81,7 +86,7 @@ export async function POST(request: Request, { params }: Params) {
       actionUrl: emailUrl(`/admin/support/${ticket.id}`),
       actionLabel: "Review reply",
       replyTo: user.email,
-    });
+    }).catch(error => console.error("[support] reply notification failed", error));
 
     return NextResponse.json({ message }, { status: 201 });
   } catch (error) {

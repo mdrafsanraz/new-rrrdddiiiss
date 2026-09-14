@@ -38,6 +38,8 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const relative = segments.join("/");
+  const supportHeaders: Record<string, string> = path.basename(relative).startsWith("support-")
+    ? { "Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff" } : {};
 
   if (storedPathUsesBucket(relative) && isS3Configured()) {
     const object = await getObject(relative);
@@ -46,6 +48,7 @@ export async function GET(_request: Request, { params }: Params) {
     }
     return new NextResponse(new Uint8Array(object.buffer), {
       headers: {
+        ...supportHeaders,
         "Content-Type": object.contentType || contentTypeFor(relative),
         "Content-Length": String(object.buffer.length),
         "Cache-Control": "private, max-age=3600",
@@ -67,6 +70,7 @@ export async function GET(_request: Request, { params }: Params) {
     const stream = Readable.toWeb(createReadStream(abs)) as ReadableStream;
     return new NextResponse(stream, {
       headers: {
+        ...supportHeaders,
         "Content-Type": contentTypeFor(abs),
         "Content-Length": String(info.size),
         "Cache-Control": "private, max-age=3600",

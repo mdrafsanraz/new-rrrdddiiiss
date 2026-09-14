@@ -177,7 +177,7 @@ const DOCUMENT_TYPES = new Set([
  * know which backend to check.
  */
 function usesBucket(kind: string): boolean {
-  return kind === "documents";
+  return kind === "documents" || kind === "support";
 }
 
 /** Recovers the `{kind}-{token}{ext}` prefix baked into a stored filename by saveGenericUpload. */

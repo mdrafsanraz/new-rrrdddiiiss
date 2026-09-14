@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readSupportRequest, saveSupportAttachments } from "@/lib/support-attachments";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
@@ -113,7 +114,8 @@ export async function POST(request: Request, { params }: Params) {
 
   const { id } = await params;
   try {
-    const body = replySchema.parse(await request.json());
+    const { fields, files } = await readSupportRequest(request);
+    const body = replySchema.parse(fields);
     const existing = await prisma.supportTicket.findUnique({
       where: { id },
       include: { user: { select: { email: true, name: true } } },
@@ -123,6 +125,7 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const nextStatus = body.status ?? "answered";
+    const attachmentsJson = await saveSupportAttachments(existing.userId, files);
 
     const [, message] = await prisma.$transaction([
       prisma.supportTicket.update({
@@ -133,6 +136,7 @@ export async function POST(request: Request, { params }: Params) {
         data: {
           ticketId: id,
           authorId: gate.admin.id,
+          attachmentsJson,
           body: body.body.trim(),
           isStaff: true,
         },
@@ -152,7 +156,7 @@ export async function POST(request: Request, { params }: Params) {
       ticketSubject: existing.subject,
       actionUrl: emailUrl(`/dashboard/support/${id}`),
       actionLabel: "Read and reply",
-    });
+    }).catch(error => console.error("[support] reply notification failed", error));
 
     return NextResponse.json({ message, status: nextStatus }, { status: 201 });
   } catch (error) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readSupportRequest, saveSupportAttachments } from "@/lib/support-attachments";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -28,6 +29,7 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
     include: {
       messages: {
+        where: { isInternal: false },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { body: true, createdAt: true, isStaff: true },
@@ -46,7 +48,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = createSchema.parse(await request.json());
+    const { fields, files } = await readSupportRequest(request);
+    const body = createSchema.parse(fields);
+    const attachmentsJson = await saveSupportAttachments(user.id, files);
     const ticket = await prisma.supportTicket.create({
       data: {
         userId: user.id,
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
         messages: {
           create: {
             authorId: user.id,
+            attachmentsJson,
             body: body.body.trim(),
             isStaff: false,
           },

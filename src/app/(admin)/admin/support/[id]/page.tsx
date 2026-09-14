@@ -107,6 +107,7 @@ export default async function AdminSupportTicketPage({ params }: Props) {
               <span>{m.createdAt.toLocaleString()}</span>
             </div>
             <p className="mt-2 whitespace-pre-wrap">{m.body}</p>
+            <SupportAttachments value={m.attachmentsJson} />
           </li>
         ))}
       </ul>
@@ -115,3 +116,4 @@ export default async function AdminSupportTicketPage({ params }: Props) {
     </div>
   );
 }
+import { SupportAttachments } from "@/components/dashboard/support-attachments";

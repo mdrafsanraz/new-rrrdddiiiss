@@ -67,6 +67,7 @@ export default async function AdminSupportPage({ searchParams }: Props) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Support inbox</h1>
+        <Link href="/admin/support/new" className={cn(buttonVariants({ variant: "outline" }), "mt-3")}>Open ticket for user</Link>
         <p className="mt-1 text-sm text-muted-foreground">
           {openCount} open / in progress. Reply to users from ticket threads.
         </p>
