@@ -49,9 +49,26 @@ export function ReleaseReviewActions({
     | "document"
     | "draft"
     | "deleting"
+    | "withdrawing"
   >("idle");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<"main" | "document" | "hold">("main");
+
+  async function withdrawReview() {
+    if (!window.confirm("Withdraw this release from LabelGrid review? It will return to draft so the user can edit and resubmit. Existing artwork and audio will be retained.")) return;
+    setError("");
+    setStatusBusy("withdrawing");
+    try {
+      const res = await fetch(`/api/admin/releases/${releaseId}/withdraw-review`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Could not withdraw release from review.");
+      else router.refresh();
+    } catch {
+      setError("Network error. Refresh release data before retrying.");
+    } finally {
+      setStatusBusy("idle");
+    }
+  }
 
   async function approve() {
     setError("");
@@ -274,6 +291,12 @@ export function ReleaseReviewActions({
             </p>
           ) : null}
           <div className="flex flex-col gap-2">
+            {hasLabelgridId && status === "labelgrid_in_review" ? (
+              <Button type="button" variant="outline" className="h-9 w-full"
+                disabled={statusBusy !== "idle"} onClick={withdrawReview}>
+                {statusBusy === "withdrawing" ? "Withdrawing..." : "Withdraw from LabelGrid review"}
+              </Button>
+            ) : null}
             {canDecide ? (
               <Button
                 type="button"
