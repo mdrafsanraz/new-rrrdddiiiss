@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
+import { canAdminResubmitMetadata } from "@/lib/releases/admin-resubmit";
 
 const DOC_KINDS = [
   "Master ownership",
@@ -50,9 +51,22 @@ export function ReleaseReviewActions({
     | "draft"
     | "deleting"
     | "withdrawing"
+    | "resubmitting"
   >("idle");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<"main" | "document" | "hold">("main");
+
+  async function resubmitMetadata() {
+    if (!window.confirm("Push the saved RDISTRO metadata and resubmit this release to LabelGrid? Save your edits first. Existing media is retained. Preflight QC may require a fresh confirmation. Releases still locked in review must be withdrawn separately.")) return;
+    setError(""); setStatusBusy("resubmitting");
+    try {
+      const res = await fetch(`/api/admin/releases/${releaseId}/resubmit`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Resubmission failed.");
+      else router.refresh();
+    } catch { setError("Network error. Refresh release data before retrying."); }
+    finally { setStatusBusy("idle"); }
+  }
 
   async function withdrawReview() {
     if (!window.confirm("Withdraw this release from LabelGrid review? It will return to draft so the user can edit and resubmit. Existing artwork and audio will be retained.")) return;
@@ -337,6 +351,11 @@ export function ReleaseReviewActions({
               Hold
             </Button>
             <details className="mt-2 border-t border-border pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">Advanced & final actions</summary><div className="mt-3 space-y-2">
+            {canAdminResubmitMetadata(status, permanentlyLocked, hasLabelgridId) ? (
+              <Button type="button" variant="outline" className="h-9 w-full" disabled={statusBusy !== "idle"} onClick={resubmitMetadata}>
+                {statusBusy === "resubmitting" ? "Resubmitting..." : "Resubmit updated metadata"}
+              </Button>
+            ) : null}
             {canSendBackToDraft ? (
               <Button
                 type="button"
