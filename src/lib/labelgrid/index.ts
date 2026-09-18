@@ -622,11 +622,13 @@ export function getReleaseQualityReport(releaseId: number | string) {
 }
 
 /** POST /releases/{id}/quality-report/refresh */
-export function refreshReleaseQualityReport(releaseId: number | string) {
-  return labelgridFetch<unknown>(
+export async function refreshReleaseQualityReport(releaseId: number | string) {
+  const result = await labelgridFetch<unknown>(
     `/releases/${releaseId}/quality-report/refresh`,
-    { method: "POST" }
+    { method: "POST", timeoutMs: 20_000 }
   );
+  if (typeof result === "string") throw new Error("LabelGrid returned an unexpected response to the analysis request. Fetch the report before retrying.");
+  return result;
 }
 
 /**

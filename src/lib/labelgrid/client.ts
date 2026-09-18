@@ -35,6 +35,7 @@ export function labelGridApiErrorMessage(error: LabelGridApiError): string {
 }
 
 type RequestOptions = {
+  timeoutMs?: number;
   method?: string;
   body?: unknown;
   /** Expected non-success responses that callers handle as normal control flow. */
@@ -75,6 +76,7 @@ export async function labelgridFetchRaw<T>(
   }
 
   const res = await fetch(url, {
+    ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
     method: options.method ?? (options.body ? "POST" : "GET"),
     headers: {
       Authorization: `Bearer ${token}`,

@@ -205,6 +205,9 @@ export async function requestQualityReportRefresh(localReleaseId: string) {
     });
     return { ok: true as const };
   } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return { ok: false as const, error: "LabelGrid did not acknowledge the analysis request within 20 seconds. It may still be running. Fetch the report before requesting another analysis." };
+    }
     if (error instanceof LabelGridApiError) {
       return {
         ok: false as const,

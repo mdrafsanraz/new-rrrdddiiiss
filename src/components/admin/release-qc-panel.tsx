@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { QcReportSnapshot } from "@/lib/labelgrid/quality-report";
 import { deriveQcStatus, safeEvidenceUrl, qcConfirmationError } from "@/lib/labelgrid/qc-state";
 import { QcBadge } from "@/components/admin/status-badges";
+import { readQcResponse } from "@/lib/labelgrid/qc-response";
 
 const descriptions: Record<string, string> = {
   pending: "Automated checks are running. The report-ready webhook saves the completed results. Fetch the report to update this panel; no confirmation happens automatically.",
@@ -45,8 +46,7 @@ export function ReleaseQcPanel({ releaseId, labelgridId, qcStatus, qcChecksInPro
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }), signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Unable to fetch the QC report.");
+      const data = await readQcResponse(res);
       if (signal?.aborted) return;
       if (action === "refresh") {
         setPending(true); setNotice("Analysis requested. Waiting for LabelGrid’s updated report.");
