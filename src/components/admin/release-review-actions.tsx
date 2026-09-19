@@ -69,7 +69,7 @@ export function ReleaseReviewActions({
   }
 
   async function withdrawReview() {
-    if (!window.confirm("Withdraw this release from LabelGrid review? It will return to draft so the user can edit and resubmit. Existing artwork and audio will be retained.")) return;
+    if (!window.confirm("Withdraw this release from LabelGrid review? LabelGrid will return it to draft, while RDISTRO keeps it In Review for admin resubmission. Existing artwork and audio will be retained.")) return;
     setError("");
     setStatusBusy("withdrawing");
     try {

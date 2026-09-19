@@ -24,24 +24,26 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Only releases awaiting LabelGrid review can be withdrawn." }, { status: 409 });
       }
       // document.json: POST /releases/{release}/withdraw-review returns ReleaseData.
-      // Never unlock locally if the provider rejects the withdrawal.
+      // Provider withdrawal must succeed before changing any local state.
       const remote = unwrapLabelGridData<ReleaseData>(await withdrawReleaseFromReview(release.labelgridId));
       if (String(remote.id) !== release.labelgridId || remote.review_status !== "draft") {
         throw new Error("LabelGrid did not confirm withdrawal to draft. Refresh release data before retrying.");
       }
       await prisma.$transaction(async (tx) => {
         await tx.release.update({ where: { id }, data: {
-          status: "draft", labelgridReviewStatus: "draft", syncError: null,
+          // Keep RDISTRO's approval; only the provider returns to draft.
+          // internal_approved is shown to users as In Review and permits admin resubmission.
+          status: "internal_approved", labelgridReviewStatus: "draft", syncError: null,
           holdReason: null, heldAt: null, heldById: null,
           reviewedAt: new Date(), reviewedById: gate.admin.id,
-          reviewNotes: "Withdrawn from LabelGrid review by RDISTRO. You can edit and resubmit this release.",
+          reviewNotes: "RDISTRO is preparing this release for resubmission. Your release remains in review.",
         } });
         await tx.releaseReviewIssue.updateMany({ where: { releaseId: id, resolved: false },
           data: { resolved: true, resolvedAt: new Date(), status: "withdrawn" } });
       });
       await logReleaseActivity({ releaseId: id, actorUserId: gate.admin.id,
         type: "edited", title: "Withdrawn from LabelGrid review",
-        description: "Returned to draft for editing and resubmission. Artwork and audio were retained." });
+        description: "Withdrawn from LabelGrid for admin resubmission. The release remains in RDISTRO review; artwork and audio were retained." });
       await writeAuditLog({ actorUserId: gate.admin.id, action: "labelgrid_sync",
         metadata: { operation: "withdraw_review", labelgridId: release.labelgridId },
         targetType: "release", targetId: id, summary: `Withdrew ${release.title} from LabelGrid review` });
