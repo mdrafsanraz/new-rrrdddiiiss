@@ -2,12 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { assertCanSubmitRelease } from "@/lib/entitlements/server";
+import { POST as finalizeSubmission } from "./submit/finalize/route";
 import { logReleaseActivity } from "@/lib/releases/activity";
-import { getConfiguredPlan } from "@/lib/plans";
 import {
   canUserEditRelease,
-  canUserSubmitRelease,
   isFinalRejection,
 } from "@/lib/releases/status";
 
@@ -120,85 +118,12 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-/** Submit an existing local draft into RDISTRO internal review. */
-export async function POST(request: Request, { params }: Params) {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as {
-    action?: string;
-  };
-
-  if (body.action !== "submit") {
+/** Compatibility endpoint: never maintain a second, weaker submission path. */
+export async function POST(request: Request, context: Params) {
+  const body = await request.json().catch(() => null);
+  if (!body || body.action !== "submit") {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }
-
-  const existing = await prisma.release.findFirst({
-    where: { id, userId: user.id },
-    include: { tracks: true },
-  });
-  if (!existing) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (!canUserSubmitRelease(existing)) {
-    return NextResponse.json(
-      { error: "This release cannot be submitted." },
-      { status: 409 }
-    );
-  }
-
-  try {
-    await assertCanSubmitRelease(user.id, user.planId);
-    const priorityReview = (await getConfiguredPlan(user.planId)).priorityReview;
-
-    const release = await prisma.$transaction(async (tx) => {
-      const lockedRelease = await tx.release.findFirst({
-        where: {
-          id: existing.id,
-          userId: user.id,
-          submittedAt: null,
-          permanentlyLocked: false,
-        },
-      });
-      if (!lockedRelease) {
-        throw new Error("Already submitted.");
-      }
-      const now = new Date();
-      const updated = await tx.release.update({
-        where: { id: lockedRelease.id },
-        data: {
-          status: "pending_internal_review",
-          submittedAt: now,
-          priorityReview,
-        },
-      });
-      if (lockedRelease.artistId) {
-        await tx.artist.updateMany({
-          where: {
-            id: lockedRelease.artistId,
-            userId: user.id,
-            locked: false,
-          },
-          data: { locked: true, lockedAt: now },
-        });
-      }
-      await logReleaseActivity({
-        tx,
-        releaseId: updated.id,
-        type: "submitted_internal",
-        title: "Submitted to RDISTRO review",
-        actorUserId: user.id,
-      });
-      return updated;
-    });
-
-    return NextResponse.json({ release });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Submit failed";
-    const status = message.includes("limit") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
-  }
+  // Uses the builder's ownership, metadata, documents, provider media, and quota gates.
+  return finalizeSubmission(request, context);
 }
