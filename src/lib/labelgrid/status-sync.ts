@@ -203,6 +203,7 @@ export async function reconcileLabelGridReleaseStatus(
   if (!release?.labelgridId) {
     return { ok: false, error: "Release has no LabelGrid id" };
   }
+  if (release.manualTakenDown) return { ok: true, status: "taken_down" };
 
   // Only reconcile after we've submitted to LabelGrid review (or beyond).
   const local = normalizeReleaseStatus(release.status);
@@ -383,6 +384,10 @@ export async function applyLabelGridReviewStatusWebhook(payload: {
   }
 
   const reviewStatus = payload.new_status?.trim().toLowerCase() || null;
+  if (release.manualTakenDown) {
+    await prisma.release.update({ where: { id: release.id }, data: { labelgridReviewStatus: reviewStatus, lastSyncedAt: new Date() } });
+    return { ok: true as const, release, status: "taken_down" as const, userStatusChanged: false };
+  }
   const mapped = mapLabelGridStatusToLocalStatus(reviewStatus);
   if (!mapped) {
     await prisma.release.update({
@@ -467,6 +472,7 @@ export async function applyLabelGridDeliveryStatusWebhook(payload: {
 
   const previousStatus = normalizeReleaseStatus(release.status);
   const eventDeliveryStatus = payload.delivery_status?.trim().toLowerCase();
+  if (release.manualTakenDown) return { ok: true as const, release, status: "taken_down" as const, userStatusChanged: false };
   const eventMapped = eventDeliveryStatus
     ? mapLabelGridStatusToLocalStatus(
         release.labelgridReviewStatus,

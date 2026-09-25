@@ -14,6 +14,7 @@ import {
 } from "@/lib/releases/status";
 
 const schema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("mark_taken_down_local"), reason: z.string().trim().max(2000).optional() }),
   z.object({
     action: z.literal("hold"),
     reason: z.string().min(1).max(2000),
@@ -52,6 +53,20 @@ export async function POST(request: Request, { params }: Params) {
         { error: "Release is permanently locked." },
         { status: 400 }
       );
+    }
+
+    if (body.action === "mark_taken_down_local") {
+      const fresh = await prisma.$transaction(async (tx) => {
+        const updated = await tx.release.update({ where: { id }, data: { status: "taken_down", manualTakenDown: true } });
+        await logReleaseActivity({ tx, releaseId: id, type: "edited", title: "Marked taken down in RDISTRO only",
+          description: body.reason || null, actorUserId: gate.admin.id,
+          metadata: { source: "admin_local_override", previousStatus: release.status, labelgridNotNotified: true } });
+        await tx.auditLog.create({ data: { actorUserId: gate.admin.id, action: "other", targetType: "release", targetId: id,
+          summary: "Manually marked taken down in RDISTRO only",
+          metadataJson: JSON.stringify({ reason: body.reason, previousStatus: release.status, labelgridNotNotified: true }) } });
+        return updated;
+      });
+      return NextResponse.json({ release: fresh });
     }
 
     if (body.action === "assign_to_me") {

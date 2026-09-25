@@ -19,8 +19,11 @@ import {
  * - rejected: FINAL — permanently locked
  */
 const schema = z.object({
-  notes: z.string().min(1).max(2000),
+  notes: z.string().trim().max(2000).optional().default(""),
   outcome: z.enum(["changes_required", "rejected"]),
+}).refine((body) => body.outcome === "rejected" || body.notes.length > 0, {
+  path: ["notes"],
+  message: "Notes are required for changes required.",
 });
 
 type Params = { params: Promise<{ id: string }> };
@@ -121,8 +124,8 @@ export async function POST(request: Request, { params }: Params) {
       where: { id },
       data: {
         status: nextStatus,
-        reviewNotes: body.notes.trim(),
-        internalRejectionReason: isFinalReject ? body.notes.trim() : null,
+        reviewNotes: body.notes || null,
+        internalRejectionReason: isFinalReject ? body.notes || null : null,
         reviewedAt: new Date(),
         reviewedById: gate.admin.id,
         syncError: null,
@@ -173,7 +176,7 @@ export async function POST(request: Request, { params }: Params) {
           ? "labelgrid_changes_required"
           : "internal_changes_required",
       title: isFinalReject ? "Rejected" : "Changes required",
-      description: body.notes.trim(),
+      description: body.notes || null,
       actorUserId: gate.admin.id,
     });
 
@@ -184,7 +187,7 @@ export async function POST(request: Request, { params }: Params) {
         {
           error:
             error.issues[0]?.message ??
-            "Notes and outcome (changes_required | rejected) are required",
+            "Invalid review decision",
         },
         { status: 400 }
       );

@@ -52,9 +52,23 @@ export function ReleaseReviewActions({
     | "deleting"
     | "withdrawing"
     | "resubmitting"
+    | "local-takedown"
   >("idle");
   const [error, setError] = useState("");
   const [panel, setPanel] = useState<"main" | "document" | "hold">("main");
+
+  async function markTakenDownLocally() {
+    setError("");
+    if (!window.confirm("Mark this release Taken Down in RDISTRO only? This does NOT remove it from stores or send anything to LabelGrid. No email will be sent to the user. Automatic LabelGrid status sync will not overwrite this local status.")) return;
+    setStatusBusy("local-takedown");
+    try {
+      const res = await fetch(`/api/admin/releases/${releaseId}/moderate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "mark_taken_down_local", reason: notes.trim() }) });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Could not update local status.");
+      else router.refresh();
+    } catch { setError("Could not confirm the update. Refresh release data before retrying."); }
+    finally { setStatusBusy("idle"); }
+  }
 
   async function resubmitMetadata() {
     if (!window.confirm("Push the saved RDISTRO metadata and resubmit this release to LabelGrid? Save your edits first. Existing media is retained. Preflight QC may require a fresh confirmation. Releases still locked in review must be withdrawn separately.")) return;
@@ -109,8 +123,8 @@ export function ReleaseReviewActions({
 
   async function decide(outcome: "changes_required" | "rejected") {
     setError("");
-    if (!notes.trim()) {
-      setError("Notes are required for changes required or rejection.");
+    if (outcome === "changes_required" && !notes.trim()) {
+      setError("Notes are required for changes required.");
       return;
     }
     if (outcome === "rejected") {
@@ -292,7 +306,7 @@ export function ReleaseReviewActions({
             as="textarea"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            helper="Shown to the user for changes, reject, document request, or send back to draft."
+            helper="Optional for rejection. Required for changes or document requests. Notes are visible to the user."
           />
           {error ? (
             <p className="text-sm font-medium text-red-700" role="alert">
@@ -351,6 +365,12 @@ export function ReleaseReviewActions({
               Hold
             </Button>
             <details className="mt-2 border-t border-border pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">Advanced & final actions</summary><div className="mt-3 space-y-2">
+            {status !== "taken_down" ? <>
+              <Button type="button" variant="outline" className="h-9 w-full text-red-800" disabled={statusBusy !== "idle"} onClick={markTakenDownLocally}>
+                {statusBusy === "local-takedown" ? "Updating..." : "Mark Taken Down — RDISTRO only"}
+              </Button>
+              <p className="text-xs text-muted-foreground">Local status only. Does not remove music from stores or notify LabelGrid. No user email is sent. Decision note is optional.</p>
+            </> : null}
             {canAdminResubmitMetadata(status, permanentlyLocked, hasLabelgridId) ? (
               <Button type="button" variant="outline" className="h-9 w-full" disabled={statusBusy !== "idle"} onClick={resubmitMetadata}>
                 {statusBusy === "resubmitting" ? "Resubmitting..." : "Resubmit updated metadata"}
