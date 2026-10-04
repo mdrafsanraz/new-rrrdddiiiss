@@ -82,6 +82,7 @@ const schema = z.object({
   upc: z.string().max(13).optional().nullable(),
   mixVersion: z.string().optional().or(z.literal("")),
   preferredLocalization: z.string().optional(),
+  recordingCountry: z.string().regex(/^([A-Z]{2})?$/, "Select a valid recording country.").optional(),
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).optional(),
   transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
@@ -164,6 +165,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const copyrightYear = selectedYear ? Number(selectedYear) : undefined;
     const nextMeta = {
       ...prevMeta,
+      ...(fields.recordingCountry !== undefined ? { recordingCountry: fields.recordingCountry || undefined } : {}),
       ...(fields.additionalArtistIds !== undefined ? { additionalArtistIds: fields.additionalArtistIds } : {}),
       ...(fields.mixVersion !== undefined
         ? { mixVersion: fields.mixVersion || undefined }
@@ -272,6 +274,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
         const tMeta: TrackMetadata = {
           ...prevTrackMeta,
+          recordingCountry: nextMeta.recordingCountry || prevTrackMeta.recordingCountry,
           mixVersion: t.mixVersion || undefined,
           compositionType: t.compositionType,
           audioAiUsage: t.audioAiUsage,

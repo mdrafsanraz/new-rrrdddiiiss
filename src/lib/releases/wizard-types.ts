@@ -71,6 +71,7 @@ export type WizardState = {
   releaseDate: string;
   upc: string;
   preferredLocalization: string;
+  recordingCountry?: string;
   // Step 2 — Distribution
   allStores: boolean;
   /** LabelGrid distro outlet key slugs (GET /distro-outlets). */

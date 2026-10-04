@@ -85,6 +85,7 @@ export function StepReview({
               value={`${state.contentType}${state.mixVersion ? ` · ${state.mixVersion}` : ""}`}
             />
             <SummaryRow label="Genre" value={state.primaryGenreName} />
+            <SummaryRow label="Recording country" value={state.recordingCountry || "Not specified"} />
             <SummaryRow label="Release date" value={state.releaseDate} />
             {state.isTransfer ? (
               <SummaryRow

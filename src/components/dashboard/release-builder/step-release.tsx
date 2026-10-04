@@ -22,6 +22,7 @@ import {
   readImageFileDimensions,
   type CatalogState,
   type GenreOption,
+  type TerritoryOption,
 } from "./shared";
 
 const CONTENT_TYPE_OPTIONS = ["Single", "EP", "Album"] as const;
@@ -39,12 +40,14 @@ export function StepRelease({
   patch,
   artists,
   genres,
+  territories,
   setError,
 }: {
   state: WizardState;
   patch: (partial: Partial<WizardState>) => void;
   artists: ArtistOption[];
   genres: CatalogState<GenreOption>;
+  territories: CatalogState<TerritoryOption>;
   setError: (message: string) => void;
 }) {
   return (
@@ -273,6 +276,25 @@ export function StepRelease({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <MetadataLanguage value={state.preferredLocalization} onChange={(value) => patch({ preferredLocalization: value })} />
+          <div className="grid gap-2">
+            <Field
+              id="recordingCountry"
+              label="Recording country"
+              as="select"
+              value={state.recordingCountry ?? ""}
+              onChange={(e) => patch({ recordingCountry: e.target.value })}
+              helper="Optional. Select where the audio was recorded. Applies to every track; leave blank to retain existing track countries."
+            >
+              <option value="">Not specified</option>
+              {state.recordingCountry && !territories.items.some((country) => country.code === state.recordingCountry) ? (
+                <option value={state.recordingCountry}>{state.recordingCountry}</option>
+              ) : null}
+              {territories.items.map((country) => (
+                <option key={country.code} value={country.code}>{country.name}</option>
+              ))}
+            </Field>
+            <CatalogStatus catalog={territories} emptyLabel="No countries available." />
+          </div>
           <div className="grid gap-2">
             <p className="text-sm font-medium">Label</p>
             <p className="flex h-10 items-center border border-border bg-muted px-3 text-sm text-muted-foreground">

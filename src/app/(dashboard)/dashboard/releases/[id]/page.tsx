@@ -116,6 +116,10 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
+  const providerChangesRequired = needsChanges && (
+    normalizeReleaseStatus(release.status) === "labelgrid_changes_required" ||
+    openIssues.some((issue) => issue.source === "LABELGRID")
+  );
   // Editing remains available for corrections, including mixed document requests.
   const documentRequiredIssues = openIssues.filter(isDocumentRequest);
   const documentRequested = documentRequiredIssues.length > 0;
@@ -368,8 +372,9 @@ export default async function ReleaseDetailPage({ params }: Props) {
       {needsChanges ? (
         <Callout tone="warning" icon={<WarningCircle size={20} weight="fill" aria-hidden />} title="Changes Required">
           <p className="opacity-85">
-            This is not a final rejection. Fix the items below, upload any
-            requested documents, then resubmit.
+            {providerChangesRequired
+              ? "Distribution review has requested changes. Review the issues below, then submit a support ticket with your release title, the issue details, and any requested documents. The RDISTRO team will help resolve the review feedback."
+              : "This is not a final rejection. Fix the items below, upload any requested documents, then resubmit."}
           </p>
           {release.reviewNotes ? (
             <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3 dark:border-amber-500/20">
@@ -379,7 +384,9 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
           <div className="mt-4 space-y-2.5">
             {openIssues.length === 0 ? (
-              <p>Review notes are above. Update your release materials, then resubmit.</p>
+              <p>{providerChangesRequired
+                ? "If no issue details are available here, submit a support ticket so our team can check the review feedback."
+                : "Review notes are above. Update your release materials, then resubmit."}</p>
             ) : (
               openIssues.map((issue) => (
                 <article key={issue.id} className="border border-amber-200/80 bg-white/70 p-3.5 dark:border-amber-500/20 dark:bg-black/10">
@@ -405,7 +412,13 @@ export default async function ReleaseDetailPage({ params }: Props) {
             )}
           </div>
 
-          {canResubmit ? (
+          {providerChangesRequired ? (
+            <div className="mt-4">
+              <Link href="/dashboard/support?view=new" className={buttonVariants()}>
+                Submit support ticket
+              </Link>
+            </div>
+          ) : canResubmit ? (
             <div className="mt-4">
               <ResubmitReleaseButton releaseId={release.id} />
             </div>

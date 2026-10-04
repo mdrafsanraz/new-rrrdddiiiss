@@ -285,6 +285,7 @@ function releasePayloadFields(state: WizardState) {
     upc: state.upc,
     mixVersion: state.mixVersion,
     preferredLocalization: state.preferredLocalization,
+    recordingCountry: state.recordingCountry ?? "",
     artworkAiUsage: state.artworkAiUsage,
     transferFromDistributor: state.isTransfer
       ? state.transferFromDistributor
@@ -753,6 +754,7 @@ export function ReleaseBuilder({
                 patch={patch}
                 artists={artists}
                 genres={genres}
+                territories={territories}
                 setError={setError}
               />
             ) : null}
