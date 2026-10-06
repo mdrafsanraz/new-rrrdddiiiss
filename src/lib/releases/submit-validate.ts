@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { isRecordingCountry } from "./recording-country";
 import { contributorRoleLimitError, requiredWriterSplitsError, requiredCompositionRolesError } from "./credit-validation";
 import {
   parseJsonObject,
@@ -30,6 +31,9 @@ export function validateReleaseForSubmit(
 ): string[] {
   const errors: string[] = [];
   const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
+  if (!isRecordingCountry(rMeta.recordingCountry)) {
+    errors.push("Please select a recording country in Release Information.");
+  }
 
   if (!release.title.trim() || release.title === "Untitled release") {
     errors.push("Please enter a release title.");
@@ -70,6 +74,9 @@ export function validateReleaseForSubmit(
   let instrumentalHasLyricist = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
+    if (!isRecordingCountry(tMeta.recordingCountry) || tMeta.recordingCountry !== rMeta.recordingCountry) {
+      errors.push(`"${t.title}": Recording country must match Release Information. Save the release again before submitting.`);
+    }
     if (!tMeta.audioLanguage?.trim()) errors.push(`"${t.title}": Select an audio language.`);
     const contributorIds = new Set<number>();
     for (const contributor of tMeta.contributors ?? []) {

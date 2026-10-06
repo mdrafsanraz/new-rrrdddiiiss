@@ -181,6 +181,7 @@ export type PublisherSplitDraft = {
 export type ReleaseMetadata = {
   recordingCountry?: string;
   additionalArtistIds?: string[];
+  featuredArtistIds?: string[];
   mixVersion?: string;
   preferredLocalization?: string;
   artisticRole?: string;

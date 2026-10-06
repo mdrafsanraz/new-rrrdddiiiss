@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { artistSelectionError } from "@/lib/releases/artist-credits";
+import { recordingCountrySchema } from "@/lib/releases/recording-country";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -13,6 +15,7 @@ import {
 const schema = z.object({
   artistId: z.string().min(1),
   additionalArtistIds: z.array(z.string().min(1)).max(100).optional(),
+  featuredArtistIds: z.array(z.string().min(1)).max(100).optional(),
   title: z.string().min(1).max(200).optional().or(z.literal("")),
   contentType: z.enum(["Single", "EP", "Album"]).default("Single"),
   /** Live LabelGrid genre id + display name (GET /genres). */
@@ -24,7 +27,7 @@ const schema = z.object({
   upc: z.string().max(13).optional().or(z.literal("")),
   mixVersion: z.string().max(200).optional().or(z.literal("")),
   preferredLocalization: z.string().default("en"),
-  recordingCountry: z.string().regex(/^([A-Z]{2})?$/, "Select a valid recording country.").optional(),
+  recordingCountry: recordingCountrySchema,
   artworkAiUsage: z.enum(ARTWORK_AI_USAGE).default("none"),
   transferFromDistributor: z.string().max(255).optional().or(z.literal("")),
   clineYear: z.string().optional().or(z.literal("")),
@@ -70,8 +73,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing payload" }, { status: 400 });
     }
     const fields = schema.parse(JSON.parse(raw));
-    if (fields.additionalArtistIds?.length) {
-      const ids = [...new Set(fields.additionalArtistIds)];
+    const selectionError = artistSelectionError(fields.artistId, fields.additionalArtistIds, fields.featuredArtistIds);
+    if (selectionError) return NextResponse.json({ error: selectionError }, { status: 400 });
+    if (fields.additionalArtistIds?.length || fields.featuredArtistIds?.length) {
+      const ids = [...new Set([...(fields.additionalArtistIds ?? []), ...(fields.featuredArtistIds ?? [])])];
       const count = await prisma.artist.count({ where: { id: { in: ids }, userId: user.id } });
       if (count !== ids.length) return NextResponse.json({ error: "Select primary artists from your own roster." }, { status: 400 });
     }
@@ -90,6 +95,7 @@ export async function POST(request: Request) {
 
     const meta: ReleaseMetadata = {
       additionalArtistIds: fields.additionalArtistIds ?? [],
+      featuredArtistIds: fields.featuredArtistIds ?? [],
       mixVersion: fields.mixVersion || undefined,
       preferredLocalization: fields.preferredLocalization,
       recordingCountry: fields.recordingCountry || undefined,

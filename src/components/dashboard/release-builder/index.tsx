@@ -1,4 +1,6 @@
 "use client";
+import { isRecordingCountry } from "@/lib/releases/recording-country";
+import { artistSelectionError } from "@/lib/releases/artist-credits";
 
 /**
  * Release Builder — Release → Distribution → Tracks → Credits → Review.
@@ -125,8 +127,11 @@ function validateStep(
     }
     if (!state.title.trim()) return "Please enter a release title.";
     if (!state.artistId) return "Please select an artist.";
+    const selectionError = artistSelectionError(state.artistId, state.additionalArtistIds, state.featuredArtistIds);
+    if (selectionError) return selectionError;
     if (!state.primaryGenreId) return "Please choose a primary genre.";
     if (!state.releaseDate) return "Please choose a release date.";
+    if (!isRecordingCountry(state.recordingCountry)) return "Please select a recording country in Release Information.";
     if (state.isTransfer) {
       if (!state.transferFromDistributor.trim()) {
         return "Please name the distributor you're transferring from.";
@@ -276,6 +281,7 @@ function releasePayloadFields(state: WizardState) {
   return {
     artistId: state.artistId,
     additionalArtistIds: (state.additionalArtistIds ?? []).filter((id) => id !== state.artistId),
+    featuredArtistIds: state.featuredArtistIds ?? [],
     title: state.title.trim(),
     contentType: state.contentType,
     primaryGenreId: state.primaryGenreId,
@@ -790,6 +796,7 @@ export function ReleaseBuilder({
 
             {state.step === STEP_REVIEW ? (
               <StepReview
+                featuredArtistName={artists.filter((artist) => state.featuredArtistIds?.includes(artist.id)).map((artist) => artist.name).join(", ")}
                 state={state}
                 patch={patch}
                 artistName={artists.filter((item) => item.id === state.artistId || state.additionalArtistIds?.includes(item.id)).map((item) => item.name).join(", ")}

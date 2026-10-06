@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { artistSelectionError, buildArtistCredits } from "@/lib/releases/artist-credits";
 import { getSubmittedArtworkUrl } from "./artwork";
 import { validateAudioLanguage, validateMetadataLanguage } from "./languages";
 import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
@@ -454,6 +455,7 @@ async function buildDistributionFields(
 }
 
 type TrackSyncContext = {
+  featuredLgArtistIds: number[];
   additionalLgArtistIds: number[];
   lgReleaseId: number;
   lgArtistId: number;
@@ -662,14 +664,7 @@ async function buildTrackBody(
     pline_year: tMeta.plineYear ?? undefined,
     pline_name: tMeta.plineName || undefined,
     titles: [{ iso_code: ctx.locale, text: track.title }],
-    artists: [
-      {
-        artist_id: ctx.lgArtistId,
-        artistic_role: ctx.artisticRole,
-        position: 1,
-      },
-      ...ctx.additionalLgArtistIds.map((id, index) => ({ artist_id: id, artistic_role: "MainArtist", position: index + 2 })),
-    ],
+    artists: buildArtistCredits(ctx.lgArtistId, ctx.additionalLgArtistIds, ctx.featuredLgArtistIds, ctx.artisticRole),
     contributors,
   };
 
@@ -977,9 +972,11 @@ export async function uploadArtworkForSubmit(
   return { url };
 }
 
-async function additionalPrimaryArtistIds(release: ReleaseWithRels, primaryId: number): Promise<number[]> {
+async function additionalPrimaryArtistIds(release: ReleaseWithRels, primaryId: number, role: "main" | "featured" = "main"): Promise<number[]> {
   const metadata = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-  const ids = [...new Set(metadata.additionalArtistIds ?? [])].filter((id) => id !== release.artistId);
+  const selectionError = artistSelectionError(release.artistId ?? "", metadata.additionalArtistIds, metadata.featuredArtistIds);
+  if (selectionError) throw new Error(selectionError);
+  const ids = [...new Set((role === "featured" ? metadata.featuredArtistIds : metadata.additionalArtistIds) ?? [])].filter((id) => id !== release.artistId);
   const artists = await prisma.artist.findMany({ where: { id: { in: ids }, userId: release.userId } });
   if (artists.length !== ids.length) throw new Error("One or more selected primary artists are unavailable in your account. Edit the release and select them again.");
   const providerIds: number[] = [];
@@ -1006,6 +1003,7 @@ async function buildReleaseBody(
     : release.releaseDate;
   const copyrightYear = effectiveReleaseDate?.getUTCFullYear();
   const additionalIds = await additionalPrimaryArtistIds(release, input.lgArtistId);
+  const featuredIds = await additionalPrimaryArtistIds(release, input.lgArtistId, "featured");
 
   const body: Record<string, unknown> = {
     content_type: release.contentType,
@@ -1035,14 +1033,7 @@ async function buildReleaseBody(
         phonetic: null,
       },
     ],
-    artists: [
-      {
-        artist_id: input.lgArtistId,
-        artistic_role: input.artisticRole,
-        position: 1,
-      },
-      ...additionalIds.map((id, index) => ({ artist_id: id, artistic_role: "MainArtist", position: index + 2 })),
-    ],
+    artists: buildArtistCredits(input.lgArtistId, additionalIds, featuredIds, input.artisticRole),
   };
 
   if (rMeta.mixVersion?.trim()) {
@@ -1153,6 +1144,7 @@ export async function buildTrackSyncContext(
     lgReleaseId: Number(release.labelgridId),
     lgArtistId,
     additionalLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId),
+    featuredLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId, "featured"),
     locale,
     artisticRole,
     releaseExplicit: release.explicit,
@@ -1213,6 +1205,7 @@ export async function syncReleaseToLabelGrid(input: {
 
     const ctx: TrackSyncContext = {
       additionalLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId),
+      featuredLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId, "featured"),
       lgReleaseId,
       lgArtistId,
       locale,

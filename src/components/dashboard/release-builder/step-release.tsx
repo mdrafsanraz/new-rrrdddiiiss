@@ -35,6 +35,32 @@ const AI_USAGE_LABELS = [
 
 export type ArtistOption = { id: string; name: string };
 
+function ArtistDropdown({ id, label, artists, selected, excluded, onChange }: {
+  id: string; label: string; artists: ArtistOption[]; selected: string[];
+  excluded: string[]; onChange: (ids: string[]) => void;
+}) {
+  const available = artists.filter((artist) => !selected.includes(artist.id) && !excluded.includes(artist.id));
+  return (
+    <div className="space-y-2">
+      <Field id={id} label={label} as="select" value="" disabled={!available.length}
+        onChange={(event) => { if (event.target.value) onChange([...selected, event.target.value]); }}>
+        <option value="">{available.length ? "Select artist to add" : "No more artists available"}</option>
+        {available.map((artist) => <option key={artist.id} value={artist.id}>{artist.name}</option>)}
+      </Field>
+      {selected.length ? <div className="flex flex-wrap gap-1.5">
+        {selected.map((artistId) => {
+          const name = artists.find((artist) => artist.id === artistId)?.name ?? "Unavailable artist";
+          return <button key={artistId} type="button" aria-label={`Remove ${name} from ${label}`}
+            onClick={() => onChange(selected.filter((value) => value !== artistId))}
+            className="rounded border border-border bg-muted px-2 py-1 text-xs hover:bg-muted/60">
+            {name} <span aria-hidden="true">×</span>
+          </button>;
+        })}
+      </div> : null}
+    </div>
+  );
+}
+
 export function StepRelease({
   state,
   patch,
@@ -169,8 +195,12 @@ export function StepRelease({
             as="select"
             required
             value={state.artistId}
-            onChange={(e) => patch({ artistId: e.target.value })}
+            onChange={(e) => patch({ artistId: e.target.value,
+              additionalArtistIds: (state.additionalArtistIds ?? []).filter((id) => id !== e.target.value),
+              featuredArtistIds: (state.featuredArtistIds ?? []).filter((id) => id !== e.target.value),
+            })}
           >
+            <option value="" disabled>Select primary artist</option>
             {artists.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -178,20 +208,15 @@ export function StepRelease({
             ))}
           </Field>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Additional primary artists</legend>
-            <p className="text-xs text-muted-foreground">Selected artists will be credited on this release and its tracks.</p>
-            {artists.filter((artist) => artist.id !== state.artistId).map((artist) => (
-              <label key={artist.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={state.additionalArtistIds?.includes(artist.id) ?? false}
-                  onChange={(event) => patch({ additionalArtistIds: event.target.checked
-                    ? [...(state.additionalArtistIds ?? []).filter((id) => id !== state.artistId && id !== artist.id), artist.id]
-                    : (state.additionalArtistIds ?? []).filter((id) => id !== artist.id) })} />
-                {artist.name}
-              </label>
-            ))}
-            {artists.length < 2 ? <p className="text-xs text-muted-foreground">Add another artist profile to your roster to select it here.</p> : null}
-          </fieldset>
+          <ArtistDropdown id="additionalArtists" label="Additional main artists"
+            artists={artists} selected={state.additionalArtistIds ?? []}
+            excluded={[state.artistId, ...(state.featuredArtistIds ?? [])]}
+            onChange={(ids) => patch({ additionalArtistIds: ids })} />
+          <ArtistDropdown id="featuredArtists" label="Featured artists"
+            artists={artists} selected={state.featuredArtistIds ?? []}
+            excluded={[state.artistId, ...(state.additionalArtistIds ?? [])]}
+            onChange={(ids) => patch({ featuredArtistIds: ids })} />
+          <p className="text-xs text-muted-foreground sm:col-span-2">Main and featured artists selected here are credited on this release and all its tracks.</p>
 
           <div className="grid gap-2">
             <p className="text-sm font-medium">Release type <span className="text-destructive" aria-hidden="true">*</span></p>
@@ -280,12 +305,13 @@ export function StepRelease({
             <Field
               id="recordingCountry"
               label="Recording country"
+              required
               as="select"
               value={state.recordingCountry ?? ""}
               onChange={(e) => patch({ recordingCountry: e.target.value })}
-              helper="Optional. Select where the audio was recorded. Applies to every track; leave blank to retain existing track countries."
+              helper="Required. Select where the audio was recorded. Applies to every track."
             >
-              <option value="">Not specified</option>
+              <option value="" disabled>Choose a recording country</option>
               {state.recordingCountry && !territories.items.some((country) => country.code === state.recordingCountry) ? (
                 <option value={state.recordingCountry}>{state.recordingCountry}</option>
               ) : null}

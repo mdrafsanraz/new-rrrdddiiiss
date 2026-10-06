@@ -46,12 +46,14 @@ export function StepReview({
   state,
   patch,
   artistName,
+  featuredArtistName,
   outlets,
   onJump,
 }: {
   state: WizardState;
   patch: (partial: Partial<WizardState>) => void;
   artistName: string;
+  featuredArtistName?: string;
   outlets: CatalogState<Outlet>;
   onJump: (step: number) => void;
 }) {
@@ -80,6 +82,7 @@ export function StepReview({
           <dl className="min-w-0 flex-1">
             <SummaryRow label="Title" value={state.title || "Untitled"} />
             <SummaryRow label="Artist" value={artistName} />
+            {featuredArtistName ? <SummaryRow label="Featured artists" value={featuredArtistName} /> : null}
             <SummaryRow
               label="Type"
               value={`${state.contentType}${state.mixVersion ? ` · ${state.mixVersion}` : ""}`}
