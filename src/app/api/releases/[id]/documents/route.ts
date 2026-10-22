@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { isLabelGridLive } from "@/lib/labelgrid/config";
-import { postReviewIssueNote } from "@/lib/labelgrid";
 import { logReleaseActivity } from "@/lib/releases/activity";
 import { canUserEditRelease, isFinalRejection } from "@/lib/releases/status";
 import { saveGenericUpload } from "@/lib/uploads/store";
@@ -23,9 +21,8 @@ const kindSchema = z.enum([
 /**
  * Upload supporting documents for Changes Required.
  *
- * LabelGrid OpenAPI has no review-issue file upload — only note replies
- * (POST /review-issues/{id}/notes). We store the file locally, associate it
- * with the release/issue/track, and optionally post a note referencing it.
+ * Documents and user notes stay in RDISTRO for admin review.
+ * This user-facing route must never send feedback to LabelGrid.
  */
 export async function POST(request: Request, { params }: Params) {
   const user = await getSessionUser();
@@ -59,7 +56,7 @@ export async function POST(request: Request, { params }: Params) {
     const kindRaw = String(form.get("kind") ?? "other");
     const issueId = String(form.get("issueId") ?? "") || null;
     const trackId = String(form.get("trackId") ?? "") || null;
-    const note = String(form.get("note") ?? "").trim();
+    const note = z.string().trim().max(2000).parse(String(form.get("note") ?? ""));
 
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "File is required" }, { status: 400 });
@@ -105,39 +102,16 @@ export async function POST(request: Request, { params }: Params) {
       },
     });
 
-    let notePosted = false;
-    if (issueId && isLabelGridLive()) {
-      const issue = await prisma.releaseReviewIssue.findFirst({
-        where: { id: issueId, releaseId: release.id },
-      });
-      if (issue?.providerIssueId && issue.source === "LABELGRID") {
-        const body =
-          note.length >= 10
-            ? note
-            : `Supporting document uploaded (${kind}): ${stored.filename}. Please review the attached evidence on the RDISTRO account.`;
-        try {
-          await postReviewIssueNote(issue.providerIssueId, body.slice(0, 2000));
-          notePosted = true;
-          await prisma.releaseDocument.update({
-            where: { id: doc.id },
-            data: { syncedNotePosted: true },
-          });
-        } catch (error) {
-          console.warn("[documents] note post failed", error);
-        }
-      }
-    }
-
     await logReleaseActivity({
       releaseId: release.id,
       type: "document_uploaded",
       title: "Document uploaded",
-      description: `${kind}: ${stored.filename}`,
+      description: `${kind}: ${stored.filename}${note ? `\n\nUser note: ${note}` : ""}`,
       actorUserId: user.id,
-      metadata: { documentId: doc.id, issueId, trackId, notePosted },
+      metadata: { documentId: doc.id, issueId, trackId, note, notePosted: false, awaitingAdminReview: true },
     });
 
-    return NextResponse.json({ document: doc, notePosted }, { status: 201 });
+    return NextResponse.json({ document: doc, notePosted: false }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

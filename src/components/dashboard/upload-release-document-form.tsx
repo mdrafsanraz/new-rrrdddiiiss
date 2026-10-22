@@ -56,7 +56,7 @@ export function UploadReleaseDocumentForm({
         setStatus("idle");
         return;
       }
-      setOk("Document uploaded.");
+      setOk("Document and note saved for RDISTRO review. Nothing was sent to the distributor.");
       setNote("");
       setStatus("idle");
       router.refresh();
@@ -85,11 +85,12 @@ export function UploadReleaseDocumentForm({
       <Field
         id={`doc-note-${issueId ?? "release"}`}
         label="Note (optional)"
+        maxLength={2000}
         as="textarea"
         value={note}
         disabled={status === "loading"}
         onChange={(e) => setNote(e.target.value)}
-        helper="Set the type and note before choosing a file — it uploads as soon as you pick one."
+        helper="For the RDISTRO team only; not sent to the distributor. Set the type and note before choosing a file — it uploads as soon as you pick one."
       />
       <div className="grid gap-2">
         <label
