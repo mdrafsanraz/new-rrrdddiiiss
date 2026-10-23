@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { invoiceSubscriptionId, subscriptionPeriodEnd } from "@/lib/stripe/webhook-data";
 import { prisma } from "@/lib/db";
 import { getStripe, planIdFromPriceId } from "@/lib/stripe";
 import { notifySubscriptionChanged } from "@/lib/email";
@@ -66,7 +67,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
       stripePriceId: priceId,
       stripeStatus,
       planId: entitled,
-      subscriptionCurrentPeriodEnd: sub.items.data.length ? new Date(Math.max(...sub.items.data.map((item) => item.current_period_end)) * 1000) : null,
+      subscriptionCurrentPeriodEnd: subscriptionPeriodEnd(sub),
       subscriptionCancelAtPeriodEnd: sub.cancel_at_period_end,
     },
   });
@@ -128,7 +129,9 @@ export async function POST(request: Request) {
       }
       case "customer.subscription.updated":
       case "customer.subscription.created": {
-        const sub = event.data.object as Stripe.Subscription;
+        // Retrieve current state using our SDK API version. Webhook snapshots
+        // can use an older schema and may arrive out of order.
+        const sub = await stripe.subscriptions.retrieve(event.data.object.id);
         const userId = await syncSubscription(sub);
         await recordEvent(event, userId, { status: sub.status });
         break;
@@ -172,11 +175,16 @@ export async function POST(request: Request) {
         break;
       }
       case "invoice.payment_failed":
+      case "invoice.paid":
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
         const user = customerId ? await prisma.user.findFirst({ where: { stripeCustomerId: customerId }, select: { id: true } }) : null;
-        await recordEvent(event, user?.id ?? null, { status: invoice.status, amountDue: invoice.amount_due, currency: invoice.currency });
+        const subscriptionId = invoiceSubscriptionId(invoice);
+        const syncedUserId = subscriptionId
+          ? await syncSubscription(await stripe.subscriptions.retrieve(subscriptionId))
+          : null;
+        await recordEvent(event, syncedUserId ?? user?.id ?? null, { status: invoice.status, amountDue: invoice.amount_due, currency: invoice.currency });
         break;
       }
       default:
