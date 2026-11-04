@@ -259,7 +259,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
           </dl>
         </div>
         <div className="flex flex-col gap-2">
-          <RefreshReleaseView />
+          <RefreshReleaseView releaseId={release.id} hasLabelgridId={Boolean(release.labelgridId)} canSync={hasPermission(admin.role, "releases.qc") || hasPermission(admin.role, "releases.moderate")} />
           {fromQueue ? <div className="flex gap-2">
             {previousQueueId ? <Link href={`/admin/releases/${previousQueueId}?queue=${queueStage}${queueStage === "preflight" ? "#qc" : ""}`} className="h-8 border border-border px-3 py-1.5 text-xs font-semibold hover:border-foreground">Previous</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Previous</span>}
             {nextQueueId ? <Link href={`/admin/releases/${nextQueueId}?queue=${queueStage}${queueStage === "preflight" ? "#qc" : ""}`} className="h-8 border border-foreground bg-foreground px-3 py-1.5 text-xs font-semibold text-background hover:opacity-85">Next release</Link> : <span className="h-8 border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50">Next release</span>}

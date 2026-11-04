@@ -44,8 +44,42 @@ export function ReleaseReviewWorkspace({ sections }: { sections: ReviewSection[]
   </div>;
 }
 
-export function RefreshReleaseView() {
+export function RefreshReleaseView({ releaseId, hasLabelgridId, canSync }: {
+  releaseId: string; hasLabelgridId: boolean; canSync: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  return <button type="button" disabled={pending} onClick={() => startTransition(() => router.refresh())} className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60">{pending ? "Refreshing…" : "Refresh release data"}</button>;
+  const [error, setError] = useState("");
+  function refresh() {
+    setError("");
+    startTransition(async () => {
+      try {
+        if (hasLabelgridId && canSync) {
+          const response = await fetch(`/api/admin/releases/${releaseId}/sync`, { method: "POST" });
+          const text = await response.text();
+          let data: { error?: string; result?: { ok: boolean; error?: string }; qc?: { ok: boolean; error?: string } };
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error(`Could not refresh release data (HTTP ${response.status}). Please try again.`);
+          }
+          if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid release refresh response.");
+          if (!response.ok) throw new Error(data.error || `Could not refresh release data (HTTP ${response.status}).`);
+          const warnings = [
+            data.result?.ok === false ? data.result.error ?? "Release status could not be refreshed." : null,
+            data.qc?.ok === false ? `Preflight QC: ${data.qc.error ?? "The latest report could not be fetched."}` : null,
+          ].filter(Boolean);
+          if (warnings.length) setError(warnings.join(" "));
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Could not refresh release data.");
+      } finally {
+        startTransition(() => router.refresh());
+      }
+    });
+  }
+  return <div className="flex flex-col items-end gap-2">
+    <button type="button" disabled={pending} onClick={refresh} className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60">{pending ? "Refreshing…" : "Refresh release data"}</button>
+    {error ? <p role="alert" className="max-w-sm text-right text-xs text-destructive">{error}</p> : null}
+  </div>;
 }

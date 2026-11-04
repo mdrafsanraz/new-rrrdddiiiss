@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
 import { reconcileLabelGridReleaseStatus } from "@/lib/labelgrid/status-sync";
+import { syncReleaseQualityReport } from "@/lib/labelgrid/quality-report";
+import { hasPermission } from "@/lib/auth/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
-/** Manual LabelGrid status reconciliation (admin). */
+/** Refresh release status and the current provider QC report (no analysis request). */
 export async function POST(_request: Request, { params }: Params) {
   const gate = await requireAdminApi();
   if ("error" in gate) {
@@ -24,16 +26,21 @@ export async function POST(_request: Request, { params }: Params) {
     );
   }
 
-  const result = await reconcileLabelGridReleaseStatus(id, {
-    deep: true,
-    forceLog: true,
-    actorUserId: gate.admin.id,
-  });
+  const [result, qc] = await Promise.all([
+    reconcileLabelGridReleaseStatus(id, {
+      deep: true,
+      forceLog: true,
+      actorUserId: gate.admin.id,
+    }),
+    hasPermission(gate.admin.role, "releases.qc")
+      ? syncReleaseQualityReport(id)
+      : Promise.resolve(null),
+  ]);
 
   const fresh = await prisma.release.findUnique({
     where: { id },
     include: { reviewIssues: true },
   });
 
-  return NextResponse.json({ result, release: fresh });
+  return NextResponse.json({ result, qc: qc ? { ok: qc.ok, error: qc.error } : null, release: fresh });
 }
