@@ -16,7 +16,7 @@
  * role name is ever offered unless this catalog actually returned it.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
@@ -41,6 +41,8 @@ import {
   type CatalogState,
   type ContributorRole,
 } from "./shared";
+
+import { getTrackCredits, updateTrackCredits } from "@/lib/releases/track-credits";
 
 export function splitTotal(rows: Array<{ share: number }>): number {
   return rows.reduce((sum, r) => sum + (Number.isFinite(r.share) ? r.share : 0), 0);
@@ -254,7 +256,54 @@ function SplitTotal({ rows }: { rows: Array<{ share: number }> }) {
   );
 }
 
-export function StepCredits({
+export function StepCredits(props: {
+  state: WizardState;
+  patch: (partial: Partial<WizardState>) => void;
+  setState: React.Dispatch<React.SetStateAction<WizardState>>;
+  contributorRoles: CatalogState<ContributorRole>;
+}) {
+  if (!props.state.tracks.length) return <Panel>Add a track before entering credits.</Panel>;
+  return <div className="space-y-10">
+    {props.state.tracks.map((track, index) => <TrackCreditEditor key={track.clientId} {...props} trackId={track.clientId} index={index} />)}
+    <ReleaseCopyright state={props.state} patch={props.patch} />
+  </div>;
+}
+
+function TrackCreditEditor({ state, patch, setState, contributorRoles, trackId, index }: {
+  trackId: string;
+  index: number;
+  state: WizardState;
+  patch: (partial: Partial<WizardState>) => void;
+  setState: React.Dispatch<React.SetStateAction<WizardState>>;
+  contributorRoles: CatalogState<ContributorRole>;
+}) {
+  const track = state.tracks.find((item) => item.clientId === trackId);
+  const activeId = trackId;
+  const setCreditState = useCallback<React.Dispatch<React.SetStateAction<WizardState>>>((action) => {
+    setState((prev) => updateTrackCredits(prev, activeId, (credits) => {
+      const current = prev.tracks.find((item) => item.clientId === activeId)!;
+      const editorState = { ...prev, ...credits, tracks: [current] };
+      const next = typeof action === "function" ? action(editorState) : action;
+      return { contributors: next.contributors, writerSplits: next.writerSplits, publisherSplits: next.publisherSplits, selfPublished: next.selfPublished };
+    }));
+  }, [setState, activeId]);
+  const patchCredits = useCallback((partial: Partial<WizardState>) => {
+    if ("contributors" in partial || "writerSplits" in partial || "publisherSplits" in partial || "selfPublished" in partial) {
+      setCreditState((prev) => ({ ...prev, ...partial }));
+    } else patch(partial);
+  }, [patch, setCreditState]);
+  if (!track) return null;
+  const credits = getTrackCredits(track, state);
+  return <section aria-labelledby={`credits-heading-${activeId}`} className="space-y-4">
+    <header className="flex items-start gap-3 border-b border-border pb-4">
+      <span className="grid size-8 shrink-0 place-items-center border border-border bg-muted text-xs font-semibold">{index + 1}</span>
+      <div className="min-w-0"><h2 id={`credits-heading-${activeId}`} className="break-words text-base font-semibold">{track.title || "Untitled track"}</h2><p className="mt-1 text-xs text-muted-foreground">Credits and splits apply to this track only.</p><p className="mt-2 text-[11px] text-muted-foreground">{credits.contributors.filter((item) => item.writerId).length} contributors · {credits.writerSplits.length} writers · {credits.selfPublished ? "Self-published" : `${credits.publisherSplits.length} publishers`}</p></div>
+    </header>
+    <CreditFields state={{ ...state, ...credits, tracks: [track] }} patch={patchCredits} setState={setCreditState} contributorRoles={contributorRoles} />
+  </section>;
+}
+
+function CreditFields({
   state,
   patch,
   setState,
@@ -336,7 +385,7 @@ export function StepCredits({
     <div className="space-y-5">
       {/* CONTRIBUTORS */}
       <Panel className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold">
               Contributors <span className="text-destructive">· Required</span>
@@ -350,7 +399,7 @@ export function StepCredits({
           <Button
             type="button"
             variant="outline"
-            className="h-9 px-3"
+            className="h-9 shrink-0 self-start px-3"
             onClick={() =>
               setState((prev) => ({
                 ...prev,
@@ -452,7 +501,7 @@ export function StepCredits({
             </div>
 
             <Field
-              id={`ai-${c.id}`}
+              id={`ai-${state.tracks[0].clientId}-${c.id}`}
               label="AI Contribution"
               as="select"
               required
@@ -497,7 +546,7 @@ export function StepCredits({
 
       {/* WRITERS & COMPOSITION SPLITS */}
       <Panel className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold">
               Writers &amp; Composition Splits{" "}
@@ -512,7 +561,7 @@ export function StepCredits({
           <Button
             type="button"
             variant="outline"
-            className="h-9 px-3"
+            className="h-9 shrink-0 self-start px-3"
             onClick={() =>
               setState((prev) => ({
                 ...prev,
@@ -566,7 +615,7 @@ export function StepCredits({
                 />
               </div>
               <Field
-                id={`share-${w.id}`}
+                id={`share-${state.tracks[0].clientId}-${w.id}`}
                 label="Share %"
                 type="number"
                 required
@@ -652,8 +701,7 @@ export function StepCredits({
         <div>
           <p className="text-sm font-semibold">Publisher</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Required according to your RDISTRO workflow — who administers the
-            publishing for this release.
+            Select who administers publishing for this track, or mark it self-published.
           </p>
         </div>
 
@@ -675,7 +723,7 @@ export function StepCredits({
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 px-3"
+                className="h-9 shrink-0 self-start px-3"
                 onClick={() =>
                   setState((prev) => ({
                     ...prev,
@@ -728,7 +776,7 @@ export function StepCredits({
                   />
                 </div>
                 <Field
-                  id={`pshare-${p.id}`}
+                  id={`pshare-${state.tracks[0].clientId}-${p.id}`}
                   label="Share %"
                   type="number"
                   required
@@ -769,11 +817,18 @@ export function StepCredits({
         ) : null}
       </Panel>
 
-      {/* COPYRIGHT */}
+
+    </div>
+  );
+}
+
+function ReleaseCopyright({ state, patch }: { state: WizardState; patch: (partial: Partial<WizardState>) => void }) {
+  return (
       <Panel className="space-y-5">
         <p className="text-sm font-semibold">
-          Copyright <span className="text-destructive">· Required</span>
+          Release copyright <span className="text-destructive">· Required</span>
         </p>
+        <p className="text-xs text-muted-foreground">Copyright ownership applies to the whole release.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             id="plineYear"
@@ -807,6 +862,5 @@ export function StepCredits({
           />
         </div>
       </Panel>
-    </div>
   );
 }

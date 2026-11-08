@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Field } from "@/components/site/field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 export function MetadataLanguage({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [languages, setLanguages] = useState<Array<{ value: string; label: string }>>([]);
@@ -20,12 +20,9 @@ export function MetadataLanguage({ value, onChange }: { value: string; onChange:
     return () => controller.abort();
   }, [attempt]);
   return <div>
-    <Field id="language" label="Metadata language" as="select" required value={value}
-      onChange={(event) => onChange(event.target.value)}
-      helper={error || "Select the language of the written title. Audio language is set separately for each track."}>
-      {!languages.some((language) => language.value === value) ? <option value={value} disabled>{value} — {languages.length ? "please select a supported language" : "loading languages…"}</option> : null}
-      {languages.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
-    </Field>
+    <SearchableSelect id="language" label="Metadata language" required value={value} options={languages}
+      disabled={!languages.length || Boolean(error)} placeholder="Choose a metadata language" searchPlaceholder="Search languages…"
+      onChange={onChange} helper={error || "Select the language of the written title. Audio language is set separately for each track."} />
     {error ? <button type="button" className="mt-2 text-sm underline" onClick={() => { setError(""); setAttempt((value) => value + 1); }}>Retry languages</button> : null}
   </div>;
 }

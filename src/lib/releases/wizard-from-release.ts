@@ -47,6 +47,14 @@ export function wizardStateFromRelease(
             ? liveTrackById.get(t.labelgridId)
             : undefined;
           return newTrack({
+            credits: {
+              contributors: (tMeta.contributors ?? liveTrack?.contributors?.map((c) => ({ writerId: c.id, ...personName(c.name), roles: c.roles })) ?? []).map((c) => ({
+                ...c, id: crypto.randomUUID(), writerId: c.writerId ?? null, aiContribution: "aiContribution" in c ? c.aiContribution ?? "none" : "none", defaultsApplied: true,
+              })),
+              writerSplits: (tMeta.writerSplits ?? (liveTrack?.writers?.length ? liveTrack.writers.map((w) => ({ writerId: w.id, ...personName(w.name), roles: w.roles, share: w.share ?? 0 })) : rMeta.writerSplits ?? [])).map((w) => ({ ...w, id: crypto.randomUUID(), writerId: w.writerId ?? null })),
+              publisherSplits: (tMeta.publisherSplits ?? (liveTrack?.publishers?.length ? liveTrack.publishers.map((p) => ({ publisherId: p.id, name: p.name, share: p.share ?? 0 })) : rMeta.publisherSplits ?? [])).map((p) => ({ ...p, id: crypto.randomUUID(), publisherId: p.publisherId ?? null })),
+              selfPublished: tMeta.selfPublished ?? (liveTrack?.publishers?.length ? false : rMeta.selfPublished ?? true),
+            },
             id: t.id,
             clientId: t.id,
             title: liveTrack?.title ?? t.title,

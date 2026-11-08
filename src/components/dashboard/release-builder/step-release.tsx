@@ -9,6 +9,7 @@
  * LabelGrid label (server-side LABELGRID_LABEL_ID) — shown, not editable.
  */
 
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Field } from "@/components/site/field";
 import { MetadataLanguage } from "./metadata-language";
 import type { WizardState } from "@/lib/releases/wizard-types";
@@ -190,24 +191,13 @@ export function StepRelease({
         />
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field
-            id="artist"
-            label="Primary artist"
-            as="select"
-            required
-            value={state.artistId}
-            onChange={(e) => patch({ artistId: e.target.value,
-              additionalArtistIds: (state.additionalArtistIds ?? []).filter((id) => id !== e.target.value),
-              featuredArtistIds: (state.featuredArtistIds ?? []).filter((id) => id !== e.target.value),
-            })}
-          >
-            <option value="" disabled>Select primary artist</option>
-            {artists.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </Field>
+          <SearchableSelect id="artist" label="Primary artist" required value={state.artistId}
+            options={artists.map((artist) => ({ value: artist.id, label: artist.name }))} disabled={!artists.length}
+            placeholder="Select primary artist" searchPlaceholder="Search your artists…"
+            onChange={(value) => patch({ artistId: value,
+              additionalArtistIds: (state.additionalArtistIds ?? []).filter((id) => id !== value),
+              featuredArtistIds: (state.featuredArtistIds ?? []).filter((id) => id !== value),
+            })} />
 
           <ArtistDropdown id="additionalArtists" label="Additional main artists"
             artists={artists} selected={state.additionalArtistIds ?? []}
@@ -241,34 +231,11 @@ export function StepRelease({
           />
 
           <div className="grid gap-2">
-            <label htmlFor="genre" className="text-sm font-medium">
-              Primary genre <span className="text-destructive">*</span>
-            </label>
+            <SearchableSelect id="genre" label="Primary genre" required value={state.primaryGenreId ? String(state.primaryGenreId) : ""}
+              fallbackLabel={state.primaryGenreName} options={genres.items.map((genre) => ({ value: String(genre.id), label: genre.name }))}
+              disabled={!genres.loaded || Boolean(genres.error) || !genres.items.length} placeholder="Choose a genre" searchPlaceholder="Search genres…"
+              onChange={(value) => { const genre = genres.items.find((item) => item.id === Number(value)); patch({ primaryGenreId: genre?.id ?? null, primaryGenreName: genre?.name ?? "" }); }} />
             <CatalogStatus catalog={genres} emptyLabel="No genres available." />
-            {genres.loaded && !genres.error && genres.items.length > 0 ? (
-              <select
-                id="genre"
-                value={state.primaryGenreId ?? ""}
-                className="h-10 border border-border bg-background px-3 text-sm outline-none focus:border-primary"
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  const genre = genres.items.find((g) => g.id === id);
-                  patch({
-                    primaryGenreId: genre?.id ?? null,
-                    primaryGenreName: genre?.name ?? "",
-                  });
-                }}
-              >
-                <option value="" disabled>
-                  Choose a genre
-                </option>
-                {genres.items.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
           </div>
         </div>
 
@@ -303,23 +270,10 @@ export function StepRelease({
         <div className="grid gap-5 sm:grid-cols-2">
           <MetadataLanguage value={state.preferredLocalization} onChange={(value) => patch({ preferredLocalization: value })} />
           <div className="grid gap-2">
-            <Field
-              id="recordingCountry"
-              label="Recording country"
-              required
-              as="select"
-              value={state.recordingCountry ?? ""}
-              onChange={(e) => patch({ recordingCountry: e.target.value })}
-              helper="Required. Select where the audio was recorded. Applies to every track."
-            >
-              <option value="" disabled>Choose a recording country</option>
-              {state.recordingCountry && !territories.items.some((country) => country.code === state.recordingCountry) ? (
-                <option value={state.recordingCountry}>{state.recordingCountry}</option>
-              ) : null}
-              {territories.items.map((country) => (
-                <option key={country.code} value={country.code}>{country.name}</option>
-              ))}
-            </Field>
+            <SearchableSelect id="recordingCountry" label="Recording country" required value={state.recordingCountry ?? ""}
+              options={territories.items.map((country) => ({ value: country.code, label: country.name, keywords: country.code }))}
+              disabled={!territories.loaded || Boolean(territories.error) || !territories.items.length} placeholder="Choose a recording country" searchPlaceholder="Search countries or country codes…"
+              onChange={(value) => patch({ recordingCountry: value })} helper="Required. Select where the audio was recorded. Applies to every track." />
             <CatalogStatus catalog={territories} emptyLabel="No countries available." />
           </div>
           <div className="grid gap-2">

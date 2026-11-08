@@ -24,7 +24,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parseJsonObject, type TrackMetadata } from "@/lib/releases/constants";
-import { contributorRoleLimitError, requiredWriterSplitsError, requiredCompositionRolesError } from "@/lib/releases/credit-validation";
+import { validateTrackCreditDraft } from "@/lib/releases/track-credit-validation";
 import {
   newContributor,
   newTrack,
@@ -48,7 +48,9 @@ import {
 import { StepRelease, type ArtistOption } from "./step-release";
 import { StepDistribution } from "./step-distribution";
 import { StepTracks } from "./step-tracks";
-import { splitTotal, StepCredits } from "./step-credits";
+import { getTrackCredits } from "@/lib/releases/track-credits";
+import type { TrackCreditsDraft } from "@/lib/releases/wizard-types";
+import { StepCredits } from "./step-credits";
 import { StepReview } from "./step-review";
 import { SubmissionProgress } from "./submission-progress";
 
@@ -104,17 +106,6 @@ function initialState(
     rightsConfirmed: false,
   };
 }
-
-/**
- * LabelGrid requires every track's contributors to cover these role
- * categories (its 422 lists whichever are still missing: "Each track needs
- * at least one contributor assigned to the role of …").
- */
-const REQUIRED_ROLE_CATEGORIES = [
-  "Performer",
-  "Composition & Lyrics",
-  "Production & Engineering",
-] as const;
 
 function validateStep(
   state: WizardState,
@@ -183,82 +174,10 @@ function validateStep(
     return null;
   }
   if (step === STEP_CREDITS) {
-    const writerError = requiredWriterSplitsError(state.writerSplits);
-    if (writerError) return writerError;
-    const compositionError = requiredCompositionRolesError(state.writerSplits, state.tracks);
-    if (compositionError) return compositionError;
-    const contributorIds = new Set<number>();
-    for (const contributor of state.contributors) {
-      const roleError = contributorRoleLimitError(contributor);
-      if (roleError) return roleError;
-      if (!contributor.writerId) continue;
-      if (contributorIds.has(contributor.writerId)) {
-        return `${contributor.firstName} ${contributor.lastName} is listed more than once in Contributors. Keep one row per person and add all their roles to that row.`;
-      }
-      contributorIds.add(contributor.writerId);
-    }
-    const ok = state.contributors.some(
-      (c) => c.writerId && c.roles.length > 0
-    );
-    if (!ok) {
-      return "Add at least one contributor with a writer and at least one role.";
-    }
-    for (const c of state.contributors) {
-      if (c.writerId && c.roles.length === 0) {
-        return `Pick at least one role for ${c.firstName} ${c.lastName}.`;
-      }
-    }
-    const hasInstrumentalTrack = state.tracks.some(
-      (track) => track.audioLanguage === "zxx"
-    );
-    const contributorHasLyricist = state.contributors.some((contributor) =>
-      contributor.roles.some((role) => role.trim().toLowerCase() === "lyricist")
-    );
-    const writerHasLyricist = state.writerSplits.some((writer) =>
-      writer.roles.some((role) => role.trim().toLowerCase() === "lyricist")
-    );
-    if (hasInstrumentalTrack && (contributorHasLyricist || writerHasLyricist)) {
-      return "An instrumental track cannot credit a Lyricist. Remove the Lyricist role, or select the track's vocal audio language.";
-    }
-    // Category coverage: LabelGrid rejects tracks whose contributors don't
-    // span all required categories. Only checkable once the live catalog
-    // (role → category) has loaded; the server still enforces it.
-    if (roleCategories && roleCategories.size > 0) {
-      const covered = new Set<string>();
-      for (const c of state.contributors) {
-        for (const role of c.roles) {
-          const category = roleCategories.get(role.trim().toLowerCase());
-          if (category) covered.add(category.trim().toLowerCase());
-        }
-      }
-      const missing = REQUIRED_ROLE_CATEGORIES.filter(
-        (cat) => !covered.has(cat.toLowerCase())
-      );
-      if (missing.length > 0) {
-        return `Contributors must cover ${missing.join(", ")} — add the matching role(s). The same contributor can hold multiple roles.`;
-      }
-    }
-    if (state.writerSplits.length > 0) {
-      for (const w of state.writerSplits) {
-        if (!w.writerId) return "Every publishing split needs a writer.";
-        if (w.roles.length === 0) {
-          return `Pick at least one role for the publishing split of ${w.firstName} ${w.lastName}.`;
-        }
-      }
-      if (Math.abs(splitTotal(state.writerSplits) - 100) > 0.001) {
-        return "Publishing splits must total exactly 100%.";
-      }
-    }
-    if (!state.selfPublished) {
-      if (state.publisherSplits.length === 0) {
-        return "Add a publisher, or mark the release self-published.";
-      }
-      for (const p of state.publisherSplits) {
-        if (!p.publisherId) return "Every publisher row needs a publisher.";
-      }
-      if (Math.abs(splitTotal(state.publisherSplits) - 100) > 0.001) {
-        return "Publisher shares must total exactly 100%.";
-      }
+    for (const track of state.tracks) {
+      const credits = getTrackCredits(track, state);
+      const error = validateTrackCreditDraft(credits, track, roleCategories);
+      if (error) return `“${track.title || "Untitled track"}”: ${error}`;
     }
     if (!state.clineName.trim() || !state.plineName.trim()) {
       return "Please fill in © and ℗ owner names.";
@@ -307,7 +226,7 @@ function releasePayloadFields(state: WizardState) {
   };
 }
 
-function buildPayload(state: WizardState) {
+function creditPayload(state: TrackCreditsDraft) {
   const validContributors = state.contributors
     .filter((c) => c.writerId && c.roles.length)
     .map((c) => ({
@@ -338,6 +257,11 @@ function buildPayload(state: WizardState) {
           share: p.share,
         }));
 
+  return { contributors: validContributors, writerSplits, publisherSplits, selfPublished: state.selfPublished };
+}
+
+function buildPayload(state: WizardState) {
+  const shared = creditPayload(state);
   const tracks = state.tracks.map((t, i) => ({
     id: t.id,
     clientId: t.clientId,
@@ -355,16 +279,13 @@ function buildPayload(state: WizardState) {
     lyrics: t.lyrics,
     licenseType: t.licenseType,
     originalTrackLink: t.originalTrackLink,
-    contributors: validContributors,
+    ...creditPayload(getTrackCredits(t, state)),
   }));
 
   return {
     ...releasePayloadFields(state),
     tracks,
-    contributors: validContributors,
-    writerSplits,
-    publisherSplits,
-    selfPublished: state.selfPublished,
+    ...shared,
   };
 }
 

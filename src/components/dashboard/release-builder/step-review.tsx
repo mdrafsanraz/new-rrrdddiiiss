@@ -8,6 +8,7 @@
  * created once the user clicks Submit (see <SubmissionProgress>).
  */
 
+import { getTrackCredits } from "@/lib/releases/track-credits";
 import { ImageSquare, MusicNotes } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -158,34 +159,15 @@ export function StepReview({
           onEdit={() => onJump(STEP_CREDITS)}
         />
         <dl>
-          <SummaryRow
-            label="Contributors"
-            value={state.contributors
-              .filter((c) => c.writerId)
-              .map((c) => `${c.firstName} ${c.lastName} (${c.roles.join(", ")})`)
-              .join("; ")}
-          />
-          {state.writerSplits.length > 0 ? (
-            <SummaryRow
-              label="Publishing"
-              value={state.writerSplits
-                .map(
-                  (w) =>
-                    `${w.firstName} ${w.lastName} ${w.share}% (${w.roles.join(", ")})`
-                )
-                .join("; ")}
-            />
-          ) : null}
-          <SummaryRow
-            label="Publisher"
-            value={
-              state.selfPublished
-                ? "Self-published"
-                : state.publisherSplits
-                    .map((p) => `${p.name} ${p.share}%`)
-                    .join("; ") || "None"
-            }
-          />
+          {state.tracks.map((track, index) => {
+            const credits = getTrackCredits(track, state);
+            return <div key={track.clientId} className="mb-4 border-b border-border pb-4 last:mb-0">
+              <h3 className="mb-2 text-sm font-semibold">{index + 1}. {track.title || "Untitled track"}</h3>
+              <SummaryRow label="Contributors" value={credits.contributors.filter((c) => c.writerId).map((c) => `${c.firstName} ${c.lastName} (${c.roles.join(", ")})`).join("; ")} />
+              <SummaryRow label="Composition splits" value={credits.writerSplits.map((w) => `${w.firstName} ${w.lastName} ${w.share}% (${w.roles.join(", ")})`).join("; ")} />
+              <SummaryRow label="Publisher" value={credits.selfPublished ? "Self-published" : credits.publisherSplits.map((p) => `${p.name} ${p.share}%`).join("; ") || "None"} />
+            </div>;
+          })}
           <SummaryRow
             label="©"
             value={`${state.clineYear} ${state.clineName}`}

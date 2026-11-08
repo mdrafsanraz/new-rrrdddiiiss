@@ -1,4 +1,5 @@
 import type { Artist, Release, Track } from "@prisma/client";
+import { trackPublishingMetadata } from "./track-credits";
 import { isRecordingCountry } from "./recording-country";
 import { contributorRoleLimitError, requiredWriterSplitsError, requiredCompositionRolesError } from "./credit-validation";
 import {
@@ -70,8 +71,6 @@ export function validateReleaseForSubmit(
     errors.push("A single must contain exactly one track.");
   }
 
-  let anyContributor = false;
-  let instrumentalHasLyricist = false;
   for (const t of release.tracks) {
     const tMeta = parseJsonObject<TrackMetadata>(t.metadataJson);
     if (!isRecordingCountry(tMeta.recordingCountry) || tMeta.recordingCountry !== rMeta.recordingCountry) {
@@ -108,69 +107,57 @@ export function validateReleaseForSubmit(
         `"${t.title}" needs a link to the original recording (required for cover licenses).`
       );
     }
-    if (tMeta.contributors?.some((c) => c.writerId && c.roles.length > 0)) {
-      anyContributor = true;
+    if (!tMeta.contributors?.some((c) => c.writerId && c.roles.length > 0)) {
+      errors.push(`"${t.title}": Add at least one contributor with a writer and at least one role.`);
     }
+    const publishing = trackPublishingMetadata(tMeta, rMeta);
+    let instrumentalHasLyricist = tMeta.audioLanguage === "zxx" && Boolean(tMeta.contributors?.some((c) => c.roles.some((r) => r.trim().toLowerCase() === "lyricist")));
+    const creditErrors: string[] = [];
+    const writerSplits = publishing.writerSplits ?? [];
+    const writerError = requiredWriterSplitsError(writerSplits);
+    if (writerError) creditErrors.push(writerError);
+    const compositionError = requiredCompositionRolesError(writerSplits, [tMeta]);
+    if (compositionError) creditErrors.push(compositionError);
     if (
       tMeta.audioLanguage === "zxx" &&
-      tMeta.contributors?.some((contributor) =>
-        contributor.roles.some(
-          (role) => role.trim().toLowerCase() === "lyricist"
-        )
+      writerSplits.some((writer) =>
+        writer.roles.some((role) => role.trim().toLowerCase() === "lyricist")
       )
     ) {
       instrumentalHasLyricist = true;
     }
-  }
-  if (!anyContributor) {
-    errors.push("Add at least one contributor with a writer and at least one role.");
-  }
+    if (instrumentalHasLyricist) {
+      creditErrors.push(
+        "An instrumental track cannot credit a Lyricist. Remove the Lyricist role, or select the track's vocal audio language."
+      );
+    }
+    if (writerSplits.length > 0) {
+      for (const w of writerSplits) {
+        if (!w.writerId) creditErrors.push("Every publishing split needs a writer.");
+        if (!w.roles?.length) {
+          creditErrors.push(`Pick at least one role for the publishing split of ${w.firstName} ${w.lastName}.`);
+        }
+      }
+      if (Math.abs(splitTotal(writerSplits) - 100) > 0.001) {
+        creditErrors.push("Publishing splits must total exactly 100%.");
+      }
+    }
 
-  const writerSplits = rMeta.writerSplits ?? [];
-  const writerError = requiredWriterSplitsError(writerSplits);
-  if (writerError) errors.push(writerError);
-  const compositionError = requiredCompositionRolesError(writerSplits, release.tracks.map((track) => parseJsonObject<TrackMetadata>(track.metadataJson)));
-  if (compositionError) errors.push(compositionError);
-  if (
-    release.tracks.some(
-      (track) =>
-        parseJsonObject<TrackMetadata>(track.metadataJson).audioLanguage === "zxx"
-    ) &&
-    writerSplits.some((writer) =>
-      writer.roles.some((role) => role.trim().toLowerCase() === "lyricist")
-    )
-  ) {
-    instrumentalHasLyricist = true;
-  }
-  if (instrumentalHasLyricist) {
-    errors.push(
-      "An instrumental track cannot credit a Lyricist. Remove the Lyricist role, or select the track's vocal audio language."
-    );
-  }
-  if (writerSplits.length > 0) {
-    for (const w of writerSplits) {
-      if (!w.writerId) errors.push("Every publishing split needs a writer.");
-      if (!w.roles?.length) {
-        errors.push(`Pick at least one role for the publishing split of ${w.firstName} ${w.lastName}.`);
+    if (!publishing.selfPublished) {
+      const publisherSplits = publishing.publisherSplits ?? [];
+      if (publisherSplits.length === 0) {
+        creditErrors.push("Add a publisher, or mark the release self-published.");
+      } else {
+        for (const p of publisherSplits) {
+          if (!p.publisherId) creditErrors.push("Every publisher row needs a publisher.");
+        }
+        if (Math.abs(splitTotal(publisherSplits) - 100) > 0.001) {
+          creditErrors.push("Publisher shares must total exactly 100%.");
+        }
       }
     }
-    if (Math.abs(splitTotal(writerSplits) - 100) > 0.001) {
-      errors.push("Publishing splits must total exactly 100%.");
-    }
-  }
 
-  if (!rMeta.selfPublished) {
-    const publisherSplits = rMeta.publisherSplits ?? [];
-    if (publisherSplits.length === 0) {
-      errors.push("Add a publisher, or mark the release self-published.");
-    } else {
-      for (const p of publisherSplits) {
-        if (!p.publisherId) errors.push("Every publisher row needs a publisher.");
-      }
-      if (Math.abs(splitTotal(publisherSplits) - 100) > 0.001) {
-        errors.push("Publisher shares must total exactly 100%.");
-      }
-    }
+    errors.push(...creditErrors.map((error) => `"${t.title}": ${error}`));
   }
 
   if (!rMeta.clineName?.trim() || !rMeta.plineName?.trim()) {

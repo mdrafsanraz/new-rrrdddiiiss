@@ -27,6 +27,20 @@ const contributorSchema = z.object({
   aiContribution: z.enum(["none", "partly", "all"]).optional(),
 });
 
+const writerSplitSchema = z.object({
+  writerId: z.number().int().positive().nullable().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  roles: z.array(z.string()).min(1),
+  share: z.number().min(0).max(100),
+});
+
+const publisherSplitSchema = z.object({
+  publisherId: z.number().int().positive().nullable().optional(),
+  name: z.string().min(1),
+  share: z.number().min(0).max(100),
+});
+
 const trackSchema = z.object({
   id: z.string().optional(),
   clientId: z.string().optional(),
@@ -55,20 +69,9 @@ const trackSchema = z.object({
   /** Required by LabelGrid for cover licenses only — link to the original recording. */
   originalTrackLink: z.string().trim().max(2048).nullable().optional(),
   contributors: z.array(contributorSchema).optional(),
-});
-
-const writerSplitSchema = z.object({
-  writerId: z.number().int().positive().nullable().optional(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  roles: z.array(z.string()).min(1),
-  share: z.number().min(0).max(100),
-});
-
-const publisherSplitSchema = z.object({
-  publisherId: z.number().int().positive().nullable().optional(),
-  name: z.string().min(1),
-  share: z.number().min(0).max(100),
+  writerSplits: z.array(writerSplitSchema).optional(),
+  publisherSplits: z.array(publisherSplitSchema).optional(),
+  selfPublished: z.boolean().optional(),
 });
 
 const schema = z.object({
@@ -297,6 +300,9 @@ export async function PATCH(request: Request, { params }: Params) {
           lyrics: t.lyrics || undefined,
           explicit: t.explicit,
           contributors,
+          writerSplits: t.writerSplits ?? prevTrackMeta.writerSplits,
+          publisherSplits: t.publisherSplits ?? prevTrackMeta.publisherSplits,
+          selfPublished: t.selfPublished ?? prevTrackMeta.selfPublished,
           featuredArtistNames: t.featuredArtistNames,
         };
         if (t.licenseType !== undefined) tMeta.licenseType = t.licenseType;
@@ -317,6 +323,9 @@ export async function PATCH(request: Request, { params }: Params) {
         // re-verify against LabelGrid rather than trusting a stale flag.
         if (
           t.contributors !== undefined ||
+          t.writerSplits !== undefined ||
+          t.publisherSplits !== undefined ||
+          t.selfPublished !== undefined ||
           fields.contributors !== undefined ||
           fields.writerSplits !== undefined ||
           fields.publisherSplits !== undefined

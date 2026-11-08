@@ -1,5 +1,6 @@
 import type { Artist, Release, Track } from "@prisma/client";
 import { artistSelectionError, buildArtistCredits } from "@/lib/releases/artist-credits";
+import { trackPublishingMetadata } from "@/lib/releases/track-credits";
 import { getSubmittedArtworkUrl } from "./artwork";
 import { validateAudioLanguage, validateMetadataLanguage } from "./languages";
 import { contributorRoleLimitError, requiredWriterSplitsError } from "@/lib/releases/credit-validation";
@@ -466,13 +467,17 @@ type TrackSyncContext = {
   /** Live LabelGrid genre id chosen in Step 1 (preferred over name lookup). */
   releasePrimaryGenreId: number | null;
   artist: Artist;
-  /** LabelGrid track `writers` array (publishing splits), same for all tracks. */
+  releaseMetadata: ReleaseMetadata;
+};
+
+type TrackSplitArrays = {
+  /** Each track resolves its own publishing metadata. */
   writers: Array<{
     writer_id: number;
     roles: Record<string, string>;
     percentage_share: number;
   }>;
-  /** LabelGrid track `publishers` array, same for all tracks. */
+  /** Resolved publisher payload shape. */
   publishers: Array<{
     id: number;
     regions: Record<string, string>;
@@ -487,8 +492,8 @@ type TrackSyncContext = {
  * validated client-side before the checkpoint sync.
  */
 async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
-  writers: TrackSyncContext["writers"];
-  publishers: TrackSyncContext["publishers"];
+  writers: TrackSplitArrays["writers"];
+  publishers: TrackSplitArrays["publishers"];
 }> {
   // Writer-split roles resolve against the LIVE GET /contributor-roles
   // catalog, then narrowed to WRITER_SPLIT_ROLE_ALLOWLIST (Composer,
@@ -503,7 +508,7 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
   const writerAllowlist = new Set(
     WRITER_SPLIT_ROLE_ALLOWLIST.map((r) => r.toLowerCase())
   );
-  const writers: TrackSyncContext["writers"] = [];
+  const writers: TrackSplitArrays["writers"] = [];
   for (const w of rMeta.writerSplits ?? []) {
     if (!w.writerId || !w.roles?.length) continue;
     const resolved = await Promise.all(
@@ -531,7 +536,7 @@ async function buildSplitArrays(rMeta: ReleaseMetadata): Promise<{
     });
   }
 
-  const publishers: TrackSyncContext["publishers"] = [];
+  const publishers: TrackSplitArrays["publishers"] = [];
   const writerError = requiredWriterSplitsError(writers);
   if (writerError) throw new Error(writerError);
   if (!rMeta.selfPublished) {
@@ -675,8 +680,9 @@ async function buildTrackBody(
   if (tMeta.lyrics?.trim()) {
     body.lyrics = [{ iso_code: ctx.locale, text: tMeta.lyrics.trim() }];
   }
-  if (ctx.writers.length > 0) body.writers = ctx.writers;
-  if (ctx.publishers.length > 0) body.publishers = ctx.publishers;
+  const splits = await buildSplitArrays(trackPublishingMetadata(tMeta, ctx.releaseMetadata));
+  body.writers = splits.writers;
+  body.publishers = splits.publishers;
 
   return body;
 }
@@ -1138,7 +1144,7 @@ export async function buildTrackSyncContext(
   const lgArtistId = await ensureLabelGridArtist(release.artist);
   const locale = await validateMetadataLanguage(rMeta.preferredLocalization || "en");
   const artisticRole = rMeta.artisticRole || "MainArtist";
-  const splits = await buildSplitArrays(rMeta);
+
 
   return {
     lgReleaseId: Number(release.labelgridId),
@@ -1151,8 +1157,7 @@ export async function buildTrackSyncContext(
     releasePrimaryGenre: release.primaryGenre,
     releasePrimaryGenreId: rMeta.primaryGenreId ?? null,
     artist: release.artist,
-    writers: splits.writers,
-    publishers: splits.publishers,
+    releaseMetadata: rMeta,
   };
 }
 
@@ -1201,7 +1206,7 @@ export async function syncReleaseToLabelGrid(input: {
       await ensureLabelGridReleaseMetadata(release);
 
     const rMeta = parseJsonObject<ReleaseMetadata>(release.metadataJson);
-    const splits = await buildSplitArrays(rMeta);
+
 
     const ctx: TrackSyncContext = {
       additionalLgArtistIds: await additionalPrimaryArtistIds(release, lgArtistId),
@@ -1214,8 +1219,7 @@ export async function syncReleaseToLabelGrid(input: {
       releasePrimaryGenre: release.primaryGenre,
       releasePrimaryGenreId: rMeta.primaryGenreId ?? null,
       artist: release.artist!,
-      writers: splits.writers,
-      publishers: splits.publishers,
+      releaseMetadata: rMeta,
     };
 
     // Every local track must exist on LabelGrid before any asset upload is

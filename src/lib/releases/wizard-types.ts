@@ -13,7 +13,15 @@ import type {
   WriterSplitDraft,
 } from "@/lib/releases/constants";
 
+export type TrackCreditsDraft = {
+  contributors: ContributorDraft[];
+  writerSplits: WriterSplitDraft[];
+  publisherSplits: PublisherSplitDraft[];
+  selfPublished: boolean;
+};
+
 export type WizardTrack = {
+  credits?: TrackCreditsDraft;
   clientId: string;
   id?: string;
   title: string;

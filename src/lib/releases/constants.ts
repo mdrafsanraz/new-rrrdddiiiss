@@ -219,6 +219,9 @@ export type ReleaseMetadata = {
 };
 
 export type TrackMetadata = {
+  writerSplits?: ReleaseMetadata["writerSplits"];
+  publisherSplits?: ReleaseMetadata["publisherSplits"];
+  selfPublished?: boolean;
   mixVersion?: string;
   compositionType?: string;
   audioAiUsage?: string;

@@ -11,8 +11,9 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { planLabel } from "@/lib/plans";
 import { formatShortDate, formatDistanceToNow } from "@/lib/admin/format";
-import { parseJsonObject, type ReleaseMetadata } from "@/lib/releases/constants";
+import { parseJsonObject, type ReleaseMetadata, type TrackMetadata } from "@/lib/releases/constants";
 import { ReleaseReviewWorkspace, RefreshReleaseView } from "@/components/admin/release-review-workspace";
+import { trackPublishingMetadata } from "@/lib/releases/track-credits";
 import { adminReviewPipeline } from "@/lib/releases/admin-review-pipeline";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
 import { parseReviewQueueStage, reviewQueueWhere } from "@/lib/admin/review-queue";
@@ -406,6 +407,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                   string,
                   unknown
                 >;
+                const submittedCredits = trackPublishingMetadata(parseJsonObject<TrackMetadata>(t.metadataJson), meta);
                 const liveTrack = liveRelease?.tracks.find(
                   (track) =>
                     t.labelgridId ? String(track.id) === t.labelgridId : track.trackNumber === t.trackNumber,
@@ -501,6 +503,8 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
                       <Row label="Composition AI" value={String(tm.compositionAiUsage ?? "Not supplied")} />
                       <Row label="Audio language" value={String(tm.audioLanguage ?? "Not supplied")} />
                       <Row label="Recording country" value={String(tm.recordingCountry ?? "Not supplied")} />
+                      <Row label="Submitted composition splits" value={(submittedCredits.writerSplits ?? []).map((w) => `${w.firstName} ${w.lastName} · ${w.roles.join(", ")} · ${w.share}%`).join("; ") || "Not supplied"} />
+                      <Row label="Submitted publishers" value={submittedCredits.selfPublished ? "Self-published" : (submittedCredits.publisherSplits ?? []).map((p) => `${p.name} · ${p.share}%`).join("; ") || "Not supplied"} />
                       <Row label="License type" value={String(tm.licenseType ?? "Not supplied")} />
                     </dl>
                     {liveTrack ? (

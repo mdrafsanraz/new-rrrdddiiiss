@@ -16,6 +16,7 @@ import { CaretDown, CircleNotch, Plus, Trash, WarningCircle } from "@phosphor-ic
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Tooltip } from "@/components/ui/tooltip";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Field } from "@/components/site/field";
 import {
   convertAudioTo16BitWav,
@@ -479,26 +480,10 @@ export function StepTracks({
                     helper="Already have one? Enter it. Otherwise it's assigned automatically."
                     placeholder="Optional"
                   />
-                  <Field
-                    id={`lang-${t.clientId}`}
-                    label="Audio language"
-                    as="select"
-                    required
-                    disabled={!languages.length}
-                    value={t.audioLanguage}
+                  <SearchableSelect id={`lang-${t.clientId}`} label="Audio language" required value={t.audioLanguage}
+                    options={languages} disabled={!languages.length} placeholder="Select audio language" searchPlaceholder="Search audio languages…"
                     helper={languages.length && t.audioLanguage && !languages.some((language) => language.value === t.audioLanguage) ? "This saved language is no longer supported. Select a supported language before submitting." : undefined}
-                    onChange={(e) =>
-                      updateTrack(t.clientId, { audioLanguage: e.target.value })
-                    }
-                  >
-                    <option value="">{languages.length ? "Select audio language" : "Loading supported languages…"}</option>
-                    {t.audioLanguage && !languages.some((language) => language.value === t.audioLanguage) ? <option value={t.audioLanguage}>{t.audioLanguage} — {languages.length ? "unsupported saved value" : "saved value"}</option> : null}
-                    {languages.map((l) => (
-                      <option key={l.value} value={l.value}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </Field>
+                    onChange={(value) => updateTrack(t.clientId, { audioLanguage: value })} />
                 </div>
 
                 <div className="space-y-3">
