@@ -29,7 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       const errors = validateReleaseForSubmit(release);
       if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
       const missingDocuments = await prisma.releaseReviewIssue.count({ where: { releaseId: id, resolved: false, requiresDocument: true, documents: { none: {} } } });
-      if (missingDocuments) return NextResponse.json({ error: "Upload the requested documents before resubmitting." }, { status: 409 });
+      if (missingDocuments) return NextResponse.json({ error: "Resolve the requested evidence through the user’s support ticket and mark the review issues resolved before resubmitting." }, { status: 409 });
       const result = await submitLabelGridDraftForReview({ release, artwork: null, audios: [] });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
       await prisma.release.update({ where: { id }, data: { status: "submitting_to_labelgrid", syncError: null, reviewedAt: new Date(), reviewedById: gate.admin.id } });

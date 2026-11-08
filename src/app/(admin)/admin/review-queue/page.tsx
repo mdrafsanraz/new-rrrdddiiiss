@@ -5,15 +5,15 @@ import { ProviderArtwork } from "@/components/admin/provider-artwork";
 import { formatDistanceToNow, formatShortDate } from "@/lib/admin/format";
 import { requirePermission } from "@/lib/auth/admin";
 import { prisma } from "@/lib/db";
-import { parseReviewQueueStage, reviewQueueStages } from "@/lib/admin/review-queue";
+import { parseReviewQueueStage, reviewQueueStages, reviewQueueWhere, type ReviewQueueStage } from "@/lib/admin/review-queue";
 
 export const metadata = { title: "Review Queue | Admin" };
 export default async function ReviewQueuePage({ searchParams }: { searchParams: Promise<{ stage?: string | string[] }> }) {
   const admin = await requirePermission("releases.read");
   const stage = parseReviewQueueStage((await searchParams).stage) ?? "pending";
   const selected = reviewQueueStages[stage];
-  const counts = await Promise.all(Object.values(reviewQueueStages).map((queue) => prisma.release.count({ where: { status: { in: [...queue.statuses] } } })));
-  const where = { status: { in: [...selected.statuses] } };
+  const counts = await Promise.all((Object.keys(reviewQueueStages) as ReviewQueueStage[]).map((key) => prisma.release.count({ where: reviewQueueWhere(key) })));
+  const where = reviewQueueWhere(stage);
   const releases = await prisma.release.findMany({
     where,
     orderBy: [{ priorityReview: "desc" }, { submittedAt: "asc" }, { createdAt: "asc" }],
@@ -51,7 +51,7 @@ export default async function ReviewQueuePage({ searchParams }: { searchParams: 
     <div className="flex items-center justify-between border-y border-border py-2 text-xs"><p><span className="font-semibold">{releases.length.toLocaleString()}</span> <span className="text-muted-foreground">releases awaiting {selected.label.toLowerCase()}</span></p><p className="text-muted-foreground">Priority, then oldest submitted</p></div>
     <section className="overflow-hidden border border-border bg-card"><div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-left text-sm">
       <thead className="border-b border-border bg-muted/40 text-[10px] uppercase tracking-[0.12em] text-muted-foreground"><tr><th className="px-4 py-3">Position</th><th className="px-3 py-3">Release</th><th className="px-3 py-3">User</th><th className="px-3 py-3">Waiting</th><th className="px-3 py-3">Review health</th><th className="px-3 py-3">Reviewer</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
-      <tbody className="divide-y divide-border">{!releases.length ? <tr><td colSpan={7} className="px-4 py-16 text-center"><p className="font-medium">No releases awaiting {selected.label.toLowerCase()}</p><p className="mt-1 text-xs text-muted-foreground">{stage === "pending" ? "Newly submitted releases will appear here." : "Releases awaiting Preflight QC confirmation appear here after internal approval."}</p></td></tr> : releases.map((release, index) => {
+      <tbody className="divide-y divide-border">{!releases.length ? <tr><td colSpan={7} className="px-4 py-16 text-center"><p className="font-medium">No releases awaiting {selected.label.toLowerCase()}</p><p className="mt-1 text-xs text-muted-foreground">{stage === "pending" ? "Newly submitted releases will appear here." : "Fetched Preflight QC reports appear here. Reports marked Not on hold are excluded."}</p></td></tr> : releases.map((release, index) => {
         const waitingSince = release.submittedAt ?? release.createdAt;
         const blocking = release.reviewIssues.filter((issue) => issue.isBlocking).length;
         const reviewHref = `/admin/releases/${release.id}?queue=${stage}${stage === "preflight" ? "#qc" : ""}`;

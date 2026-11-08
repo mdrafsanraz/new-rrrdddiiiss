@@ -56,7 +56,7 @@ export async function POST(_request: Request, { params }: Params) {
     where: { releaseId: id, resolved: false, requiresDocument: true, documents: { none: {} } },
   });
   if (missingDocuments > 0) {
-    return NextResponse.json({ error: "Upload the requested documents before resubmitting." }, { status: 400 });
+    return NextResponse.json({ error: "Create a support ticket to resolve the reviewer’s feedback before resubmitting.", supportUrl: `/dashboard/support?view=new&releaseId=${encodeURIComponent(id)}` }, { status: 400 });
   }
 
   const errors = validateReleaseForSubmit(release);

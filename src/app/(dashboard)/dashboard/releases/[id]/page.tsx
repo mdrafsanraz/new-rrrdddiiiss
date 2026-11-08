@@ -13,8 +13,6 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { SubmitReleaseButton } from "@/components/dashboard/submit-release-button";
-import { ResubmitReleaseButton } from "@/components/dashboard/resubmit-release-button";
-import { UploadReleaseDocumentForm } from "@/components/dashboard/upload-release-document-form";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
@@ -116,15 +114,11 @@ export default async function ReleaseDetailPage({ params }: Props) {
   const finalReject = isFinalRejection(release);
   const needsChanges = facing === "changes_required";
   const openIssues = (release.reviewIssues ?? []).filter((i) => !i.resolved);
-  const providerChangesRequired = needsChanges && (
-    normalizeReleaseStatus(release.status) === "labelgrid_changes_required" ||
-    openIssues.some((issue) => issue.source === "LABELGRID")
-  );
   // Editing remains available for corrections, including mixed document requests.
   const documentRequiredIssues = openIssues.filter(isDocumentRequest);
   const documentRequested = documentRequiredIssues.length > 0;
   const canSubmit = canUserSubmitRelease(release);
-  const { canEdit, canResubmit } = getReviewActions(release, openIssues);
+  const { canEdit } = getReviewActions(release, openIssues);
   const tracks = release.tracks ?? [];
   const documents = (release.documents ?? []).map((d) => ({
     id: d.id,
@@ -372,9 +366,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
       {needsChanges ? (
         <Callout tone="warning" icon={<WarningCircle size={20} weight="fill" aria-hidden />} title="Changes Required">
           <p className="opacity-85">
-            {providerChangesRequired
-              ? "Distribution review has requested changes. Review the issues below, then submit a support ticket with your release title, the issue details, and any requested documents. The RDISTRO team will help resolve the review feedback."
-              : "This is not a final rejection. Fix the items below, upload any requested documents, then resubmit."}
+            Please create a support ticket to resolve the reviewer’s feedback below. Include your reply and any requested files in the ticket so the RDISTRO team can help resolve the issues.
           </p>
           {release.reviewNotes ? (
             <p className="mt-3 whitespace-pre-wrap border-t border-amber-200 pt-3 dark:border-amber-500/20">
@@ -384,9 +376,7 @@ export default async function ReleaseDetailPage({ params }: Props) {
 
           <div className="mt-4 space-y-2.5">
             {openIssues.length === 0 ? (
-              <p>{providerChangesRequired
-                ? "If no issue details are available here, submit a support ticket so our team can check the review feedback."
-                : "Review notes are above. Update your release materials, then resubmit."}</p>
+              <p>{release.reviewNotes ? "Include the review notes above when contacting support." : "No detailed review issues are available here. Please create a support ticket so our team can check the feedback."}</p>
             ) : (
               openIssues.map((issue) => (
                 <article key={issue.id} className="border border-amber-200/80 bg-white/70 p-3.5 dark:border-amber-500/20 dark:bg-black/10">
@@ -395,34 +385,21 @@ export default async function ReleaseDetailPage({ params }: Props) {
                       {issue.category || "Review"}
                     </span>
                     {isDocumentRequest(issue) ? (
-                      <span className="text-[11px] font-medium">Document may be required</span>
+                      <span className="text-[11px] font-medium">Attach requested files to your support ticket</span>
                     ) : null}
                   </div>
                   <h3 className="mt-1 text-sm font-semibold">{issue.title || "Issue"}</h3>
-                  <p className="mt-1 leading-relaxed opacity-90">{issue.message}</p>
-                  {issue.requiresDocument || issue.requiresFeedback ? (
-                    <UploadReleaseDocumentForm
-                      releaseId={release.id}
-                      issueId={issue.id}
-                      trackId={issue.affectedTrackId}
-                    />
-                  ) : null}
+                  <p className="mt-1 whitespace-pre-wrap leading-relaxed opacity-90">{issue.message}</p>
                 </article>
               ))
             )}
           </div>
 
-          {providerChangesRequired ? (
-            <div className="mt-4">
-              <Link href="/dashboard/support?view=new" className={buttonVariants()}>
-                Submit support ticket
-              </Link>
-            </div>
-          ) : canResubmit ? (
-            <div className="mt-4">
-              <ResubmitReleaseButton releaseId={release.id} />
-            </div>
-          ) : null}
+          <div className="mt-4">
+            <Link href={`/dashboard/support?view=new&releaseId=${encodeURIComponent(release.id)}`} className={buttonVariants()}>
+              Create support ticket
+            </Link>
+          </div>
         </Callout>
       ) : null}
 

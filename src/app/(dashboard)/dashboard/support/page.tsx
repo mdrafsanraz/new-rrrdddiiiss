@@ -6,9 +6,10 @@ import { NewSupportTicketForm } from "@/components/dashboard/new-support-ticket-
 import { supportCategoryLabel, supportStatusLabel, supportTicketNumber } from "@/lib/support";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
+import { releaseSupportDraft } from "@/lib/releases/support-draft";
 
 export const metadata = { title: "Support" };
-type Props = { searchParams: Promise<{ view?: string | string[] }> };
+type Props = { searchParams: Promise<{ view?: string | string[]; releaseId?: string | string[] }> };
 
 function statusTone(status: string) {
   if (status === "closed") return "border-zinc-300 bg-zinc-100 text-zinc-600";
@@ -22,6 +23,11 @@ export default async function SupportPage({ searchParams }: Props) {
   const query = await searchParams;
   const requestedView = Array.isArray(query.view) ? query.view[0] : query.view;
   const creating = requestedView === "new";
+  const releaseId = typeof query.releaseId === "string" ? query.releaseId : undefined;
+  const release = creating && releaseId ? await prisma.release.findFirst({
+    where: { id: releaseId, userId: user.id },
+    select: { id: true, title: true, reviewNotes: true, reviewIssues: { where: { resolved: false }, orderBy: { createdAt: "desc" }, select: { title: true, message: true, resolved: true } } },
+  }) : null;
   const tickets = await prisma.supportTicket.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
@@ -42,7 +48,7 @@ export default async function SupportPage({ searchParams }: Props) {
         </div>
       </header>
 
-      {creating ? <NewSupportTicketForm /> : <>
+      {creating ? <NewSupportTicketForm key={release?.id ?? "new"} {...(release ? releaseSupportDraft(release) : {})} /> : <>
         <section className="grid overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-3">
           <div className="flex items-center gap-4 p-5 sm:p-6"><div className="flex size-10 items-center justify-center rounded-xl bg-sky-50 text-sky-700"><ClockCountdown size={20} weight="duotone" /></div><div><p className="text-2xl font-semibold tabular-nums">{activeCount}</p><p className="text-xs text-muted-foreground">Active requests</p></div></div>
           <div className="flex items-center gap-4 border-y border-border p-5 sm:border-x sm:border-y-0 sm:p-6"><div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><ChatCircleDots size={20} weight="duotone" /></div><div><p className="text-2xl font-semibold tabular-nums">{answeredCount}</p><p className="text-xs text-muted-foreground">Awaiting your reply</p></div></div>

@@ -155,7 +155,7 @@ const USER_FACING_DESCRIPTIONS: Record<UserFacingStatusKey, string> = {
   in_review:
     "Your release is being reviewed. You will be notified if anything needs attention.",
   changes_required:
-    "Review found items that need attention. Fix the issues, then resubmit.",
+    "Review found items that need attention. Read the reviewer’s feedback and create a support ticket to resolve the issues.",
   rejected:
     "This release was rejected and cannot be edited or resubmitted. Contact support if you believe this decision needs review.",
   approved: "Your release was approved and is preparing for delivery.",

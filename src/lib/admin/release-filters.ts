@@ -1,4 +1,5 @@
 import type { Prisma, ReleaseStatus } from "@prisma/client";
+import { reviewQueueWhere } from "./review-queue";
 
 export type AdminReleaseFilter =
   | "all"
@@ -124,7 +125,7 @@ export function adminReleaseWhere(
       filterClause = { priorityReview: true, status: { in: PENDING } };
       break;
     case "preflight":
-      filterClause = { status: "labelgrid_preflight" };
+      filterClause = reviewQueueWhere("preflight");
       break;
     case "qc_flagged":
       filterClause = {

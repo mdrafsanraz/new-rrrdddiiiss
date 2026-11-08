@@ -15,7 +15,7 @@ import { parseJsonObject, type ReleaseMetadata } from "@/lib/releases/constants"
 import { ReleaseReviewWorkspace, RefreshReleaseView } from "@/components/admin/release-review-workspace";
 import { adminReviewPipeline } from "@/lib/releases/admin-review-pipeline";
 import { parseCachedQcReport } from "@/lib/labelgrid/quality-report";
-import { parseReviewQueueStage, reviewQueueStages } from "@/lib/admin/review-queue";
+import { parseReviewQueueStage, reviewQueueWhere } from "@/lib/admin/review-queue";
 import { canAdminDecide, canAdminDeleteRelease, canAdminSendBackToDraft, getAdminStatusLabel } from "@/lib/releases/status";
 import { hasPermission } from "@/lib/auth/permissions";
 import { isLabelGridLive } from "@/lib/labelgrid/config";
@@ -107,7 +107,7 @@ export default async function AdminReleaseDetailPage({ params, searchParams }: P
   let nextQueueId: string | undefined;
   if (queueStage) {
     const queue = await prisma.release.findMany({
-      where: { status: { in: [...reviewQueueStages[queueStage].statuses] } },
+      where: reviewQueueWhere(queueStage),
       orderBy: [{ priorityReview: "desc" }, { submittedAt: "asc" }, { createdAt: "asc" }],
       select: { id: true },
     });
