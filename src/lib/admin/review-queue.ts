@@ -9,25 +9,22 @@ export const reviewQueueStages = {
   },
   preflight: {
     label: "Preflight QC confirmation",
-    description: "All recorded Preflight QC states, excluding reports marked Not on hold. Review pending, stale and completed reports before confirming into LabelGrid review.",
-    statuses: ["labelgrid_preflight"],
+    description: "Releases in LabelGrid review with recorded Preflight QC reports. Reports marked Not on hold are excluded.",
+    statuses: ["labelgrid_in_review"],
     action: "Review Preflight QC",
   },
 } as const;
 
 export type ReviewQueueStage = keyof typeof reviewQueueStages;
 
-/** QC cache determines this queue, independently of the release lifecycle status. */
+/** Preflight reports are scoped to releases currently in LabelGrid review. */
 export function reviewQueueWhere(stage: ReviewQueueStage): Prisma.ReleaseWhereInput {
   if (stage === "pending") return { status: { in: [...reviewQueueStages.pending.statuses] } };
   return {
+    status: { in: [...reviewQueueStages.preflight.statuses] },
     labelgridId: { not: null },
     qcEnabled: true,
-    OR: [
-      { qcStatus: { notIn: ["not_held", "not_enabled"] } },
-      // Newly entered holds can precede the first cached report.
-      { status: "labelgrid_preflight", qcStatus: null },
-    ],
+    qcStatus: { notIn: ["not_held", "not_enabled"] },
   };
 }
 

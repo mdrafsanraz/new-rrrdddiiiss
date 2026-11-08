@@ -6,15 +6,12 @@ test("internal queue still selects submissions awaiting RDISTRO approval", () =>
   assert.deepEqual(reviewQueueWhere("pending"), { status: { in: ["pending_internal_review", "submitted", "in_review"] } });
 });
 
-test("Preflight includes recorded QC states regardless of lifecycle and excludes Not on hold", () => {
+test("Preflight includes only LabelGrid in-review releases and excludes Not on hold", () => {
   const where = reviewQueueWhere("preflight");
-  assert.equal(where.status, undefined);
   assert.deepEqual(where, {
+    status: { in: ["labelgrid_in_review"] },
     labelgridId: { not: null }, qcEnabled: true,
-    OR: [
-      { qcStatus: { notIn: ["not_held", "not_enabled"] } },
-      { status: "labelgrid_preflight", qcStatus: null },
-    ],
+    qcStatus: { notIn: ["not_held", "not_enabled"] },
   });
 });
 
