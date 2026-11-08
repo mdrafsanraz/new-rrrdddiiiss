@@ -4,11 +4,13 @@ export type AdminReleaseFilter =
   | "all"
   | "draft"
   | "pending_review"
+  | "preflight"
   | "priority"
   | "qc_flagged"
   | "documents_required"
   | "changes_required"
   | "labelgrid_review"
+  | "labelgrid_in_review"
   | "approved"
   | "delivering"
   | "live"
@@ -27,11 +29,13 @@ export const ADMIN_RELEASE_FILTERS: {
   { value: "all", label: "All Releases" },
   { value: "draft", label: "Draft" },
   { value: "pending_review", label: "In RDISTRO Review" },
+  { value: "preflight", label: "Preflight QC Confirmation" },
   { value: "priority", label: "Priority" },
   { value: "qc_flagged", label: "QC Flagged" },
   { value: "documents_required", label: "Documents Required" },
   { value: "changes_required", label: "Changes Required" },
-  { value: "labelgrid_review", label: "LabelGrid Review" },
+  { value: "labelgrid_review", label: "LabelGrid Pipeline" },
+  { value: "labelgrid_in_review", label: "In LabelGrid Review" },
   { value: "action_required", label: "Action Required" },
   { value: "approved", label: "Approved" },
   { value: "delivering", label: "Delivering" },
@@ -119,6 +123,9 @@ export function adminReleaseWhere(
     case "priority":
       filterClause = { priorityReview: true, status: { in: PENDING } };
       break;
+    case "preflight":
+      filterClause = { status: "labelgrid_preflight" };
+      break;
     case "qc_flagged":
       filterClause = {
         OR: [
@@ -150,6 +157,9 @@ export function adminReleaseWhere(
       break;
     case "labelgrid_review":
       filterClause = { status: { in: LG_REVIEW } };
+      break;
+    case "labelgrid_in_review":
+      filterClause = { status: "labelgrid_in_review" };
       break;
     case "approved":
       filterClause = { status: "labelgrid_approved" };

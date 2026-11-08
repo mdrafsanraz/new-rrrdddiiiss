@@ -98,9 +98,14 @@ export function updateArtist(
   });
 }
 
-export function listReleases(page = 1, perPage = 50) {
+export function listReleases(page = 1, perPage = 50, filters: { upc?: string; catalogNumber?: string; liveOnly?: boolean } = {}) {
   return labelgridFetch<Paginated<ReleaseData>>("/releases", {
-    searchParams: { page, per_page: perPage },
+    searchParams: {
+      page, per_page: perPage,
+      ...(filters.upc ? { "filter[barcode_number]": filters.upc } : {}),
+      ...(filters.catalogNumber ? { "filter[cat]": filters.catalogNumber } : {}),
+      ...(filters.liveOnly ? { "filter[is_live]": 1 } : {}),
+    },
   });
 }
 
