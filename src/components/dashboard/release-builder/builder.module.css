@@ -1,0 +1,34 @@
+.root {
+  --builder-control-height: 2.625rem;
+}
+
+.root :where(input[type="text"], input[type="number"], input[type="date"], input[type="url"], select, [data-builder-control]) {
+  height: var(--builder-control-height);
+  min-height: var(--builder-control-height);
+  padding-block: 0.55rem;
+  box-shadow: none;
+}
+
+.root :global(.grid) {
+  align-content: start;
+}
+
+.root textarea {
+  padding: 0.75rem;
+  box-shadow: none;
+}
+
+.root :where([data-builder-panel]) {
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+.root :where([data-builder-panel]) > :where(h3:first-child) {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 639px) {
+  .root {
+    --builder-control-height: 2.75rem;
+  }
+}

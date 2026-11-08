@@ -76,8 +76,8 @@ export default async function EditReleasePage({ params }: Props) {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div className="space-y-4">
+    <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-3">
         <Link
           href={`/dashboard/releases/${id}`}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -85,15 +85,15 @@ export default async function EditReleasePage({ params }: Props) {
           <ArrowLeft size={14} weight="bold" aria-hidden />
           Back to release
         </Link>
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
           <div className="max-w-2xl">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Catalog
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-balance">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance">
               Edit release
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               Update metadata and re-upload artwork or audio. Changes stay in
               this editor until you click Submit Release.
             </p>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTrackCredits, trackPublishingMetadata, updateTrackCredits } from "./track-credits";
+import { copyCreditsFromFirstTrack, getTrackCredits, trackPublishingMetadata, updateTrackCredits } from "./track-credits";
 import { validateTrackCreditDraft } from "./track-credit-validation";
 import { validateReleaseForSubmit } from "./submit-validate";
 import { wizardStateFromRelease } from "./wizard-from-release";
@@ -25,6 +25,43 @@ function fixture() {
     tracks: [first, second].map((item, index) => ({ id: `track-${index}`, title: `Track ${index + 1}`, trackNumber: index + 1, metadataJson: JSON.stringify({ ...item, audioLanguage: index ? "zxx" : "en", recordingCountry: "BD" }) })),
   } as unknown as Parameters<typeof validateReleaseForSubmit>[0];
 }
+
+test("copying from track one replaces only target credits and deep-copies editable rows", () => {
+  const source = credits(1);
+  source.selfPublished = false;
+  source.publisherSplits = [{ id: "publisher", publisherId: 8, name: "Test Publisher", share: 100 }];
+  const state = { ...credits(9), tracks: [
+    newTrack({ clientId: "one", credits: source }),
+    newTrack({ clientId: "two", credits: credits(2), audioLanguage: "zxx", lyrics: "Keep this text" }),
+    newTrack({ clientId: "three", credits: credits(3) }),
+  ] } as WizardState;
+  const next = copyCreditsFromFirstTrack(state, "two");
+  const copied = next.tracks[1].credits!;
+  assert.equal(copied.writerSplits[0].writerId, 1);
+  assert.equal(copied.writerSplits[0].share, 100);
+  assert.equal(copied.publisherSplits[0].publisherId, 8);
+  assert.equal(copied.selfPublished, false);
+  assert.notEqual(copied.contributors[0].id, source.contributors[0].id);
+  assert.notEqual(copied.writerSplits[0].id, source.writerSplits[0].id);
+  assert.notEqual(copied.publisherSplits[0].id, source.publisherSplits[0].id);
+  assert.notEqual(copied.contributors[0].roles, source.contributors[0].roles);
+  copied.writerSplits[0].roles.push("Test role");
+  assert.ok(!source.writerSplits[0].roles.includes("Test role"));
+  assert.equal(next.tracks[0], state.tracks[0]);
+  assert.equal(next.tracks[2], state.tracks[2]);
+  assert.equal(next.tracks[1].audioLanguage, "zxx");
+  assert.equal(next.tracks[1].lyrics, "Keep this text");
+  assert.equal(state.tracks[1].credits?.writerSplits[0].writerId, 2);
+  assert.equal(copyCreditsFromFirstTrack(state, "one"), state);
+  assert.equal(copyCreditsFromFirstTrack(state, "missing"), state);
+});
+
+test("copy also works for older tracks using release-level credit defaults", () => {
+  const state = { ...credits(9), tracks: [newTrack({ clientId: "one" }), newTrack({ clientId: "two" })] } as WizardState;
+  const next = copyCreditsFromFirstTrack(state, "two");
+  assert.equal(next.tracks[1].credits?.writerSplits[0].writerId, 9);
+  assert.notEqual(next.tracks[1].credits?.writerSplits, state.writerSplits);
+});
 
 test("editing one track isolates its credits and preserves legacy defaults and other tracks", () => {
   const shared = credits(1);

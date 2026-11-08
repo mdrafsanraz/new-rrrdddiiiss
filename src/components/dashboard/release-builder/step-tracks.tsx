@@ -307,8 +307,9 @@ export function StepTracks({
   }, [languageAttempt]);
   return (
     <Panel className="space-y-4">
+      <h3 className="text-sm font-semibold">Tracklist and master audio</h3>
       {languageError ? <div role="alert" className="text-sm text-destructive">{languageError} <button type="button" className="underline" onClick={() => { setLanguageError(null); setLanguageAttempt((attempt) => attempt + 1); }}>Retry</button></div> : null}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {state.tracks.map((t, i) => {
           const isEditing = editingTrackId === t.clientId;
           const showLyrics = lyricsExpanded[t.clientId] ?? Boolean(t.lyrics.trim());
@@ -316,7 +317,7 @@ export function StepTracks({
           <div
             key={t.clientId}
             className={cn(
-              "border transition-colors duration-200 ease-[var(--ease-rdistro)]",
+              "overflow-hidden border bg-background transition-colors duration-200 ease-[var(--ease-rdistro)]",
               isEditing ? "border-primary/40" : "border-border"
             )}
           >
@@ -383,7 +384,7 @@ export function StepTracks({
 
             {isEditing ? (
               <TrackEditor key={t.clientId} id={`track-editor-${t.clientId}`} labelledBy={`track-toggle-${t.clientId}`}>
-              <div className="space-y-5 border-t border-border bg-muted/30 p-4 sm:p-5">
+              <div className="space-y-4 border-t border-border bg-muted/20 p-4 sm:p-5">
                 <TrackAudioDropzone
                   track={t}
                   onFile={(file) => {
@@ -414,7 +415,7 @@ export function StepTracks({
                   }}
                 />
 
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <Field
                       id={`title-${t.clientId}`}
@@ -441,7 +442,7 @@ export function StepTracks({
                   </div>
                 </div>
 
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     id={`featured-${t.clientId}`}
                     label="Featured artists"
@@ -468,7 +469,7 @@ export function StepTracks({
                   />
                 </div>
 
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     id={`isrc-${t.clientId}`}
                     label="ISRC"
@@ -535,7 +536,7 @@ export function StepTracks({
                   />
                 </div>
 
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     id={`audio-ai-${t.clientId}`}
                     label="Audio AI usage"

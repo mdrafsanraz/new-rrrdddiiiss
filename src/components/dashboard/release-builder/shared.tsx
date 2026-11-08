@@ -162,7 +162,7 @@ export function Panel({
   children: ReactNode;
   className?: string;
 }) {
-  return <Card className={cn("p-5 sm:p-6", className)}>{children}</Card>;
+  return <Card data-builder-panel="" className={cn("min-w-0 p-4 sm:p-5", className)}>{children}</Card>;
 }
 
 /** Animated show/hide for an in-flow block (e.g. a collapsible section). */
@@ -295,9 +295,9 @@ export function SummaryRow({
   value: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-6 border-b border-border/60 py-2 text-sm last:border-b-0">
-      <dt className="shrink-0 font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-right">{value || "—"}</dd>
+    <div className="grid gap-1 border-b border-border/60 py-2.5 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-4">
+      <dt className="font-medium text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words sm:text-right">{value || "—"}</dd>
     </div>
   );
 }
@@ -391,20 +391,20 @@ export function MediaDropzone({
           dragging
             ? "border-primary bg-primary/5"
             : "border-border bg-muted/40 hover:border-primary/50 hover:bg-muted/70",
-          kind === "image" ? "min-h-52" : "min-h-32"
+          kind === "image" ? "min-h-48" : "min-h-28"
         )}
       >
         {kind === "image" && playUrl ? (
-          <div className="grid gap-0 sm:grid-cols-[minmax(0,200px)_1fr]">
+          <div className="grid gap-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={playUrl}
               alt="Cover preview"
               className="aspect-square w-full bg-muted object-cover"
             />
-            <div className="flex flex-col justify-between gap-4 p-5">
+            <div className="flex min-w-0 flex-col justify-between gap-3 border-t border-border p-3">
               <div>
-                <p className="text-sm font-semibold text-foreground">
+                <p className="break-words text-xs font-semibold text-foreground">
                   {file?.name ?? "Current artwork"}
                 </p>
                 {file ? (
@@ -484,7 +484,7 @@ export function MediaDropzone({
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="flex w-full cursor-pointer flex-col items-center justify-center gap-3 px-6 py-12 text-center"
+            className="flex min-h-48 w-full cursor-pointer flex-col items-center justify-center gap-3 px-4 py-6 text-center"
           >
             <span className="flex size-12 items-center justify-center border border-border bg-background text-primary">
               <UploadSimple size={22} weight="regular" aria-hidden />
@@ -535,8 +535,8 @@ export function StepRail({
     : { type: "spring" as const, stiffness: 380, damping: 32 };
 
   return (
-    <aside className="lg:sticky lg:top-6 lg:self-start">
-      <div className="border border-border bg-card p-5">
+    <aside aria-label="Release builder steps" className="min-w-0 lg:sticky lg:top-6 lg:self-start">
+      <div className="border border-border bg-card p-3.5">
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground">
@@ -558,7 +558,7 @@ export function StepRail({
             transition={spring}
           />
         </div>
-        <ol className="mt-5 space-y-0.5">
+        <ol className="mt-4 grid grid-cols-5 gap-1 lg:grid-cols-1">
           {WIZARD_STEPS.map((s, i) => {
             const isDone = i < step;
             const isCurrent = i === step;
@@ -577,7 +577,7 @@ export function StepRail({
                   onClick={() => onJump(i)}
                   aria-current={isCurrent ? "step" : undefined}
                   className={cn(
-                    "relative flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors duration-150",
+                    "relative flex w-full min-w-0 cursor-pointer flex-col items-center gap-1.5 px-1 py-2 text-center text-[10px] leading-tight transition-colors duration-150 lg:flex-row lg:gap-2.5 lg:px-2 lg:py-3 lg:text-left lg:text-xs",
                     isCurrent
                       ? "font-semibold text-foreground"
                       : isDone
@@ -619,6 +619,7 @@ export function StepRail({
             );
           })}
         </ol>
+        <p className="mt-4 hidden border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground lg:block">Complete each step to continue. Review everything before submission.</p>
       </div>
     </aside>
   );

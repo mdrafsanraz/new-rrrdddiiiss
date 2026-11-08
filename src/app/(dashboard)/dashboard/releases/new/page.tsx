@@ -24,8 +24,8 @@ export default async function NewReleasePage({ searchParams }: Props) {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div className="space-y-4">
+    <div className="mx-auto max-w-7xl space-y-5">
+      <div className="space-y-3">
         <Link
           href="/dashboard/releases"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -33,16 +33,16 @@ export default async function NewReleasePage({ searchParams }: Props) {
           <ArrowLeft size={14} weight="bold" aria-hidden />
           Releases
         </Link>
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
           <div className="max-w-2xl">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Catalog
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-balance">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance">
               Create release
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Five steps — details, tracks, credits, distribution, then review.
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Five steps: release details, distribution, tracks, credits, then review.
               We&apos;ll check everything before it goes live
               {usage.releasesLimit === null
                 ? ""

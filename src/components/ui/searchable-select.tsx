@@ -23,7 +23,7 @@ export function SearchableSelect({ id, label, value, options, onChange, placehol
       filter={(item, query) => `${item.label} ${item.keywords ?? item.value}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())}
     >
       <Combobox.Label className="text-sm font-medium">{label}{required ? <span className="ml-1 text-destructive" aria-hidden>*</span> : null}</Combobox.Label>
-      <Combobox.Trigger id={id} aria-describedby={helper ? `${id}-helper` : undefined} className="flex min-h-11 w-full min-w-0 items-center justify-between gap-3 border border-border bg-background px-3.5 py-3 text-left text-sm shadow-sm outline-none hover:border-primary/40 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:text-muted-foreground data-placeholder:text-muted-foreground">
+      <Combobox.Trigger id={id} data-builder-control="" aria-describedby={helper ? `${id}-helper` : undefined} className="flex min-h-11 w-full min-w-0 items-center justify-between gap-3 border border-border bg-background px-3.5 py-3 text-left text-sm shadow-sm outline-none hover:border-primary/40 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:bg-muted/60 disabled:text-muted-foreground data-placeholder:text-muted-foreground">
         <span className="min-w-0 truncate"><Combobox.Value placeholder={placeholder} /></span>
         <CaretDown size={15} aria-hidden className="shrink-0 text-muted-foreground" />
       </Combobox.Trigger>

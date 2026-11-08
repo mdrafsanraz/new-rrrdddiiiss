@@ -34,7 +34,7 @@ function SectionHeader({
   onEdit: () => void;
 }) {
   return (
-    <div className="mb-1 flex items-center justify-between gap-3">
+    <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
       <p className="text-sm font-semibold">{title}</p>
       <Button type="button" variant="ghost" className="h-8 px-3" onClick={onEdit}>
         Edit
@@ -59,8 +59,8 @@ export function StepReview({
   onJump: (step: number) => void;
 }) {
   return (
-    <div className="space-y-5">
-      <Panel>
+    <div className="grid items-start gap-4 xl:grid-cols-2">
+      <Panel className="xl:col-span-2">
         <SectionHeader
           title="Artwork & Release"
           onEdit={() => onJump(STEP_RELEASE)}
@@ -153,7 +153,7 @@ export function StepReview({
         </dl>
       </Panel>
 
-      <Panel>
+      <Panel className="xl:col-span-2">
         <SectionHeader
           title="Credits & Rights"
           onEdit={() => onJump(STEP_CREDITS)}
@@ -161,7 +161,7 @@ export function StepReview({
         <dl>
           {state.tracks.map((track, index) => {
             const credits = getTrackCredits(track, state);
-            return <div key={track.clientId} className="mb-4 border-b border-border pb-4 last:mb-0">
+            return <div key={track.clientId} className="mb-4 border border-border bg-muted/20 p-3.5 last:mb-0">
               <h3 className="mb-2 text-sm font-semibold">{index + 1}. {track.title || "Untitled track"}</h3>
               <SummaryRow label="Contributors" value={credits.contributors.filter((c) => c.writerId).map((c) => `${c.firstName} ${c.lastName} (${c.roles.join(", ")})`).join("; ")} />
               <SummaryRow label="Composition splits" value={credits.writerSplits.map((w) => `${w.firstName} ${w.lastName} ${w.share}% (${w.roles.join(", ")})`).join("; ")} />
@@ -179,7 +179,7 @@ export function StepReview({
         </dl>
       </Panel>
 
-      <Panel>
+      <Panel className="xl:col-span-2">
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"

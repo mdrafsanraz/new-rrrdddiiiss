@@ -34,8 +34,9 @@ export function StepDistribution({
   const manualTerritories = !state.worldwide;
 
   return (
-    <div className="space-y-5">
+    <div className="grid items-start gap-4 xl:grid-cols-2">
       <Panel className="space-y-4">
+        <h3 className="text-sm font-semibold">Store delivery</h3>
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
@@ -72,7 +73,7 @@ export function StepDistribution({
             />
           </button>
           <ExpandPanel show={manualStores}>
-            <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
+            <div className="mt-4 grid max-h-80 gap-2 overflow-y-auto 2xl:grid-cols-2">
               <CatalogStatus
                 catalog={outlets}
                 emptyLabel="No stores available right now."
@@ -109,6 +110,7 @@ export function StepDistribution({
       </Panel>
 
       <Panel className="space-y-4">
+        <h3 className="text-sm font-semibold">Territory availability</h3>
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
@@ -148,7 +150,7 @@ export function StepDistribution({
             />
           </button>
           <ExpandPanel show={manualTerritories}>
-            <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
+            <div className="mt-4 grid max-h-80 gap-2 overflow-y-auto 2xl:grid-cols-2">
               <CatalogStatus
                 catalog={territories}
                 emptyLabel="No territories available right now."

@@ -53,6 +53,7 @@ import type { TrackCreditsDraft } from "@/lib/releases/wizard-types";
 import { StepCredits } from "./step-credits";
 import { StepReview } from "./step-review";
 import { SubmissionProgress } from "./submission-progress";
+import styles from "./builder.module.css";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -606,7 +607,7 @@ export function ReleaseBuilder({
   const artist = artists.find((a) => a.id === state.artistId);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
+    <div className={cn(styles.root, "grid items-start gap-5 lg:grid-cols-[184px_minmax(0,1fr)] xl:gap-7")}>
       <StepRail
         step={state.step}
         onJump={(i) => {
@@ -614,17 +615,18 @@ export function ReleaseBuilder({
         }}
       />
 
-      <div className="mx-auto min-w-0 w-full max-w-3xl space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-balance sm:text-2xl">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Step {state.step + 1} / {WIZARD_STEPS.length}</p>
+            <h2 className="text-xl font-semibold tracking-tight text-balance">
               {stepMeta.title}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {state.step === STEP_RELEASE
                 ? "Artwork, transfer status, and the release details stores will show."
                 : state.step === STEP_DISTRIBUTION
-                  ? "Pick stores and territories — completing this creates your release with the distributor."
+                  ? "Choose the stores and territories for this release."
                   : state.step === STEP_TRACKS
                     ? "Upload masters and fill in track details."
                     : state.step === STEP_CREDITS
@@ -633,7 +635,8 @@ export function ReleaseBuilder({
             </p>
             <p className="mt-2 text-xs text-muted-foreground"><span className="font-semibold text-destructive">*</span> Required field</p>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex min-h-7 items-center gap-2 border border-border bg-card px-2.5 text-[11px] text-muted-foreground" aria-live="polite">
+            <span className="text-muted-foreground">Draft</span>
             {saveStatus === "saving" ? (
               <span className="font-medium text-foreground">Saving…</span>
             ) : saveStatus === "saved" ? (
@@ -744,7 +747,7 @@ export function ReleaseBuilder({
         ) : (
           <div
             className={cn(
-              "sticky bottom-0 z-10 -mx-1 border border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0"
+              "sticky bottom-3 z-10 border border-border bg-card/95 px-4 py-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/90"
             )}
           >
             <div className="flex items-center justify-between gap-3">

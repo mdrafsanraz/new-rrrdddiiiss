@@ -78,8 +78,8 @@ export function StepRelease({
   setError: (message: string) => void;
 }) {
   return (
-    <>
-      <Panel className="space-y-5">
+    <div className="grid items-start gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+      <Panel className="space-y-4 xl:sticky xl:top-6">
         <MediaDropzone
           id="artwork"
           label="Cover artwork"
@@ -129,7 +129,10 @@ export function StepRelease({
         </div>
       </Panel>
 
-      <Panel className="space-y-5">
+      <div className="min-w-0 space-y-4">
+
+      <Panel className="space-y-4">
+        <h3 className="text-sm font-semibold">Release history</h3>
         <YesNo
           label="Are you transferring this release from another distributor?"
           required
@@ -150,7 +153,7 @@ export function StepRelease({
           }
         />
         {state.isTransfer ? (
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="transferFrom"
               label="Previous distributor"
@@ -180,7 +183,8 @@ export function StepRelease({
         ) : null}
       </Panel>
 
-      <Panel className="space-y-5">
+      <Panel className="space-y-4">
+        <h3 className="text-sm font-semibold">Release information</h3>
         <Field
           id="title"
           label="Release title"
@@ -190,7 +194,7 @@ export function StepRelease({
           placeholder="Release title"
         />
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <SearchableSelect id="artist" label="Primary artist" required value={state.artistId}
             options={artists.map((artist) => ({ value: artist.id, label: artist.name }))} disabled={!artists.length}
             placeholder="Select primary artist" searchPlaceholder="Search your artists…"
@@ -221,7 +225,7 @@ export function StepRelease({
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             id="mixVersion"
             label="Version / mix version"
@@ -239,7 +243,7 @@ export function StepRelease({
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             id="releaseDate"
             label="Release date"
@@ -267,7 +271,7 @@ export function StepRelease({
           />
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <MetadataLanguage value={state.preferredLocalization} onChange={(value) => patch({ preferredLocalization: value })} />
           <div className="grid gap-2">
             <SearchableSelect id="recordingCountry" label="Recording country" required value={state.recordingCountry ?? ""}
@@ -284,6 +288,7 @@ export function StepRelease({
           </div>
         </div>
       </Panel>
-    </>
+      </div>
+    </div>
   );
 }

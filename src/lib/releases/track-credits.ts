@@ -27,3 +27,16 @@ export function updateTrackCredits(state: WizardState, clientId: string, update:
   if (after === before || (after.contributors === before.contributors && after.writerSplits === before.writerSplits && after.publisherSplits === before.publisherSplits && after.selfPublished === before.selfPublished)) return state;
   return { ...state, tracks: state.tracks.map((item) => item.clientId === clientId ? { ...item, credits: after } : item) };
 }
+
+/** Copy the first track's current credits as independent, editable rows. */
+export function copyCreditsFromFirstTrack(state: WizardState, targetId: string): WizardState {
+  const first = state.tracks[0];
+  if (!first || first.clientId === targetId) return state;
+  const source = getTrackCredits(first, state);
+  return updateTrackCredits(state, targetId, () => ({
+    contributors: source.contributors.map((row) => ({ ...row, id: crypto.randomUUID(), roles: [...row.roles] })),
+    writerSplits: source.writerSplits.map((row) => ({ ...row, id: crypto.randomUUID(), roles: [...row.roles] })),
+    publisherSplits: source.publisherSplits.map((row) => ({ ...row, id: crypto.randomUUID() })),
+    selfPublished: source.selfPublished,
+  }));
+}

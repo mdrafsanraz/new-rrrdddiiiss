@@ -17,7 +17,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "motion/react";
+import { CaretDown, Copy, Plus, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { cn } from "@/lib/utils";
@@ -42,7 +43,7 @@ import {
   type ContributorRole,
 } from "./shared";
 
-import { getTrackCredits, updateTrackCredits } from "@/lib/releases/track-credits";
+import { copyCreditsFromFirstTrack, getTrackCredits, updateTrackCredits } from "@/lib/releases/track-credits";
 
 export function splitTotal(rows: Array<{ share: number }>): number {
   return rows.reduce((sum, r) => sum + (Number.isFinite(r.share) ? r.share : 0), 0);
@@ -262,21 +263,28 @@ export function StepCredits(props: {
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
   contributorRoles: CatalogState<ContributorRole>;
 }) {
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(props.state.tracks[0]?.clientId ?? null);
   if (!props.state.tracks.length) return <Panel>Add a track before entering credits.</Panel>;
-  return <div className="space-y-10">
-    {props.state.tracks.map((track, index) => <TrackCreditEditor key={track.clientId} {...props} trackId={track.clientId} index={index} />)}
+  return <div className="space-y-4">
+    <Panel className="space-y-3">
+      <h3 className="text-sm font-semibold">Track credits</h3>
+      {props.state.tracks.map((track, index) => <TrackCreditEditor key={track.clientId} {...props} trackId={track.clientId} index={index} isEditing={editingTrackId === track.clientId} onToggle={() => setEditingTrackId(editingTrackId === track.clientId ? null : track.clientId)} />)}
+    </Panel>
     <ReleaseCopyright state={props.state} patch={props.patch} />
   </div>;
 }
 
-function TrackCreditEditor({ state, patch, setState, contributorRoles, trackId, index }: {
+function TrackCreditEditor({ state, patch, setState, contributorRoles, trackId, index, isEditing, onToggle }: {
   trackId: string;
   index: number;
+  isEditing: boolean;
+  onToggle: () => void;
   state: WizardState;
   patch: (partial: Partial<WizardState>) => void;
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
   contributorRoles: CatalogState<ContributorRole>;
 }) {
+  const reduceMotion = useReducedMotion();
   const track = state.tracks.find((item) => item.clientId === trackId);
   const activeId = trackId;
   const setCreditState = useCallback<React.Dispatch<React.SetStateAction<WizardState>>>((action) => {
@@ -294,12 +302,23 @@ function TrackCreditEditor({ state, patch, setState, contributorRoles, trackId, 
   }, [patch, setCreditState]);
   if (!track) return null;
   const credits = getTrackCredits(track, state);
-  return <section aria-labelledby={`credits-heading-${activeId}`} className="space-y-4">
-    <header className="flex items-start gap-3 border-b border-border pb-4">
-      <span className="grid size-8 shrink-0 place-items-center border border-border bg-muted text-xs font-semibold">{index + 1}</span>
-      <div className="min-w-0"><h2 id={`credits-heading-${activeId}`} className="break-words text-base font-semibold">{track.title || "Untitled track"}</h2><p className="mt-1 text-xs text-muted-foreground">Credits and splits apply to this track only.</p><p className="mt-2 text-[11px] text-muted-foreground">{credits.contributors.filter((item) => item.writerId).length} contributors · {credits.writerSplits.length} writers · {credits.selfPublished ? "Self-published" : `${credits.publisherSplits.length} publishers`}</p></div>
-    </header>
-    <CreditFields state={{ ...state, ...credits, tracks: [track] }} patch={patchCredits} setState={setCreditState} contributorRoles={contributorRoles} />
+  return <section aria-labelledby={`credits-heading-${activeId}`} className={cn("overflow-hidden border bg-background transition-colors duration-200", isEditing ? "border-primary/40" : "border-border")}>
+    <button type="button" id={`credits-toggle-${activeId}`} aria-expanded={isEditing} aria-controls={`credits-editor-${activeId}`} onClick={onToggle} className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring">
+      <span className={cn("grid size-8 shrink-0 place-items-center border text-xs font-semibold", isEditing ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted")}>{index + 1}</span>
+      <span className="min-w-0 flex-1"><span id={`credits-heading-${activeId}`} className="block truncate text-sm font-semibold">{track.title || "Untitled track"}</span><span className="mt-0.5 block text-xs text-muted-foreground">{credits.contributors.filter((item) => item.writerId).length} contributors · {credits.writerSplits.length} writers · {credits.selfPublished ? "Self-published" : `${credits.publisherSplits.length} publishers`}</span></span>
+      <span className="shrink-0 text-xs font-medium text-muted-foreground">{isEditing ? "Close" : "Edit"}</span>
+      <CaretDown size={16} aria-hidden className={cn("shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none", isEditing && "rotate-180")} />
+    </button>
+    <motion.div id={`credits-editor-${activeId}`} role="region" aria-labelledby={`credits-toggle-${activeId}`} hidden={!isEditing} initial={false} animate={{ opacity: isEditing ? 1 : 0, transform: isEditing ? "translateY(0px)" : "translateY(6px)" }} transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }} className="min-w-0 border-t border-border bg-muted/20 p-4 sm:p-5">
+      {index > 0 ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-border bg-background p-3">
+        <p className="max-w-sm text-xs text-muted-foreground">Replace this track’s credits with a copy of the first track’s contributors, composition splits and publisher details.</p>
+        <Button type="button" variant="outline" className="h-auto min-h-9 max-w-full gap-2 whitespace-normal px-3 py-2 text-left" onClick={() => setState((prev) => copyCreditsFromFirstTrack(prev, activeId))}>
+          <Copy size={14} aria-hidden className="shrink-0" />
+          <span className="min-w-0 break-words">Copy from {state.tracks[0].title || "Track 1"}</span>
+        </Button>
+      </div> : null}
+      <CreditFields state={{ ...state, ...credits, tracks: [track] }} patch={patchCredits} setState={setCreditState} contributorRoles={contributorRoles} />
+    </motion.div>
   </section>;
 }
 
@@ -382,10 +401,10 @@ function CreditFields({
   }, [contributorRoles.loaded, contributorRoles.items, setState]);
 
   return (
-    <div className="space-y-5">
+    <div className="grid items-start gap-4 xl:grid-cols-2">
       {/* CONTRIBUTORS */}
       <Panel className="space-y-4">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col items-stretch gap-3">
           <div>
             <p className="text-sm font-semibold">
               Contributors <span className="text-destructive">· Required</span>
@@ -419,7 +438,7 @@ function CreditFields({
         </div>
 
         {state.contributors.map((c) => (
-          <div key={c.id} className="space-y-4 border border-border p-4">
+          <div key={c.id} className="space-y-4 border border-border bg-muted/20 p-3.5">
             <div className="grid gap-2">
               <p className="text-sm font-medium">Contributor <span className="text-destructive" aria-hidden="true">*</span></p>
               <EntityPicker
@@ -546,7 +565,7 @@ function CreditFields({
 
       {/* WRITERS & COMPOSITION SPLITS */}
       <Panel className="space-y-4">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col items-stretch gap-3">
           <div>
             <p className="text-sm font-semibold">
               Writers &amp; Composition Splits{" "}
@@ -578,7 +597,7 @@ function CreditFields({
         </div>
 
         {state.writerSplits.map((w) => (
-          <div key={w.id} className="space-y-4 border border-border p-4">
+          <div key={w.id} className="space-y-4 border border-border bg-muted/20 p-3.5">
             <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
               <div className="grid gap-2">
                 <p className="text-sm font-medium">Writer <span className="text-destructive" aria-hidden="true">*</span></p>
@@ -697,7 +716,7 @@ function CreditFields({
       </Panel>
 
       {/* PUBLISHER */}
-      <Panel className="space-y-4">
+      <Panel className="space-y-4 xl:col-span-2">
         <div>
           <p className="text-sm font-semibold">Publisher</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -828,7 +847,7 @@ function ReleaseCopyright({ state, patch }: { state: WizardState; patch: (partia
         <p className="text-sm font-semibold">
           Release copyright <span className="text-destructive">· Required</span>
         </p>
-        <p className="text-xs text-muted-foreground">Copyright ownership applies to the whole release.</p>
+        <p className="text-xs text-muted-foreground">These ownership details apply to the whole release.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             id="plineYear"
