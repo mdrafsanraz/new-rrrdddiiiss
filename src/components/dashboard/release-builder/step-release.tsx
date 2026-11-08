@@ -96,12 +96,13 @@ export function StepRelease({
             const dims = await readImageFileDimensions(file);
             if (
               !dims ||
-              dims.width !== REQUIRED_ARTWORK_SIZE ||
-              dims.height !== REQUIRED_ARTWORK_SIZE
+              dims.width !== dims.height ||
+              dims.width < REQUIRED_ARTWORK_SIZE ||
+              dims.height < REQUIRED_ARTWORK_SIZE
             ) {
               setError(
                 dims
-                  ? `Cover artwork must be exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px — this file is ${dims.width}×${dims.height}px.`
+                  ? `Cover artwork must be square and at least ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px — this file is ${dims.width}×${dims.height}px.`
                   : "Could not read this image. Try a different file."
               );
               return;
@@ -112,7 +113,7 @@ export function StepRelease({
               artworkUrl: null,
             });
           }}
-          helper={`Exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px required — square JPEG, PNG, or WebP.`}
+          helper={`Minimum ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px — square JPEG, PNG, or WebP. Larger square images are accepted.`}
         />
 
         <div className="grid gap-2">

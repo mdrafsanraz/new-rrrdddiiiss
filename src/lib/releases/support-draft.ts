@@ -3,6 +3,8 @@ export function releaseSupportDraft(release: {
   id: string;
   title: string;
   reviewNotes: string | null;
+  catalogNumber?: string | null;
+  upc?: string | null;
   reviewIssues: { title: string | null; message: string | null; resolved: boolean }[];
 }) {
   const feedback = [
@@ -12,6 +14,7 @@ export function releaseSupportDraft(release: {
   return {
     initialSubject: `Changes required: ${release.title}`.slice(0, 160),
     initialCategory: "release",
+    initialReference: release.catalogNumber?.trim() || release.upc?.trim() || "",
     initialBody: [
       `Release: ${release.title}\nRelease ID: ${release.id}`,
       "Please help me resolve the changes requested on this release.",

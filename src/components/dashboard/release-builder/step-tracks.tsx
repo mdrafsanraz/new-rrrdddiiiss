@@ -10,8 +10,9 @@
  * and the cover/sample license document when clearance is required.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleNotch, PencilSimple, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { CaretDown, CircleNotch, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -39,6 +40,19 @@ import {
   ChipGroup,
 } from "./shared";
 import type { LanguageOption } from "@/lib/labelgrid/audio-languages";
+
+function TrackEditor({ id, labelledBy, children }: { id: string; labelledBy: string; children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  return <motion.div
+    id={id}
+    role="region"
+    aria-labelledby={labelledBy}
+    initial={reduceMotion ? false : { opacity: 0, transform: "translateY(6px)" }}
+    animate={{ opacity: 1, transform: "translateY(0px)" }}
+    transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
+    className="min-w-0"
+  >{children}</motion.div>;
+}
 
 const EXPLICIT_FRIENDLY = [
   { value: "off" as const, label: "No" },
@@ -278,6 +292,7 @@ export function StepTracks({
   const [languages, setLanguages] = useState<LanguageOption[]>([]);
   const [languageError, setLanguageError] = useState<string | null>(null);
   const [languageAttempt, setLanguageAttempt] = useState(0);
+  const [lyricsExpanded, setLyricsExpanded] = useState<Record<string, boolean>>({});
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/labelgrid/languages?type=audio", { signal: controller.signal })
@@ -295,6 +310,7 @@ export function StepTracks({
       <div className="space-y-2">
         {state.tracks.map((t, i) => {
           const isEditing = editingTrackId === t.clientId;
+          const showLyrics = lyricsExpanded[t.clientId] ?? Boolean(t.lyrics.trim());
           return (
           <div
             key={t.clientId}
@@ -303,7 +319,15 @@ export function StepTracks({
               isEditing ? "border-primary/40" : "border-border"
             )}
           >
-            <div className="flex items-center gap-3 px-4 py-3">
+            <div className="flex items-stretch">
+              <button
+                id={`track-toggle-${t.clientId}`}
+                type="button"
+                aria-expanded={isEditing}
+                aria-controls={`track-editor-${t.clientId}`}
+                onClick={() => setEditingTrackId(isEditing ? null : t.clientId)}
+                className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+              >
               <span
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center border text-xs font-semibold transition-colors",
@@ -314,43 +338,33 @@ export function StepTracks({
               >
                 {i + 1}
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
                   {t.title.trim() || "Untitled track"}
-                </p>
+                </span>
                 {t.audioProcessing || t.audioProcessingError ? (
-                  <div className="mt-1">
+                  <span className="mt-1 block">
                     <AudioStatusPill
                       status={t.audioProcessingError ? "failed" : "processing"}
                     />
-                  </div>
+                  </span>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <span className="block text-xs text-muted-foreground">
                     {formatDuration(t.audioDurationSec)}
                     {t.audioFile || t.audioUrl ? " · Audio ready" : " · No audio"}
-                  </p>
+                  </span>
                 )}
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 px-3"
-                onClick={() =>
-                  setEditingTrackId(
-                    editingTrackId === t.clientId ? null : t.clientId
-                  )
-                }
-              >
-                <PencilSimple size={14} weight="bold" aria-hidden />
-                Edit
-              </Button>
+              </span>
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">{isEditing ? "Close" : "Edit"}</span>
+                <CaretDown size={16} aria-hidden className={cn("shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none", isEditing && "rotate-180")} />
+              </button>
               {state.contentType !== "Single" && state.tracks.length > 1 ? (
                 <Tooltip content="Remove track">
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-9 px-2 text-destructive"
-                    aria-label="Remove track"
+                    className="my-auto mr-2 h-9 shrink-0 px-2 text-destructive"
+                    aria-label={`Remove track ${i + 1}: ${t.title.trim() || "Untitled track"}`}
                     onClick={() =>
                       setState((prev) => ({
                         ...prev,
@@ -366,7 +380,8 @@ export function StepTracks({
               ) : null}
             </div>
 
-            {editingTrackId === t.clientId ? (
+            {isEditing ? (
+              <TrackEditor key={t.clientId} id={`track-editor-${t.clientId}`} labelledBy={`track-toggle-${t.clientId}`}>
               <div className="space-y-5 border-t border-border bg-muted/30 p-4 sm:p-5">
                 <TrackAudioDropzone
                   track={t}
@@ -484,6 +499,16 @@ export function StepTracks({
                       </option>
                     ))}
                   </Field>
+                </div>
+
+                <div className="space-y-3">
+                  <Button type="button" variant="outline" className="h-9 px-3" aria-expanded={showLyrics} aria-controls={`lyrics-panel-${t.clientId}`} onClick={() => setLyricsExpanded((prev) => ({ ...prev, [t.clientId]: !showLyrics }))}>
+                    {showLyrics ? <CaretDown size={14} aria-hidden className="rotate-180" /> : <Plus size={14} aria-hidden />}
+                    {showLyrics ? "Hide lyrics" : t.lyrics.trim() ? "Edit lyrics" : "Add lyrics"}
+                  </Button>
+                  {showLyrics ? <div id={`lyrics-panel-${t.clientId}`}>
+                    <Field id={`lyrics-${t.clientId}`} label="Lyrics" as="textarea" value={t.lyrics} maxLength={20000} onChange={(event) => updateTrack(t.clientId, { lyrics: event.target.value })} placeholder="Enter the lyrics for this track" helper="Optional. Enter the song’s lyrics, up to 20,000 characters. Hiding this field keeps your lyrics saved." />
+                  </div> : null}
                 </div>
 
                 <div className="grid gap-2">
@@ -608,6 +633,7 @@ export function StepTracks({
                   />
                 ) : null}
               </div>
+              </TrackEditor>
             ) : null}
           </div>
           );

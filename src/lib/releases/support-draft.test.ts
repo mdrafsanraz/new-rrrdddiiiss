@@ -28,6 +28,13 @@ test("missing feedback and oversized notes still produce a usable ticket", () =>
   assert.ok(long.initialBody.length < 8000);
 });
 
+test("release links prefill the actual catalog number or UPC without inventing an identifier", () => {
+  const release = { id: "r", title: "Release", reviewNotes: null, reviewIssues: [] };
+  assert.equal(releaseSupportDraft({ ...release, catalogNumber: "CAT123", upc: "123456789012" }).initialReference, "CAT123");
+  assert.equal(releaseSupportDraft({ ...release, upc: "123456789012" }).initialReference, "123456789012");
+  assert.equal(releaseSupportDraft(release).initialReference, "");
+});
+
 test("both changes-required flows direct users to support", () => {
   for (const status of ["internal_changes_required", "labelgrid_changes_required", "changes_required"]) {
     assert.match(getUserFacingStatusDescription(status), /support ticket/);

@@ -62,6 +62,7 @@ export function Field({
           disabled={disabled}
           readOnly={readOnly}
           rows={5}
+          maxLength={maxLength}
           {...(value !== undefined ? { value } : {})}
           onChange={onChange}
           placeholder={placeholder}

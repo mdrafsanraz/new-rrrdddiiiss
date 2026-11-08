@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { SUPPORT_CATEGORIES } from "@/lib/support";
 
-export function NewSupportTicketForm({ admin = false, initialSubject = "", initialCategory = "general", initialBody = "" }: {
-  admin?: boolean; initialSubject?: string; initialCategory?: string; initialBody?: string;
+export function NewSupportTicketForm({ admin = false, initialSubject = "", initialCategory = "general", initialBody = "", initialReference = "" }: {
+  admin?: boolean; initialSubject?: string; initialCategory?: string; initialBody?: string; initialReference?: string;
 }) {
   const router = useRouter();
   const [subject, setSubject] = useState(initialSubject);
@@ -17,6 +17,7 @@ export function NewSupportTicketForm({ admin = false, initialSubject = "", initi
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
+  const [releaseReference, setReleaseReference] = useState(initialReference);
 
   return (
     <form className="overflow-hidden rounded-2xl border border-border bg-card" onSubmit={async (event) => {
@@ -24,6 +25,7 @@ export function NewSupportTicketForm({ admin = false, initialSubject = "", initi
       try {
         const form = new FormData(event.currentTarget);
         form.set("subject", subject); form.set("category", category); form.set("body", body);
+        if (!admin && category === "release") form.set("releaseReference", releaseReference);
         if (admin) form.set("email", email);
         const response = await fetch(admin ? "/api/admin/support" : "/api/support", { method: "POST", body: form });
         const data = await response.json();
@@ -37,6 +39,7 @@ export function NewSupportTicketForm({ admin = false, initialSubject = "", initi
         <label className="text-sm md:col-span-2">Attachments (up to 3, 10 MB each)<input className="mt-2 block w-full text-sm" name="attachments" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" /></label>
         <div className="md:col-span-2"><Field id="subject" label="Subject" required value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={160} /></div>
         <Field id="category" label="Category" as="select" required value={category} onChange={(event) => setCategory(event.target.value)}>{SUPPORT_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Field>
+        {!admin && category === "release" ? <Field id="release-reference" label="UPC / catalog number" required maxLength={100} value={releaseReference} onChange={(event) => setReleaseReference(event.target.value)} helper="Enter either identifier so our team can locate your release." /> : null}
         <div className="rounded-xl border border-border bg-muted/35 p-4 text-xs leading-5 text-muted-foreground"><p className="font-semibold text-foreground">Direct to RDISTRO Support</p><p className="mt-1">We will email you when the status changes or a team member replies.</p></div>
         <div className="md:col-span-2"><Field id="body" label="Message" as="textarea" required maxLength={8000} value={body} onChange={(event) => setBody(event.target.value)} helper="Include release names, dates, or error details when relevant." /></div>
         {error ? <p className="text-sm font-medium text-destructive md:col-span-2" role="alert">{error}</p> : null}

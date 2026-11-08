@@ -26,7 +26,7 @@ export default async function SupportPage({ searchParams }: Props) {
   const releaseId = typeof query.releaseId === "string" ? query.releaseId : undefined;
   const release = creating && releaseId ? await prisma.release.findFirst({
     where: { id: releaseId, userId: user.id },
-    select: { id: true, title: true, reviewNotes: true, reviewIssues: { where: { resolved: false }, orderBy: { createdAt: "desc" }, select: { title: true, message: true, resolved: true } } },
+    select: { id: true, title: true, reviewNotes: true, catalogNumber: true, upc: true, reviewIssues: { where: { resolved: false }, orderBy: { createdAt: "desc" }, select: { title: true, message: true, resolved: true } } },
   }) : null;
   const tickets = await prisma.supportTicket.findMany({
     where: { userId: user.id },

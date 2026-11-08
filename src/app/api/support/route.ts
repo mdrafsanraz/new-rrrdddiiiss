@@ -5,18 +5,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { emailUrl, notifySupportTeam } from "@/lib/email";
 import { supportCategoryLabel, supportTicketNumber } from "@/lib/support";
-
-const createSchema = z.object({
-  subject: z.string().min(3).max(160),
-  category: z.enum([
-    "general",
-    "release",
-    "billing",
-    "account",
-    "technical",
-  ]),
-  body: z.string().min(10).max(8000),
-});
+import { userSupportTicketSchema, supportTicketMessage } from "@/lib/support-ticket-input";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -49,7 +38,8 @@ export async function POST(request: Request) {
 
   try {
     const { fields, files } = await readSupportRequest(request);
-    const body = createSchema.parse(fields);
+    const body = userSupportTicketSchema.parse(fields);
+    const message = supportTicketMessage(body);
     const attachmentsJson = await saveSupportAttachments(user.id, files);
     const ticket = await prisma.supportTicket.create({
       data: {
@@ -61,7 +51,7 @@ export async function POST(request: Request) {
           create: {
             authorId: user.id,
             attachmentsJson,
-            body: body.body.trim(),
+            body: message,
             isStaff: false,
           },
         },
@@ -75,7 +65,7 @@ export async function POST(request: Request) {
         subject: `[${supportTicketNumber(ticket.id)}] New support ticket: ${ticket.subject}`,
         preheader: `${user.name} opened a new support ticket.`,
         heading: "New support request",
-        message: `${body.body.trim()}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
+        message: `${message}\n\nCategory: ${supportCategoryLabel(ticket.category)}\nFrom: ${user.name} (${user.email})`,
         ticketNumber: supportTicketNumber(ticket.id),
         ticketSubject: ticket.subject,
         actionUrl: emailUrl(`/admin/support/${ticket.id}`),

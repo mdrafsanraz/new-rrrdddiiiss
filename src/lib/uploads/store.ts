@@ -5,7 +5,7 @@ import { readImageDimensions } from "@/lib/uploads/image-dimensions";
 import { getObject, isS3Configured, putObject } from "@/lib/uploads/s3";
 import { inspectAudioBytes } from "@/lib/audio/compatibility";
 
-/** LabelGrid cover art requirement — exact square, no exceptions. */
+/** Minimum cover artwork dimensions; artwork must also be square. */
 export const REQUIRED_ARTWORK_SIZE = 3000;
 
 /**
@@ -126,12 +126,13 @@ async function validateFile(
     const dims = readImageDimensions(buf, file.type);
     if (
       !dims ||
-      dims.width !== REQUIRED_ARTWORK_SIZE ||
-      dims.height !== REQUIRED_ARTWORK_SIZE
+      dims.width !== dims.height ||
+      dims.width < REQUIRED_ARTWORK_SIZE ||
+      dims.height < REQUIRED_ARTWORK_SIZE
     ) {
       const got = dims ? `${dims.width}×${dims.height}` : "unreadable dimensions";
       throw new Error(
-        `Artwork must be exactly ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px (got ${got}).`
+        `Artwork must be square and at least ${REQUIRED_ARTWORK_SIZE}×${REQUIRED_ARTWORK_SIZE}px (got ${got}).`
       );
     }
   } else {
