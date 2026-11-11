@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/site/field";
 import { canAdminResubmitMetadata } from "@/lib/releases/admin-resubmit";
+import { WithdrawReviewDialog } from "@/components/admin/withdraw-review-dialog";
 
 const DOC_KINDS = [
   "Master ownership",
@@ -41,6 +42,7 @@ export function ReleaseReviewActions({
   const [notes, setNotes] = useState("");
   const [docKind, setDocKind] = useState<string>(DOC_KINDS[0]);
   const [holdReason, setHoldReason] = useState("");
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [statusBusy, setStatusBusy] = useState<
     | "idle"
     | "approving"
@@ -50,7 +52,6 @@ export function ReleaseReviewActions({
     | "document"
     | "draft"
     | "deleting"
-    | "withdrawing"
     | "resubmitting"
     | "local-takedown"
   >("idle");
@@ -80,22 +81,6 @@ export function ReleaseReviewActions({
       else router.refresh();
     } catch { setError("Network error. Refresh release data before retrying."); }
     finally { setStatusBusy("idle"); }
-  }
-
-  async function withdrawReview() {
-    if (!window.confirm("Withdraw this release from LabelGrid review? LabelGrid will return it to draft, while RDISTRO keeps it In Review for admin resubmission. Existing artwork and audio will be retained.")) return;
-    setError("");
-    setStatusBusy("withdrawing");
-    try {
-      const res = await fetch(`/api/admin/releases/${releaseId}/withdraw-review`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? "Could not withdraw release from review.");
-      else router.refresh();
-    } catch {
-      setError("Network error. Refresh release data before retrying.");
-    } finally {
-      setStatusBusy("idle");
-    }
   }
 
   async function approve() {
@@ -290,6 +275,7 @@ export function ReleaseReviewActions({
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+      <WithdrawReviewDialog releaseId={releaseId} open={withdrawOpen} onOpenChange={setWithdrawOpen} />
       <div>
         <h2 className="text-base font-semibold">Review decision</h2>
         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -321,8 +307,8 @@ export function ReleaseReviewActions({
           <div className="flex flex-col gap-2">
             {hasLabelgridId && status === "labelgrid_in_review" ? (
               <Button type="button" variant="outline" className="h-9 w-full"
-                disabled={statusBusy !== "idle"} onClick={withdrawReview}>
-                {statusBusy === "withdrawing" ? "Withdrawing..." : "Withdraw from LabelGrid review"}
+                disabled={statusBusy !== "idle"} onClick={() => setWithdrawOpen(true)}>
+                Withdraw from LabelGrid review
               </Button>
             ) : null}
             {canDecide ? (
